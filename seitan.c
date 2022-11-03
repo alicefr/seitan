@@ -74,9 +74,10 @@ static int event(int s)
 		return -EIO;
 
 	nlh = (struct nlmsghdr *)buf;
-	while (NLMSG_OK(nlh, n)) {
+	for (; NLMSG_OK(nlh, n); nlh = NLMSG_NEXT(nlh, n)) {
 		if (nlh->nlmsg_type == NLMSG_NOOP)
 			continue;
+
 		if ((nlh->nlmsg_type == NLMSG_ERROR) ||
 		    (nlh->nlmsg_type == NLMSG_OVERRUN))
 			break;
@@ -85,7 +86,7 @@ static int event(int s)
 		ev = (struct proc_event *)cnh->data;
 
 		if (ev->what != PROC_EVENT_EXEC)
-			return -EAGAIN;
+			continue;
 
 		snprintf(path, PATH_MAX, "/proc/%i/exe",
 			 ev->event_data.exec.process_pid);
@@ -97,8 +98,6 @@ static int event(int s)
 
 		if (nlh->nlmsg_type == NLMSG_DONE)
 			break;
-
-		nlh = NLMSG_NEXT(nlh, n);
 	}
 
 	return -EAGAIN;
