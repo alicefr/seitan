@@ -1,0 +1,4 @@
+FROM fedora:37
+
+COPY ./seitan-eater /usr/bin/seitan-eater
+COPY ./tests-utils/test-syscalls /usr/local/bin/test-syscalls

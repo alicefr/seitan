@@ -1,0 +1,5 @@
+FROM fedora:37
+
+RUN dnf install -y sysbench && dnf remove all
+
+COPY ./seitan-eater /usr/bin/seitan-eater
