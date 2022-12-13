@@ -8,10 +8,8 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
-CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\" -DBUILD_BPF_OUT=\"bpf.out\"
-CFLAGS += -DBUILD_IN=\"qemu_filter\"
+CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\"
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
-CFLAGS += -DBUILD_PROFILE=qemu_filter
 CFLAGS += -Wall -Wextra -pedantic
 
 REGISTRY ?= "quay.io/"
@@ -24,8 +22,14 @@ bpf.out: qemu_filter build
 t.out: qemu_filter build
 	./build
 
-build: build.c filter.h numbers.h transform.h
-	$(CC) $(CFLAGS) -o build build.c
+build: tree.c build.c filter.h numbers.h transform.h tree.h
+	$(CC) $(CFLAGS) -o build build.c tree.c
+
+test-filter:
+	$(CC) $(CFLAGS) -o tfilter test-filter.c
+
+bpf_dbg: disasm.c
+	$(CC) $(CFLAGS) -o bpf_dbg disasm.c
 
 seitan-loader: loader.c
 	$(CC) $(CFLAGS) -o seitan-loader loader.c
@@ -39,8 +43,8 @@ test:
 filter.h: qemu_filter
 	./filter.sh qemu_filter
 
-numbers.h: qemu_filter
-	./filter.sh qemu_filter
+numbers.h:
+	./filter.sh
 
 transform.h: qemu_filter
 	./transform.sh qemu_filter
