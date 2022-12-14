@@ -1,5 +1,9 @@
 FROM fedora:37
 
-RUN dnf install -y sysbench && dnf remove all
+RUN dnf install -y sysbench strace && dnf remove all
 
-COPY ./seitan-eater /usr/bin/seitan-eater
+#COPY ./seitan-eater /usr/bin/seitan-eater
+COPY ./tfilter /usr/bin/tfilter
+COPY ./test.bpf /
+
+ENTRYPOINT ["/usr/bin/tfilter"]
