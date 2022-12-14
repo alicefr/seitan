@@ -15,6 +15,8 @@
 
 #define SIZE_FILTER 1024
 
+extern char **environ;
+
 static int seccomp(unsigned int operation, unsigned int flags, void *args)
 {
         return syscall(__NR_seccomp, operation, flags, args);
@@ -22,9 +24,10 @@ static int seccomp(unsigned int operation, unsigned int flags, void *args)
 
 int main(int argc, char **argv)
 {
-        struct sock_filter *filter;
+        struct sock_filter filter[SIZE_FILTER];
         struct sock_fprog prog;
         size_t n, fd;
+	char *binary, **args;
 	int ret;
 
         (void)argc;
@@ -33,8 +36,9 @@ int main(int argc, char **argv)
                 perror("missing input file");
                 exit(EXIT_FAILURE);
         }
+	binary = argv[2];
+	args = &argv[3];
         fd = open(argv[1], O_CLOEXEC | O_RDONLY);
-	filter = calloc(SIZE_FILTER, sizeof(struct sock_filter));
 
 	n = read(fd, filter, sizeof(struct sock_filter)*SIZE_FILTER);
         close(fd);
@@ -50,8 +54,14 @@ int main(int argc, char **argv)
 			SECCOMP_FILTER_FLAG_NEW_LISTENER, &prog);
 	if (ret < 0) {
 		perror("fail setting filter");
-		exit(EXIT_FAILURE);
 	}
-	free(filter);
+
+	execvpe(binary, args, environ);
+	if (errno != ENOENT) {
+		fprintf(stderr, "execvpe with %s\n", binary);
+	}
+
+        perror("execvpe");
+
 	return 0;
 }
