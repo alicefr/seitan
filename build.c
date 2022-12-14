@@ -177,7 +177,7 @@ struct bpf_call calls[] = {
 		.args = { 123, 0, 0, 0, 0, 0 },
 		.check_arg = { true, false, false, false, false, false },
 	},
-	/*	{
+	{
 		.name = "openat",
 		.args = { 123, 123, 0, 0, 0, 0 },
 		.check_arg = { true, true, false, false, false, false },
@@ -222,7 +222,7 @@ struct bpf_call calls[] = {
 		.args = { 123, 123, 0, 0, 0, 0 },
 		.check_arg = { true, true, false, false, false, false },
 	},
-*/
+
 };
 
 int main(int argc, char **argv)
