@@ -7,10 +7,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <linux/audit.h>
-#include <linux/filter.h>
-#include <linux/seccomp.h>
-
 #include "numbers.h"
 #include "filter.h"
 
@@ -141,17 +137,16 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	create_lookup_nodes(nodes, n_syscall);
 
 	empty = 0;
-	size = 2;
-	n_nodes = count_nodes(nodes);
+	size = 3;
+	/* No nodes if there is a single syscall */
+	if (n_syscall == 1)
+		n_nodes = 0;
+	else
+		n_nodes = count_nodes(nodes);
 	n_args = get_total_args(table, n_syscall);
 
-	/*
-	 * Total number of instructions =
-	 * 	offset preinstructions + n nodes
-	 * 	+ n syscalls (instruction + ja to end) + total args
-	 */
-	accept = size + n_nodes + 2 * n_syscall + n_args - 2;
-	notify = size + n_nodes + 2 * n_syscall + n_args - 1;
+	accept = 2 + n_nodes + 2 * n_syscall + n_args + 1;
+	notify = 2 + n_nodes + 2 * n_syscall + n_args + 2;
 
 	/* Pre */
 	/* cppcheck-suppress badBitmaskCheck */
@@ -159,10 +154,12 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 			BPF_LD | BPF_W | BPF_ABS,
 			(offsetof(struct seccomp_data, arch)));
 	filter[1] = (struct sock_filter)BPF_JUMP(
-			BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, size - 4);
+			BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, accept - 2);
 	/* cppcheck-suppress badBitmaskCheck */
 	filter[2] = (struct sock_filter)BPF_STMT(
 			BPF_LD | BPF_W | BPF_ABS, (offsetof(struct seccomp_data, nr)));
+
+	printf("n_nodes: %d \n", n_nodes);
 
 	/* Insert nodes */
 	for (i = 0; i < n_nodes; i++) {
@@ -173,25 +170,19 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 		offset_left = left_child(i) - i - 1 - empty;
 		offset_right = right_child(i) - i - 1 - empty;
 
-		printf("i=%d nr=%ld node %d offset_right=%d offset_left=%d\n",
-				i, table[nodes[i]].nr, nodes[i], offset_right,
-				offset_left);
 		filter[size] = (struct sock_filter)JGE(
 				table[nodes[i]].nr, offset_right, offset_left);
 		size++;
 	}
 
-	/* Insert leaves */
-	for (i = 0; i < n_syscall; i++) {
-		filter[size++] = (struct sock_filter)EQ(
-				table[i].nr, notify - size, accept - size);
-	}
-
 	/*
-	 * Insert args: evaluate every args, if it doesn't match continue with
+	 * Insert leaves and args. Evaluate every args, if it doesn't match continue with
 	 * the following, otherwise notify.
 	 */
 	for (i = 0; i < n_syscall; i++) {
+		/* Insert leaves */
+		filter[size++] = (struct sock_filter)EQ(
+				table[i].nr, 0, accept - size);
 		for (j = 0; j < table->count; j++) {
 			for (k = 0; k < 6; k++)
 				if ((table[i].entry + j)->check_arg[k])
@@ -204,11 +195,10 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	}
 
 	/* Seccomp accept and notify instruction */
-	filter[size - 2] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
+	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
 			SECCOMP_RET_ALLOW);
-	filter[size - 1] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
+	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
 			SECCOMP_RET_USER_NOTIF);
-	printf("It should be 0 got %d \n", notify + 1 - size);
 	return size;
 }
 
@@ -221,7 +211,6 @@ static int compare_names(const void *a, const void *b)
 int convert_bpf(char *file, struct bpf_call *entries, int n)
 {
 	int nt, fd, fsize;
-	size_t nwrite;
 	struct syscall_entry table[N_SYSCALL];
 	struct sock_filter filter[MAX_FILTER];
 
@@ -235,8 +224,8 @@ int convert_bpf(char *file, struct bpf_call *entries, int n)
 
 	fd = open(file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
 		  S_IRUSR | S_IWUSR);
-	nwrite = write(fd, filter, sizeof(struct sock_filter) * fsize);
-	printf("written %ld entries\n", nwrite / sizeof(struct sock_filter));
+	write(fd, filter, sizeof(struct sock_filter) * fsize);
+
 	close(fd);
 
 	return 0;
@@ -331,22 +320,3 @@ void create_lookup_nodes(int jumps[], unsigned int n)
 			    interval);
 	}
 }
-//void main(void) {
-//	int parent;
-//	parent =0;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//	parent =1;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//	parent =2;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//	parent =3;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//	parent =4;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//	parent =5;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//	parent =6;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//	parent =7;
-//	printf("parent %d left=%d right= %d\n", parent, left_child(parent), right_child(parent));
-//}
