@@ -1,6 +1,11 @@
 #ifndef FILTER_H_
 #define FILTER_H_
 
+#include <linux/filter.h>
+#include <linux/audit.h>
+#include <linux/seccomp.h>
+
+
 #define JGE(nr, right, left) \
         BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, (nr), (right), (left))
 #define JUMPA(jump)  BPF_JUMP(BPF_JMP | BPF_JA, (jump), 0, 0)
@@ -30,6 +35,9 @@ unsigned int left_child(unsigned int parent_index);
 unsigned int right_child(unsigned int parent_index);
 void print_nodes(int nodes[]);
 
+unsigned int create_bfp_program(struct syscall_entry table[],
+                struct sock_filter filter[],
+                unsigned int n_syscall);
 int convert_bpf(char *file, struct bpf_call *entries, int n);
 
 #endif
