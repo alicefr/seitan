@@ -1,16 +1,13 @@
 #define _GNU_SOURCE
-#include <fcntl.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <linux/filter.h>
 
-
-#define SIZE_FILTER 1024
+#include "disasm.h"
 
 /* From linux tools/bpf/bpf_dbg.c */
 #define BPF_LDX_B	(BPF_LDX | BPF_B)
@@ -65,7 +62,7 @@ static const char * const op_table[] = {
         [BPF_RET]       = "ret",
 };
 
-static void bpf_disasm(const struct sock_filter f, unsigned int i)
+void bpf_disasm(const struct sock_filter f, unsigned int i)
 {
 	const char *op, *fmt;
 	int val = f.k;
@@ -289,30 +286,9 @@ static void bpf_disasm(const struct sock_filter f, unsigned int i)
 
 }
 
-static void bpf_disasm_all(const struct sock_filter *f, unsigned int len)
+void bpf_disasm_all(const struct sock_filter *f, unsigned int len)
 {
 	unsigned int i;
 	for (i = 0; i < len; i++)
 		bpf_disasm(f[i], i);
 }
-
-int main(int argc, char **argv)
-{
-        struct sock_filter *filter;
-        size_t fd, n;
-
-        if (argc < 2) {
-                perror("missing input file");
-                exit(EXIT_FAILURE);
-        }
-	filter = calloc(SIZE_FILTER, sizeof(struct sock_filter));
-        fd = open(argv[1], O_CLOEXEC | O_RDONLY);
-
-        n = read(fd, filter, sizeof(struct sock_filter)*SIZE_FILTER);
-        close(fd);
-	printf("Read %ld entries\n", n/sizeof(struct sock_filter));
-	bpf_disasm_all(filter, n/sizeof(struct sock_filter));
-	free(filter);
-        return 0;
-}
-
