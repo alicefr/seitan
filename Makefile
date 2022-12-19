@@ -12,6 +12,8 @@ CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\"
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 CFLAGS += -Wall -Wextra -pedantic
 
+export CFLAGS
+
 REGISTRY ?= "quay.io/"
 
 all: bpf.out t.out seitan-loader seitan
@@ -22,8 +24,8 @@ bpf.out: qemu_filter build
 t.out: qemu_filter build
 	./build
 
-build: tree.c build.c filter.h numbers.h transform.h tree.h
-	$(CC) $(CFLAGS) -o build build.c tree.c
+build: filter.c build.c filter.h numbers.h
+	$(CC) $(CFLAGS) -o build build.c filter.c
 
 test-filter:
 	$(CC) $(CFLAGS) -o tfilter test-filter.c
@@ -40,6 +42,9 @@ seitan: seitan.c transform.h
 test:
 	$(MAKE) -C tests-utils
 
+test-unit:
+	$(MAKE) -C tests/unit
+
 filter.h: qemu_filter
 	./filter.sh qemu_filter
 
@@ -50,7 +55,7 @@ transform.h: qemu_filter
 	./transform.sh qemu_filter
 
 clean:
-	rm -f filter.h numbers.h transform.h t.out bpf.out build seitan-loader seitan
+	rm -f numbers.h transform.h t.out bpf.out build seitan-loader seitan
 
 test-images:
 	podman build -t $(REGISTRY)seitan/test-seitan -f containerfiles/tests/seitan/Containerfile .

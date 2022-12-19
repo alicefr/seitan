@@ -1,5 +1,5 @@
-#ifndef FILTER_H
-#define FILTER_H
+#ifndef FILTER_H_
+#define FILTER_H_
 
 #define JGE(nr, right, left) \
         BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, (nr), (right), (left))
@@ -8,7 +8,9 @@
         BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (nr), (a1), (a2))
 
 #define MAX_FILTER 1024
-#define N_SYSCALL sizeof(numbers) / sizeof(numbers[0])
+
+#define MAX_JUMPS 128
+#define EMPTY -1
 
 struct bpf_call {
         char *name;
@@ -21,6 +23,12 @@ struct syscall_entry {
         long nr;
         const struct bpf_call *entry;
 };
+
+void create_lookup_nodes(int jumps[], unsigned int n);
+unsigned int count_nodes(int jumps[]);
+unsigned int left_child(unsigned int parent_index);
+unsigned int right_child(unsigned int parent_index);
+void print_nodes(int nodes[]);
 
 int convert_bpf(char *file, struct bpf_call *entries, int n);
 
