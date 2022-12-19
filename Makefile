@@ -30,8 +30,8 @@ build: filter.c build.c filter.h numbers.h
 test-filter:
 	$(CC) $(CFLAGS) -o tfilter test-filter.c
 
-bpf_dbg: disasm.c
-	$(CC) $(CFLAGS) -o bpf_dbg disasm.c
+bpf_dbg: disasm.c disasm.h bpf_dbg.c
+	$(CC) $(CFLAGS) -o bpf_dbg bpf_dbg.c disasm.c
 
 seitan-loader: loader.c
 	$(CC) $(CFLAGS) -o seitan-loader loader.c
