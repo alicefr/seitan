@@ -258,6 +258,85 @@ START_TEST(test_multiple_instr_with_args)
 }
 END_TEST
 
+START_TEST(test_multiple_instance_same_instr)
+{
+	unsigned int size;
+	struct bpf_call calls[] = {
+		{
+			.name = "test1",
+			.args = { 0, 123, 0, 0, 0, 0 },
+			.check_arg = { false, true, false, false, false, false }
+		},
+		{
+			.name = "test1",
+			.args = { 0, 0, 321, 0, 0, 0 },
+			.check_arg = { false, false, true, false, false, false }
+		},
+		{ .name = "test2"}, { .name = "test3"},
+		{
+			.name = "test4",
+			.args = { 0, 123, 0, 0, 0, 0 },
+			.check_arg = { false, true, false, false, false, false }
+		},
+		{
+			.name = "test4",
+			.args = { 0, 0, 321, 0, 0, 0 },
+			.check_arg = { false, false, true, false, false, false }
+		},
+		{ .name = "test5"},
+	};
+	struct syscall_entry table[] = {
+		{ .count = 2, .nr = 42, .entry = &calls[0] },
+		{ .count = 1, .nr = 43, .entry = &calls[1] },
+		{ .count = 1, .nr = 44, .entry = &calls[2] },
+		{ .count = 2, .nr = 45, .entry = &calls[3] },
+		{ .count = 1, .nr = 46, .entry = &calls[4] },
+	};
+	struct sock_filter expected[] = {
+		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+		 	 (offsetof(struct seccomp_data, arch))),
+		/* l1 */ BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 22),
+		/* l2 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+	 	 (offsetof(struct seccomp_data, nr))),
+		/* ------- level0 -------- */
+		/* l3 */ JGE(46, 1, 0),
+		/* ------- level1 -------- */
+		/* l4 */ JGE(45, 2, 1),
+		/* l5 */ JGE(46, 3, 2),
+		/* ------- level2 -------- */
+		/* l6 */ JGE(43, 4, 3),
+		/* l7 */ JGE(45, 5, 4),
+		/* l8 */ JGE(46, 6, 5),
+		/* l9 */ JUMPA(14),
+		/* -------- leaves ------- */
+		/* l10 */ EQ(42, 4, 13),
+		/* l11 */ EQ(43, 6, 12),
+		/* l12 */ EQ(44, 6, 11),
+		/* l13 */ EQ(45, 6, 10),
+		/* l14 */ EQ(46, 8, 9),
+		/* ------- args ---------- */
+		/* l15 */ EQ(123, 9, 0),
+		/* l16 */ EQ(321, 8, 0),
+		/* l17 */ JUMPA(6),
+		/* l18 */ JUMPA(5),
+		/* l19 */ JUMPA(4),
+		/* l20 */ EQ(123, 4, 0),
+		/* l21 */ EQ(321, 3, 0),
+		/* l22 */ JUMPA(1),
+		/* l23 */ JUMPA(0),
+		/* l24 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+		/* l25 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
+	};
+	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
+
+	size = create_bfp_program(table, result,
+				  sizeof(calls) / sizeof(calls[0]));
+	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
+	ck_assert(filter_eq(expected, result,
+			    sizeof(expected) / sizeof(expected[0])));
+}
+END_TEST
+
 
 Suite *bpf_suite(void)
 {
@@ -272,6 +351,7 @@ Suite *bpf_suite(void)
 	tcase_add_test(tc_core, test_two_instr);
 	tcase_add_test(tc_core, test_multiple_instr_no_args);
 	tcase_add_test(tc_core, test_multiple_instr_with_args);
+	tcase_add_test(tc_core, test_multiple_instance_same_instr);
 
 	suite_add_tcase(s, tc_core);
 
