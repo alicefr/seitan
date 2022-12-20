@@ -128,10 +128,10 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 		unsigned int n_syscall)
 {
 	unsigned int offset_left, offset_right;
-	unsigned int n_args, n_nodes;
+	unsigned int n_args, n_nodes,rchild;
 	unsigned int notify, accept;
 	unsigned int i,j,k, size;
-	unsigned int empty;
+	unsigned int empty, next_offset;
 	int nodes[MAX_JUMPS];
 
 	create_lookup_nodes(nodes, n_syscall);
@@ -168,21 +168,31 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 			continue;
 		}
 		offset_left = left_child(i) - i - 1 - empty;
-		offset_right = right_child(i) - i - 1 - empty;
-
+		rchild = right_child(i);
+		if (rchild/2 > n_syscall) {
+			printf("XXX set rchild %d offset %d n_syscalls %d\n",
+					rchild, offset_left,n_syscall);
+			offset_right = offset_left;
+		} else
+			offset_right = right_child(i) - i - 1 - empty;
 		filter[size] = (struct sock_filter)JGE(
 				table[nodes[i]].nr, offset_right, offset_left);
 		size++;
 	}
 
+	next_offset = n_syscall -1;
+	/* Insert leaves */
+	for (i = 0; i < n_syscall; i++) {
+		filter[size++] = (struct sock_filter)EQ(
+				table[i].nr, next_offset, accept - size);
+		next_offset += get_n_args(&table[i]);
+	}
+
 	/*
-	 * Insert leaves and args. Evaluate every args, if it doesn't match continue with
+	 * Insert args. Evaluate every args, if it doesn't match continue with
 	 * the following, otherwise notify.
 	 */
 	for (i = 0; i < n_syscall; i++) {
-		/* Insert leaves */
-		filter[size++] = (struct sock_filter)EQ(
-				table[i].nr, 0, accept - size);
 		for (j = 0; j < table->count; j++) {
 			for (k = 0; k < 6; k++)
 				if ((table[i].entry + j)->check_arg[k])
