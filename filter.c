@@ -12,12 +12,6 @@
 
 #define N_SYSCALL sizeof(numbers) / sizeof(numbers[0])
 
-const int LEAF_SIZE = 1;
-const int NODE_SIZE = 2;
-const int ARG_SIZE = 1;
-const int NOTIFY = 1;
-const int ACCEPT = 2;
-
 static int compare_key(const void *key, const void *base)
 {
 	return strcmp((const char *)key,
@@ -36,16 +30,14 @@ static int compare_table_nr(const void *a, const void *b)
 		((struct syscall_entry *)b)->nr);
 }
 
-//static void print_table(struct syscall_entry *table, int n)
-//{
-//	int i;
-//	printf("-----------------------\n");
-//	for (i = 0; i < n; i++) {
-//		printf("nr=%ld n=%d entry=%s\n", table[i].nr, table[i].count,
-//		       (table[i].entry)->name);
-//	}
-//	printf("-----------------------\n");
-//}
+static unsigned int count_shift_right(unsigned int n)
+{
+	unsigned int i = 0;
+	for (; n > 0; i++) {
+		n = n >> 1;
+	}
+	return i;
+}
 
 long resolve_syscall_nr(const char *name)
 {
@@ -128,21 +120,18 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 		unsigned int n_syscall)
 {
 	unsigned int offset_left, offset_right;
-	unsigned int n_args, n_nodes,rchild;
+	unsigned int n_args, n_nodes;
 	unsigned int notify, accept;
 	unsigned int i,j,k, size;
-	unsigned int empty, next_offset;
+	unsigned int next_offset;
 	int nodes[MAX_JUMPS];
 
 	create_lookup_nodes(nodes, n_syscall);
 
-	empty = 0;
 	size = 3;
 	/* No nodes if there is a single syscall */
-	if (n_syscall == 1)
-		n_nodes = 0;
-	else
-		n_nodes = count_nodes(nodes);
+	n_nodes = (1 << count_shift_right(n_syscall - 1)) - 1;
+
 	n_args = get_total_args(table, n_syscall);
 
 	accept = 2 + n_nodes + 2 * n_syscall + n_args + 1;
@@ -159,25 +148,16 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	filter[2] = (struct sock_filter)BPF_STMT(
 			BPF_LD | BPF_W | BPF_ABS, (offsetof(struct seccomp_data, nr)));
 
-	printf("n_nodes: %d \n", n_nodes);
-
 	/* Insert nodes */
 	for (i = 0; i < n_nodes; i++) {
 		if (nodes[i] == EMPTY) {
-			empty++;
-			continue;
+			filter[size++] = (struct sock_filter) JUMPA(accept - size);
+		} else {
+			offset_left = left_child(i) - i - 1;
+			offset_right = right_child(i) - i - 1;
+			filter[size++] = (struct sock_filter)JGE(
+					table[nodes[i]].nr, offset_right, offset_left);
 		}
-		offset_left = left_child(i) - i - 1 - empty;
-		rchild = right_child(i);
-		if (rchild/2 > n_syscall) {
-			printf("XXX set rchild %d offset %d n_syscalls %d\n",
-					rchild, offset_left,n_syscall);
-			offset_right = offset_left;
-		} else
-			offset_right = right_child(i) - i - 1 - empty;
-		filter[size] = (struct sock_filter)JGE(
-				table[nodes[i]].nr, offset_right, offset_left);
-		size++;
 	}
 
 	next_offset = n_syscall -1;
@@ -254,15 +234,6 @@ static void insert_pair(int jumps[], int arr[], unsigned int level)
 	}
 }
 
-static unsigned count_shift_right(unsigned int n)
-{
-	unsigned int i = 0;
-	for (; n > 0; i++) {
-		n = n >> 1;
-	}
-	return i;
-}
-
 void print_nodes(int nodes[])
 {
 	unsigned int i;
@@ -304,7 +275,7 @@ unsigned int right_child(unsigned int parent_index)
 void create_lookup_nodes(int jumps[], unsigned int n)
 {
 	unsigned int i, index;
-	unsigned old_interval, interval;
+	unsigned int old_interval, interval;
 
 	for (i = 0; i < MAX_JUMPS; i++)
 		jumps[i] = EMPTY;
