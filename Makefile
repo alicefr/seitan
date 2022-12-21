@@ -16,9 +16,6 @@ export CFLAGS
 
 all: t.out seitan-loader seitan
 
-t.out: qemu_filter build
-	./build
-
 build: build.c filter.c filter.h numbers.h
 	$(CC) $(CFLAGS) -o build filter.c build.c
 
@@ -30,9 +27,6 @@ seitan-loader: loader.c
 
 seitan: seitan.c transform.h
 	$(CC) $(CFLAGS) -o seitan seitan.c
-
-filter.h: qemu_filter
-	./filter.sh qemu_filter
 
 numbers.h:
 	./nr_syscalls.sh
