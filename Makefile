@@ -12,6 +12,8 @@ CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\"
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 CFLAGS += -Wall -Wextra -pedantic
 
+export CFLAGS
+
 all: t.out seitan-loader seitan
 
 t.out: qemu_filter build
@@ -34,6 +36,9 @@ filter.h: qemu_filter
 
 numbers.h:
 	./nr_syscalls.sh
+
+test-unit:
+	$(MAKE) -C tests/unit
 
 transform.h: qemu_filter
 	./transform.sh qemu_filter
