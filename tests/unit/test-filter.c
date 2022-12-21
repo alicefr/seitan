@@ -50,7 +50,7 @@ START_TEST(test_single_instr)
 	};
 
 	size = create_bfp_program(table, result,
-				  sizeof(calls) / sizeof(calls[0]));
+				  sizeof(table) / sizeof(table[0]));
 	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
 	ck_assert(filter_eq(expected, result,
 			    sizeof(expected) / sizeof(expected[0])));
@@ -87,7 +87,7 @@ START_TEST(test_single_instr_two_args)
 	};
 
 	size = create_bfp_program(table, result,
-				  sizeof(calls) / sizeof(calls[0]));
+				  sizeof(table) / sizeof(table[0]));
 	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
 	ck_assert(filter_eq(expected, result,
 			    sizeof(expected) / sizeof(expected[0])));
@@ -128,7 +128,7 @@ START_TEST(test_two_instr)
 	struct sock_filter result[30];
 
 	size = create_bfp_program(table, result,
-				  sizeof(calls) / sizeof(calls[0]));
+				  sizeof(table) / sizeof(table[0]));
 	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
 	ck_assert(filter_eq(expected, result,
 			    sizeof(expected) / sizeof(expected[0])));
@@ -182,7 +182,7 @@ START_TEST(test_multiple_instr_no_args)
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 
 	size = create_bfp_program(table, result,
-				  sizeof(calls) / sizeof(calls[0]));
+				  sizeof(table) / sizeof(table[0]));
 	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
 	ck_assert(filter_eq(expected, result,
 			    sizeof(expected) / sizeof(expected[0])));
@@ -251,7 +251,7 @@ START_TEST(test_multiple_instr_with_args)
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 
 	size = create_bfp_program(table, result,
-				  sizeof(calls) / sizeof(calls[0]));
+				  sizeof(table) / sizeof(table[0]));
 	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
 	ck_assert(filter_eq(expected, result,
 			    sizeof(expected) / sizeof(expected[0])));
@@ -287,10 +287,10 @@ START_TEST(test_multiple_instance_same_instr)
 	};
 	struct syscall_entry table[] = {
 		{ .count = 2, .nr = 42, .entry = &calls[0] },
-		{ .count = 1, .nr = 43, .entry = &calls[1] },
-		{ .count = 1, .nr = 44, .entry = &calls[2] },
-		{ .count = 2, .nr = 45, .entry = &calls[3] },
-		{ .count = 1, .nr = 46, .entry = &calls[4] },
+		{ .count = 1, .nr = 43, .entry = &calls[2] },
+		{ .count = 1, .nr = 44, .entry = &calls[3] },
+		{ .count = 2, .nr = 45, .entry = &calls[4] },
+		{ .count = 1, .nr = 46, .entry = &calls[6] },
 	};
 	struct sock_filter expected[] = {
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
@@ -319,9 +319,9 @@ START_TEST(test_multiple_instance_same_instr)
 		/* l16 */ EQ(321, 8, 0),
 		/* l17 */ JUMPA(6),
 		/* l18 */ JUMPA(5),
-		/* l19 */ JUMPA(4),
-		/* l20 */ EQ(123, 4, 0),
-		/* l21 */ EQ(321, 3, 0),
+		/* l21 */ JUMPA(4),
+		/* l19 */ EQ(123, 4, 0),
+		/* l20 */ EQ(321, 3, 0),
 		/* l22 */ JUMPA(1),
 		/* l23 */ JUMPA(0),
 		/* l24 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
@@ -330,7 +330,7 @@ START_TEST(test_multiple_instance_same_instr)
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 
 	size = create_bfp_program(table, result,
-				  sizeof(calls) / sizeof(calls[0]));
+				  sizeof(table) / sizeof(table[0]));
 	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
 	ck_assert(filter_eq(expected, result,
 			    sizeof(expected) / sizeof(expected[0])));
@@ -341,19 +341,21 @@ END_TEST
 Suite *bpf_suite(void)
 {
 	Suite *s;
-	TCase *tc_core;
+	TCase *tsingle_instr, *tmultiple_instr;
 
 	s = suite_create("Create BPF filter");
-	tc_core = tcase_create("verify filter");
+	tsingle_instr = tcase_create("single instruction");
+	tmultiple_instr = tcase_create("multiple instructions");
 
-	tcase_add_test(tc_core, test_single_instr);
-	tcase_add_test(tc_core, test_single_instr_two_args);
-	tcase_add_test(tc_core, test_two_instr);
-	tcase_add_test(tc_core, test_multiple_instr_no_args);
-	tcase_add_test(tc_core, test_multiple_instr_with_args);
-	tcase_add_test(tc_core, test_multiple_instance_same_instr);
+	tcase_add_test(tsingle_instr, test_single_instr);
+	tcase_add_test(tsingle_instr, test_single_instr_two_args);
+	tcase_add_test(tmultiple_instr, test_two_instr);
+	tcase_add_test(tmultiple_instr, test_multiple_instr_no_args);
+	tcase_add_test(tmultiple_instr, test_multiple_instr_with_args);
+	tcase_add_test(tmultiple_instr, test_multiple_instance_same_instr);
 
-	suite_add_tcase(s, tc_core);
+	suite_add_tcase(s, tsingle_instr);
+	suite_add_tcase(s, tmultiple_instr);
 
 	return s;
 }
@@ -367,7 +369,7 @@ int main(void)
 	s = bpf_suite();
 	runner = srunner_create(s);
 
-	srunner_run_all(runner, CK_NORMAL);
+	srunner_run_all(runner, CK_VERBOSE);
 	no_failed = srunner_ntests_failed(runner);
 	srunner_free(runner);
 	return (no_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
