@@ -33,6 +33,15 @@ numbers.h:
 test-unit:
 	$(MAKE) -C tests/unit
 
+build-test-images: build seitan seitan-eater
+	$(MAKE) -C tests-utils
+	./build test.bpf
+	sudo podman build -t test-seitan -f containerfiles/tests/seitan/Containerfile .
+	sudo podman build -t test-eater -f containerfiles/tests/eater/Containerfile .
+
+test-integration:
+	python -m pytest tests/integration/seitan_containers.py
+
 transform.h: qemu_filter
 	./transform.sh qemu_filter
 

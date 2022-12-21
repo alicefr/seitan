@@ -1,0 +1,14 @@
+FROM fedora:37
+
+RUN mkdir -p /var/run/test-filters
+
+COPY ./seitan-eater /usr/bin/seitan-eater
+COPY ./tests-utils/test-syscalls /usr/local/bin/test-syscalls
+# Filter without syscalls
+COPY ./test.bpf /var/run/test-filters/test.bpf
+
+# Make all test filter files reable by all users
+RUN chmod -R 0777 /var/run/test-filters && \
+	chmod 0777 /var/run/test-filters/*
+
+ENTRYPOINT ["/usr/bin/seitan-eater"]

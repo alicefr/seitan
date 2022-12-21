@@ -1,0 +1,4 @@
+FROM fedora:37
+
+COPY ./seitan /usr/bin/seitan
+COPY ./tests-utils/test-server /usr/local/bin/test-server
