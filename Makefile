@@ -34,8 +34,8 @@ seitan: seitan.c transform.h
 filter.h: qemu_filter
 	./filter.sh qemu_filter
 
-numbers.h: qemu_filter
-	./filter.sh qemu_filter
+numbers.h:
+	./nr_syscalls.sh
 
 transform.h: qemu_filter
 	./transform.sh qemu_filter
