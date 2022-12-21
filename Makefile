@@ -12,10 +12,7 @@ CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\"
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 CFLAGS += -Wall -Wextra -pedantic
 
-all: bpf.out t.out seitan-loader seitan
-
-bpf.out: qemu_filter build
-	./build
+all: t.out seitan-loader seitan
 
 t.out: qemu_filter build
 	./build
