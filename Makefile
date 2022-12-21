@@ -20,6 +20,9 @@ t.out: qemu_filter build
 build: build.c filter.c filter.h numbers.h
 	$(CC) $(CFLAGS) -o build filter.c build.c
 
+bpf_dbg: disasm.c disasm.h bpf_dbg.c
+	$(CC) $(CFLAGS) -o bpf_dbg bpf_dbg.c disasm.c
+
 seitan-loader: loader.c
 	$(CC) $(CFLAGS) -o seitan-loader loader.c
 
