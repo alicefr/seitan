@@ -173,13 +173,13 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	 * the following, otherwise notify.
 	 */
 	for (i = 0; i < n_syscall; i++) {
-		for (j = 0; j < table->count; j++) {
+		for (j = 0; j < (table[i]).count; j++) {
 			for (k = 0; k < 6; k++)
-				if ((table[i].entry + j)->check_arg[k])
+				if ((table[i].entry + j)->check_arg[k]) {
 					filter[size++] = (struct sock_filter)EQ(
 							(table[i].entry + j)->args[k],
 							notify - size, 0);
-
+				}
 		}
 		filter[size++] = (struct sock_filter) JUMPA(accept - size);
 	}
