@@ -20,8 +20,8 @@ bpf.out: qemu_filter build
 t.out: qemu_filter build
 	./build
 
-build: build.c filter.h numbers.h transform.h
-	$(CC) $(CFLAGS) -o build build.c
+build: build.c filter.c filter.h numbers.h
+	$(CC) $(CFLAGS) -o build filter.c build.c
 
 seitan-loader: loader.c
 	$(CC) $(CFLAGS) -o seitan-loader loader.c

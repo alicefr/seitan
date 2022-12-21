@@ -1,102 +1,32 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-
-/* SEITAN - Syscall Expressive Interpreter, Transformer and Notifier
- *
- * build.c - Build BPF program and transformation table blobs
- *
- * Copyright (c) 2022 Red Hat GmbH
- * Author: Stefano Brivio <sbrivio@redhat.com>
- */
-
-#include <stdio.h>
+#define _GNU_SOURCE
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>
 #include <unistd.h>
 
-#include <linux/audit.h>
-#include <linux/filter.h>
-#include <linux/seccomp.h>
-
-struct syscall_numbers {
-	char name[1024];
-	long number;
-};
-
-enum transform {
-	NONE,
-	FD1_UNIX,
-	FDRET_SRC,
-	DEV_CHECK,
-};
-
 #include "filter.h"
-#include "numbers.h"
 
-struct table {
-	enum transform type;
-	long number;
-
-	char arg[6][1024];
+struct bpf_call calls[] = {
+	{
+		.name = "connect",
+		.args = { 0, 111, 0, 0, 0, 0 },
+		.check_arg = { false, false, false, false, false, false },
+	},
 };
 
-static struct table t[16];
-
-int main(void)
+int main(int argc, char **argv)
 {
-	struct table *tp = t;
-	char buf[BUFSIZ];
-	FILE *fp;
-	int fd;
-
-	fd = open(BUILD_BPF_OUT, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
-		  S_IRUSR | S_IWUSR);
-	write(fd, BUILD_PROFILE, sizeof(BUILD_PROFILE));
-	close(fd);
-
-	fp = fopen(BUILD_IN, "r");
-	while (fgets(buf, BUFSIZ, fp)) {
-		char name[1024];
-		char type[1024];
-		unsigned i;
-
-		if (*buf == '\n' || *buf == '#')
-			continue;
-		if (sscanf(buf, "%s %s " /* syscall, type */
-				"%s %s %s %s %s %s", name, type,
-				tp->arg[0], tp->arg[1], tp->arg[2],
-				tp->arg[3], tp->arg[4], tp->arg[5]) < 3)
-			continue;
-
-		for (i = 0; i < sizeof(numbers) / sizeof(numbers[0]); i++) {
-			if (!strcmp(name, numbers[i].name))
-				break;
-		}
-
-		if (i == sizeof(numbers))
-			continue;
-
-		if (!strcmp(type, "fd1_unix"))
-			tp->type = 1;
-		else if (!strcmp(type, "fdret_src"))
-			tp->type = 2;
-		else if (!strcmp(type, "dev_check"))
-			tp->type = 3;
-		else
-			continue;
-
-		tp->number = numbers[i].number;
-
-		tp++;
+	int ret;
+	if (argc < 2) {
+		perror("missing input file");
+		exit(EXIT_FAILURE);
 	}
-	fclose(fp);
-
-	fd = open(BUILD_TRANSFORM_OUT,
-		  O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR | S_IWUSR);
-
-	write(fd, t, sizeof(t));
-	close(fd);
-
+	ret = convert_bpf(argv[1], calls, sizeof(calls) / sizeof(calls[0]));
+	if (ret < 0) {
+		perror("converting bpf program");
+		exit(EXIT_FAILURE);
+	}
 	return 0;
 }
