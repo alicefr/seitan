@@ -8,10 +8,8 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
-CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\" -DBUILD_BPF_OUT=\"bpf.out\"
-CFLAGS += -DBUILD_IN=\"qemu_filter\"
+CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\"
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
-CFLAGS += -DBUILD_PROFILE=qemu_filter
 CFLAGS += -Wall -Wextra -pedantic
 
 all: bpf.out t.out seitan-loader seitan
