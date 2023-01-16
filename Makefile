@@ -14,7 +14,7 @@ CFLAGS += -Wall -Wextra -pedantic
 
 export CFLAGS
 
-all: t.out seitan-loader seitan
+all: t.out seitan-eater seitan
 
 build: build.c filter.c filter.h numbers.h
 	$(CC) $(CFLAGS) -o build filter.c build.c
@@ -22,8 +22,8 @@ build: build.c filter.c filter.h numbers.h
 bpf_dbg: disasm.c disasm.h bpf_dbg.c
 	$(CC) $(CFLAGS) -o bpf_dbg bpf_dbg.c disasm.c
 
-seitan-loader: loader.c
-	$(CC) $(CFLAGS) -o seitan-loader loader.c
+seitan-eater: eater.c
+	$(CC) $(CFLAGS) -o seitan-eater eater.c
 
 seitan: seitan.c transform.h
 	$(CC) $(CFLAGS) -o seitan seitan.c
@@ -38,4 +38,4 @@ transform.h: qemu_filter
 	./transform.sh qemu_filter
 
 clean:
-	rm -f filter.h numbers.h transform.h t.out bpf.out build seitan-loader seitan
+	rm -f filter.h numbers.h transform.h t.out bpf.out build seitan-eater seitan

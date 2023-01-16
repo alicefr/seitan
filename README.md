@@ -21,7 +21,7 @@ div > ul {
 * **build-table**
     * build transformation table
 
-* **seitan-loader**
+* **seitan-eater**
     * load BPF blob
     * attach filter
     * call blocking syscall
@@ -30,7 +30,7 @@ div > ul {
 * **seitan**
     * load transformation table blob
     * listen to netlink proc connector
-    * look for seitan-loader, once found:
+    * look for seitan-eater, once found:
     * get seccomp notifier via pidfd_getfd()
     * listen to it, new syscall:
         * look up in transformation table

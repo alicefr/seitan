@@ -92,8 +92,8 @@ static int event(int s)
 			 ev->event_data.exec.process_pid);
 
 		readlink(path, exe, PATH_MAX);
-		if (!strcmp(exe, "/usr/local/bin/seitan-loader") ||
-		    !strcmp(exe, "/usr/bin/seitan-loader"))
+		if (!strcmp(exe, "/usr/local/bin/seitan-eater") ||
+		    !strcmp(exe, "/usr/bin/seitan-eater"))
 			return ev->event_data.exec.process_pid;
 
 		if (nlh->nlmsg_type == NLMSG_DONE)

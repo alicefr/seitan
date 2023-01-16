@@ -2,7 +2,7 @@
 
 /* SEITAN - Syscall Expressive Interpreter, Transformer and Notifier
  *
- * loader.c - Load BPF program and execute binary
+ * eater.c - Load BPF program and execute binary
  *
  * Copyright (c) 2022 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
@@ -41,7 +41,7 @@ static char *qemu_names[] = {
  */
 void usage(void)
 {
-	fprintf(stderr, "Usage: seitan-loader [QEMU_ARG]...\n");
+	fprintf(stderr, "Usage: seitan-eater [QEMU_ARG]...\n");
 	fprintf(stderr, "\n");
 
 	exit(EXIT_FAILURE);
