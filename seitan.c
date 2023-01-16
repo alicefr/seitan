@@ -168,6 +168,19 @@ struct table {
 
 static struct table t[16];
 
+static int pidfd_send_signal(int pidfd, int sig, siginfo_t *info,
+		unsigned int flags)
+{
+	return syscall(__NR_pidfd_send_signal, pidfd, sig, info, flags);
+}
+
+static void unblock_eater(int pidfd){
+	if (pidfd_send_signal(pidfd, SIGCONT, NULL, 0) == -1) {
+		perror("pidfd_send_signal");
+		exit(EXIT_FAILURE);
+	}
+}
+
 int handle(struct seccomp_notif *req, int notifyfd)
 {
 	char path[PATH_MAX + 1];
@@ -259,6 +272,9 @@ int main(int argc, char **argv)
                perror("epoll_ctl: notifier");
                exit(EXIT_FAILURE);
         }
+	/* Unblock seitan-loader */
+	unblock_eater(pidfd);
+
 	while(running) {
 		nevents = epoll_wait(epollfd, events, EPOLL_EVENTS, -1);
 		if (nevents < 0 ) {

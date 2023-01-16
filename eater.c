@@ -20,6 +20,7 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
+#include <signal.h>
 
 #include <linux/audit.h>
 #include <linux/filter.h>
@@ -75,6 +76,8 @@ static int seccomp(unsigned int operation, unsigned int flags, void *args)
 	return syscall(__NR_seccomp, operation, flags, args);
 }
 
+static void signal_handler(__attribute__((unused))int s){}
+
 /**
  * main() - Entry point
  * @argc:	Argument count
@@ -87,6 +90,7 @@ int main(int argc, char **argv)
 	struct sock_filter filter[1024];
 	struct arguments arguments;
 	struct sock_fprog prog;
+	struct sigaction act;
 	size_t n;
 	int fd;
 
@@ -106,8 +110,10 @@ int main(int argc, char **argv)
 		perror("seccomp");
 		exit(EXIT_FAILURE);
 	}
+	act.sa_handler = signal_handler;
+	sigaction(SIGCONT, &act, NULL);
+	pause();
 
-	connect(0, NULL, 0); /* Wait for seitan to unblock this */
 	execvpe(argv[arguments.program_index], &argv[arguments.program_index],
 			environ);
 	if (errno != ENOENT) {
