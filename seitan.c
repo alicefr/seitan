@@ -14,6 +14,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <limits.h>
@@ -23,6 +24,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/epoll.h>
 #include <argp.h>
 #include <linux/netlink.h>
 #include <linux/connector.h>
@@ -31,6 +33,8 @@
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
+
+#define EPOLL_EVENTS 8
 
 static char doc[] = "Usage: seitan: setain -pid <pid> -i <input file> ";
 
@@ -209,12 +213,16 @@ int handle(struct seccomp_notif *req, int notifyfd)
 
 int main(int argc, char **argv)
 {
+
 	int s = nl_init(), ret, pidfd, notifier;
 	char resp_b[BUFSIZ], req_b[BUFSIZ];
+	struct epoll_event ev, events[EPOLL_EVENTS];
 	struct seccomp_notif_resp *resp = (struct seccomp_notif_resp *)resp_b;
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
 	struct arguments arguments;
-	int fd;
+	bool running = true;
+	int fd, epollfd;
+	int nevents,i;
 
 	arguments.pid = -1;
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
@@ -234,7 +242,6 @@ int main(int argc, char **argv)
 		perror("pidfd_open");
 		exit(EXIT_FAILURE);
 	}
-
 	sleep(1);
 
 	if ((notifier = syscall(SYS_pidfd_getfd, pidfd, 3, 0)) < 0) {
@@ -242,21 +249,41 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	while (1) {
+	if ((epollfd = epoll_create1(0)) < 0) {
+		perror("epoll_create");
+		exit(EXIT_FAILURE);
+	}
+	ev.events = EPOLLIN;
+	ev.data.fd = notifier;
+	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, notifier, &ev) == -1) {
+               perror("epoll_ctl: notifier");
+               exit(EXIT_FAILURE);
+        }
+	while(running) {
+		nevents = epoll_wait(epollfd, events, EPOLL_EVENTS, -1);
+		if (nevents < 0 ) {
+			perror("epoll_wait");
+			exit(EXIT_FAILURE);
+		}
 		/* TODO: Open syscall transformation table blob, actually handle
 		 * syscalls actions as parsed
 		 */
 		memset(req, 0, sizeof(*req));
-		ioctl(notifier, SECCOMP_IOCTL_NOTIF_RECV, req);
+		for (i = 0; i < nevents; ++i) {
+			if (events[i].events & EPOLLHUP) {
+				/* The notifier fd was closed by the target */
+				running = false;
+			} else if (notifier == events[i].data.fd) {
+				if (!handle(req, events[i].data.fd))
+					continue;
 
-		if (!handle(req, notifier))
-			continue;
+				resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+				resp->id = req->id;
+				resp->error = 0;
+				resp->val = 0;
 
-		resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
-		resp->id = req->id;
-		resp->error = 0;
-		resp->val = 0;
-
-		ioctl(notifier, SECCOMP_IOCTL_NOTIF_SEND, resp);
+				ioctl(notifier, SECCOMP_IOCTL_NOTIF_SEND, resp);
+			}
+		}
 	}
 }
