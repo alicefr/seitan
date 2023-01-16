@@ -97,13 +97,19 @@ int main(int argc, char **argv)
 
 	prog.filter = filter;
 	prog.len = (unsigned short)(n / sizeof(filter[0]));
-	prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-	fd = seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER,
-		     &prog);
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
+		perror("prctl");
+		exit(EXIT_FAILURE);
+	}
+	if ((fd = seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER,
+					&prog) < 0)) {
+		perror("seccomp");
+		exit(EXIT_FAILURE);
+	}
 
 	connect(0, NULL, 0); /* Wait for seitan to unblock this */
 	execvpe(argv[arguments.program_index], &argv[arguments.program_index],
-		environ);
+			environ);
 	if (errno != ENOENT) {
 		perror("execvpe");
 		exit(EXIT_FAILURE);
