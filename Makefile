@@ -8,13 +8,12 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
-CFLAGS += -DBUILD_TRANSFORM_OUT=\"t.out\"
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 CFLAGS += -Wall -Wextra -pedantic
 
 export CFLAGS
 
-all: t.out seitan-eater seitan
+all: seitan-eater seitan
 
 build: build.c filter.c filter.h numbers.h
 	$(CC) $(CFLAGS) -o build filter.c build.c
@@ -38,4 +37,4 @@ transform.h: qemu_filter
 	./transform.sh qemu_filter
 
 clean:
-	rm -f filter.h numbers.h transform.h t.out bpf.out build seitan-eater seitan
+	rm -f filter.h numbers.h transform.h bpf.out build seitan-eater seitan
