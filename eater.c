@@ -16,6 +16,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <argp.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
@@ -26,26 +27,48 @@
 
 extern char **environ;
 
-static char *qemu_names[] = {
-	"kvm",
-	"qemu-kvm",
-#ifdef ARCH
-	( "qemu-system-" ARCH ),
-#endif
-	"/usr/libexec/qemu-kvm",
-	NULL,
+static char doc[] =
+	"Usage: seitan-eater: setain-eater -i <input file> -- program args1 args2...";
+
+/* Eater options */
+static struct argp_option options[] = { { "input", 'i', "FILE", 0,
+					  "BPF filter input file", 0 },
+					{ 0 } };
+
+struct arguments {
+	char *input_file;
+	unsigned int program_index;
 };
 
-/**
- * usage() - Print usage and exit
- */
-void usage(void)
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
-	fprintf(stderr, "Usage: seitan-eater [QEMU_ARG]...\n");
-	fprintf(stderr, "\n");
+	struct arguments *arguments = state->input;
 
-	exit(EXIT_FAILURE);
+	if (state->quoted == 0)
+		arguments->program_index = state->next + 1;
+	switch (key) {
+	case 'i':
+		if (state->quoted == 0)
+			arguments->input_file = arg;
+		break;
+	case ARGP_KEY_END:
+		if (arguments->input_file == NULL)
+			argp_error(state, "missing input file");
+		if (state->argv[arguments->program_index] == NULL)
+			argp_error(state, "missing program");
+		break;
+	}
+
+	return 0;
 }
+
+static struct argp argp = { .options = options,
+			    .parser = parse_opt,
+			    .args_doc = NULL,
+			    .doc = doc,
+			    .children = NULL,
+			    .help_filter = NULL,
+			    .argp_domain = NULL };
 
 static int seccomp(unsigned int operation, unsigned int flags, void *args)
 {
@@ -55,40 +78,35 @@ static int seccomp(unsigned int operation, unsigned int flags, void *args)
 /**
  * main() - Entry point
  * @argc:	Argument count
- * @argv:	qemu arguments
+ * @argv:	Seitan-eater and program arguments
  *
  * Return: 0 once interrupted, non-zero on failure
  */
 int main(int argc, char **argv)
 {
-	int fd = open("bpf.out", O_CLOEXEC | O_RDONLY);
 	struct sock_filter filter[1024];
+	struct arguments arguments;
 	struct sock_fprog prog;
-	char **name;
 	size_t n;
+	int fd;
 
-	(void)argc;
-
+	argp_parse(&argp, argc, argv, 0, 0, &arguments);
+	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
 	n = read(fd, filter, sizeof(filter));
 	close(fd);
 
 	prog.filter = filter;
 	prog.len = (unsigned short)(n / sizeof(filter[0]));
 	prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-	fd = seccomp(SECCOMP_SET_MODE_FILTER,
-		     SECCOMP_FILTER_FLAG_NEW_LISTENER, &prog);
+	fd = seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER,
+		     &prog);
 
-	connect(0, NULL, 0);	/* Wait for seitan to unblock this */
-
-	for (name = qemu_names; *name; name++) {
-		argv[0] = *name;
-		execvpe(*name, argv, environ);
-		if (errno != ENOENT) {
-			perror("execvpe");
-			usage();
-		}
+	connect(0, NULL, 0); /* Wait for seitan to unblock this */
+	execvpe(argv[arguments.program_index], &argv[arguments.program_index],
+		environ);
+	if (errno != ENOENT) {
+		perror("execvpe");
+		exit(EXIT_FAILURE);
 	}
-
-	perror("execvpe");
 	return EXIT_FAILURE;
 }
