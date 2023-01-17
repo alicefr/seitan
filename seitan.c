@@ -23,6 +23,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <argp.h>
 #include <linux/netlink.h>
 #include <linux/connector.h>
 #include <linux/cn_proc.h>
@@ -30,6 +31,50 @@
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
+
+static char doc[] = "Usage: seitan: setain -pid <pid> -i <input file> ";
+
+/* Seitan options */
+static struct argp_option options[] = {
+	{ "input", 'i', "FILE", 0, "Action input file", 0 },
+	{ "pid", 'p', "pid", 0, "Pid of process to monitor", 0 },
+	{ 0 }
+};
+
+struct arguments {
+	char *input_file;
+	int pid;
+};
+
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+	struct arguments *arguments = state->input;
+
+	switch (key) {
+	case 'p':
+		arguments->pid = atoi(arg);
+		break;
+	case 'i':
+		arguments->input_file = arg;
+		break;
+	case ARGP_KEY_END:
+		if (arguments->input_file == NULL)
+			argp_error(state, "missing input file");
+		break;
+	default:
+		return ARGP_ERR_UNKNOWN;
+	}
+
+	return 0;
+}
+
+static struct argp argp = { .options = options,
+			    .parser = parse_opt,
+			    .args_doc = NULL,
+			    .doc = doc,
+			    .children = NULL,
+			    .help_filter = NULL,
+			    .argp_domain = NULL };
 
 static int nl_init(void)
 {
@@ -168,16 +213,19 @@ int main(int argc, char **argv)
 	char resp_b[BUFSIZ], req_b[BUFSIZ];
 	struct seccomp_notif_resp *resp = (struct seccomp_notif_resp *)resp_b;
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
+	struct arguments arguments;
 	int fd;
 
-	fd = open("t.out", O_CLOEXEC | O_RDONLY);
+	arguments.pid = -1;
+	argp_parse(&argp, argc, argv, 0, 0, &arguments);
+	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
 	read(fd, t, sizeof(t));
 	close(fd);
 
-	if (argc < 2)
+	if (arguments.pid < 0)
 		while ((ret = event(s)) == -EAGAIN);
 	else
-		ret = atoi(argv[1]);
+		ret = arguments.pid;
 
 	if (ret < 0)
 		exit(EXIT_FAILURE);
