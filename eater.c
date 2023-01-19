@@ -26,6 +26,11 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 
+#include <dirent.h>
+#include <sys/stat.h>
+
+#include "common.h"
+
 extern char **environ;
 
 static char doc[] =
@@ -92,7 +97,7 @@ int main(int argc, char **argv)
 	struct sock_fprog prog;
 	struct sigaction act;
 	size_t n;
-	int fd;
+	int fd, flags;
 
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
@@ -105,9 +110,20 @@ int main(int argc, char **argv)
 		perror("prctl");
 		exit(EXIT_FAILURE);
 	}
-	if ((fd = seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER,
-					&prog) < 0)) {
+	if (seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER,
+					&prog) < 0) {
 		perror("seccomp");
+		exit(EXIT_FAILURE);
+	}
+	/*
+	 * close-on-exec flag is set for the file descriptor by seccomp.
+	 * We want to preserve the fd on the exec in this way we are able
+	 * to easly find the notifier fd if seitan restarts.
+	 */
+	fd = find_fd_seccomp_notifier("/proc/self/fd");
+	flags = fcntl(fd, F_GETFD);
+	if (fcntl(fd, F_SETFD, flags & !FD_CLOEXEC) < 0) {
+		perror("fcntl");
 		exit(EXIT_FAILURE);
 	}
 	act.sa_handler = signal_handler;
@@ -120,5 +136,6 @@ int main(int argc, char **argv)
 		perror("execvpe");
 		exit(EXIT_FAILURE);
 	}
+	close(fd);
 	return EXIT_FAILURE;
 }
