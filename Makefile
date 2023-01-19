@@ -21,8 +21,8 @@ build: build.c filter.c filter.h numbers.h
 bpf_dbg: disasm.c disasm.h bpf_dbg.c
 	$(CC) $(CFLAGS) -o bpf_dbg bpf_dbg.c disasm.c
 
-seitan-eater: eater.c
-	$(CC) $(CFLAGS) -o seitan-eater eater.c
+seitan-eater: eater.c common.h common.c
+	$(CC) $(CFLAGS) -o seitan-eater eater.c common.c
 
 seitan: seitan.c transform.h common.h common.c
 	$(CC) $(CFLAGS) -o seitan seitan.c common.c
