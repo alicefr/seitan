@@ -24,8 +24,8 @@ bpf_dbg: disasm.c disasm.h bpf_dbg.c
 seitan-eater: eater.c
 	$(CC) $(CFLAGS) -o seitan-eater eater.c
 
-seitan: seitan.c transform.h
-	$(CC) $(CFLAGS) -o seitan seitan.c
+seitan: seitan.c transform.h common.h common.c
+	$(CC) $(CFLAGS) -o seitan seitan.c common.c
 
 numbers.h:
 	./nr_syscalls.sh
