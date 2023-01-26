@@ -167,6 +167,7 @@ int do_call(struct arg_clone *c)
 int do_actions(struct action actions[], unsigned int n_actions, int pid,
 	       int notifyfd, uint64_t id)
 {
+	struct seccomp_notif_addfd resp_fd;
 	struct seccomp_notif_resp resp;
 	struct arg_clone c;
 	unsigned int i;
@@ -208,6 +209,23 @@ int do_actions(struct action actions[], unsigned int n_actions, int pid,
 			resp.error = 0;
 			resp.val = 0;
 			if (send_target(&resp, notifyfd) == -1)
+				return -1;
+			break;
+		case A_INJECT_A:
+			resp_fd.id = id;
+			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SEND;
+			resp_fd.newfd = actions[i].inj.newfd;
+			resp_fd.srcfd = actions[i].inj.old;
+			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SETFD;
+			if (send_inject_target(&resp_fd, notifyfd) == -1)
+				return -1;
+			break;
+		case A_INJECT:
+			resp_fd.id = id;
+			resp_fd.newfd = actions[i].inj.newfd;
+			resp_fd.srcfd = actions[i].inj.old;
+			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SETFD;
+			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
 		default:
