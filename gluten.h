@@ -49,6 +49,7 @@ enum action_type {
 	A_CONT,
 	A_INJECT,
 	A_INJECT_A,
+	A_RETURN,
 };
 
 struct act_call {
