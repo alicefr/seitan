@@ -75,12 +75,6 @@ struct act_inject {
 	uint32_t old;
 };
 
-struct act_inject_a {
-	uint32_t newfd;
-	uint32_t old;
-	int64_t value;
-};
-
 struct action {
 	enum action_type type;
 	union {
@@ -89,7 +83,6 @@ struct action {
 		struct act_continue cont;
 		struct act_return ret;
 		struct act_inject inj;
-		struct act_inject_a inj_a;
 	};
 };
 #endif /* GLUTEN_H */
