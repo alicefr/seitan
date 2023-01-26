@@ -193,6 +193,14 @@ int do_actions(struct action actions[], unsigned int n_actions, int pid,
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
 			break;
+		case A_RETURN:
+			resp.id = id;
+			resp.flags = 0;
+			resp.error = 0;
+			resp.val = actions[i].ret.value;
+			if (send_target(&resp, notifyfd) == -1)
+				return -1;
+			break;
 		default:
 			fprintf(stderr, "unknow action %d \n", actions[i].type);
 		}
