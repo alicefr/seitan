@@ -185,6 +185,14 @@ int do_actions(struct action actions[], unsigned int n_actions, int pid,
 					return -1;
 			}
 			break;
+		case A_BLOCK:
+			resp.id = id;
+			resp.val = 0;
+			resp.flags = 0;
+			resp.error = actions[i].block.error;
+			if (send_target(&resp, notifyfd) == -1)
+				return -1;
+			break;
 		default:
 			fprintf(stderr, "unknow action %d \n", actions[i].type);
 		}
