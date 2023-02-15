@@ -145,6 +145,12 @@ void setup()
 		      (req.data).nr);
 }
 
+void teardown()
+{
+	if (at != NULL)
+		munmap(at, sizeof(struct args_target));
+}
+
 START_TEST(test_act_continue)
 {
 	struct action actions[] = {
@@ -195,7 +201,7 @@ Suite *action_call_suite(void)
 	s = suite_create("Perform actions");
 	tactions = tcase_create("actions");
 
-	tcase_add_checked_fixture(tactions, setup, NULL);
+	tcase_add_checked_fixture(tactions, setup, teardown);
 	tcase_set_timeout(tactions, 30);
 	tcase_add_test(tactions, test_act_return);
 	tcase_add_test(tactions, test_act_block);
