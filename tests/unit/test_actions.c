@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <limits.h>
+#include <fcntl.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
@@ -24,6 +25,8 @@
 struct args_target {
 	long ret;
 	int err;
+	bool check_fd;
+	int fd;
 };
 
 struct seccomp_notif req;
@@ -31,6 +34,7 @@ int notifyfd;
 struct args_target *at;
 int pipefd[2];
 int nr = __NR_getpid;
+pid_t pid;
 
 static int install_notification_filter()
 {
@@ -62,20 +66,26 @@ static int install_notification_filter()
 	return fd;
 }
 
+static int create_test_fd()
+{
+	return open("/tmp", O_RDWR| O_TMPFILE );
+}
+
 static int target()
 {
-	int ret = 0;
-	int fd;
-
-	close(pipefd[0]);
-	fd = install_notification_filter();
-	if (fd < 0) {
+	int buf = 0;
+	if (install_notification_filter() < 0) {
 		return -1;
 	}
+
 	at->ret = getpid();
 	at->err = errno;
+	if (at->check_fd)
+		read(pipefd[0], &buf, 1);
 
-	write(pipefd[1], &ret, 1);
+	close(pipefd[0]);
+
+	write(pipefd[1], &buf, 1);
 	close(pipefd[1]);
 	exit(0);
 }
@@ -137,7 +147,24 @@ void target_exit()
 	}
 }
 
-void setup()
+static bool has_fd(int pid, int fd)
+{
+        char path[PATH_MAX + 1];
+
+	snprintf(path, sizeof(path), "/proc/%d/fd/%d", pid, fd);
+	return access(path, F_OK) == 0;
+}
+
+static void check_target_fd(int pid, int fd)
+{
+	int buf = 0;
+
+	ck_assert(has_fd(pid, fd));
+	write(pipefd[1], &buf, 1);
+	close(pipefd[1]);
+}
+
+void setup(bool check_fd)
 {
 	int ret;
 
@@ -145,10 +172,14 @@ void setup()
 	ck_assert_int_ne(pipe(pipefd), -1);
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	pid_t pid = do_clone(target, NULL);
+	at-> check_fd = check_fd;
+	pid = do_clone(target, NULL);
 	ck_assert_int_ge(pid, 0);
 
-	ck_assert_int_ne(close(pipefd[1]), -1);
+	/* Use write pipe to sync the target for checking the existance of the fd */
+	if (!check_fd)
+		ck_assert_int_ne(close(pipefd[1]), -1);
+
 	notifyfd = get_fd_notifier(pid);
 
 	memset(&req, 0, sizeof(req));
@@ -162,6 +193,15 @@ void teardown()
 {
 	if (at != NULL)
 		munmap(at, sizeof(struct args_target));
+}
+
+void setup_without_fd()
+{
+	setup(false);
+}
+void setup_fd()
+{
+	setup(true);
 }
 
 START_TEST(test_act_continue)
@@ -206,21 +246,59 @@ START_TEST(test_act_return)
 }
 END_TEST
 
+static void test_inject(struct action actions[], int n)
+{
+	int fd_inj;
+	int test_fd = 3;
+	int ret;
+
+	fd_inj = create_test_fd();
+	ck_assert_int_ge(fd_inj,0);
+	actions[0].inj.newfd = fd_inj;
+	actions[0].inj.oldfd = test_fd;
+
+	ret = do_actions(actions, n, -1, notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	check_target_fd(pid, test_fd);
+}
+
+START_TEST(test_act_inject_a)
+{
+	struct action actions[] = {{.type = A_INJECT_A}	};
+	test_inject(actions, sizeof(actions) / sizeof(actions[0]));
+}
+END_TEST
+
+START_TEST(test_act_inject)
+{
+	struct action actions[] = { { .type = A_INJECT }};
+	test_inject(actions,sizeof(actions) / sizeof(actions[0]));
+}
+END_TEST
+
 Suite *action_call_suite(void)
 {
 	Suite *s;
 	TCase *tactions;
+	TCase *tactions_fd;
 
 	s = suite_create("Perform actions");
 	tactions = tcase_create("actions");
+	tactions_fd = tcase_create("actions with file descriptor injection");
 
-	tcase_add_checked_fixture(tactions, setup, teardown);
+	tcase_add_checked_fixture(tactions, setup_without_fd, teardown);
 	tcase_set_timeout(tactions, 30);
 	tcase_add_test(tactions, test_act_return);
 	tcase_add_test(tactions, test_act_block);
 	tcase_add_test(tactions, test_act_continue);
 
+	tcase_add_checked_fixture(tactions_fd, setup_fd, teardown);
+	tcase_set_timeout(tactions_fd, 30);
+	tcase_add_test(tactions_fd, test_act_inject);
+	tcase_add_test(tactions_fd, test_act_inject_a);
+
 	suite_add_tcase(s, tactions);
+	suite_add_tcase(s, tactions_fd);
 
 	return s;
 }
