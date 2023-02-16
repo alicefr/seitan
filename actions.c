@@ -213,7 +213,7 @@ int do_actions(struct action actions[], unsigned int n_actions, int pid,
 			break;
 		case A_INJECT_A:
 			resp_fd.id = id;
-			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SEND;
+			resp_fd.flags = SECCOMP_ADDFD_FLAG_SEND;
 			resp_fd.newfd = actions[i].inj.newfd;
 			resp_fd.srcfd = actions[i].inj.oldfd;
 			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SETFD;
@@ -224,7 +224,8 @@ int do_actions(struct action actions[], unsigned int n_actions, int pid,
 			resp_fd.id = id;
 			resp_fd.newfd = actions[i].inj.newfd;
 			resp_fd.srcfd = actions[i].inj.oldfd;
-			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SETFD;
+			resp_fd.flags = SECCOMP_ADDFD_FLAG_SETFD;
+			resp_fd.newfd_flags = 0;
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
