@@ -236,13 +236,43 @@ START_TEST(test_act_return)
 	struct action actions[] = {
 		{
 			.type = A_RETURN,
-			.ret = { .value = 1 },
+			.ret = { .type = IMMEDIATE, .value = 1 },
 		},
 	};
 	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0);
+}
+END_TEST
+
+START_TEST(test_act_return_ref)
+{
+	int64_t v = 2;
+	struct action actions[] = {
+		{
+			.type = A_RETURN,
+			.ret = { .type = REFERENCE, .value_p = &v },
+		},
+	};
+	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
+			     notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	check_target_result(v, 0);
+}
+END_TEST
+
+START_TEST(test_act_return_empty_ref)
+{
+	struct action actions[] = {
+		{
+			.type = A_RETURN,
+			.ret = { .type = REFERENCE, .value_p = NULL },
+		},
+	};
+	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
+			     notifyfd, req.id);
+	ck_assert_int_eq(ret, -1);
 }
 END_TEST
 
@@ -295,6 +325,8 @@ Suite *action_call_suite(void)
 	tcase_add_checked_fixture(ret, setup_without_fd, teardown);
 	tcase_set_timeout(ret, timeout);
 	tcase_add_test(ret, test_act_return);
+	tcase_add_test(ret, test_act_return_ref);
+	tcase_add_test(ret, test_act_return_empty_ref);
 	suite_add_tcase(s, ret);
 
 	block = tcase_create("a_block");
