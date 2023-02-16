@@ -295,7 +295,7 @@ Suite *action_call_suite(void)
 	tcase_add_checked_fixture(ret, setup_without_fd, teardown);
 	tcase_set_timeout(ret, timeout);
 	tcase_add_test(ret, test_act_return);
-	suite_add_tcase(s, cont);
+	suite_add_tcase(s, ret);
 
 	block = tcase_create("a_block");
 	tcase_add_checked_fixture(block, setup_without_fd, teardown);
