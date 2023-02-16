@@ -205,7 +205,7 @@ int do_actions(struct action actions[], unsigned int n_actions, int pid,
 
 		case A_CONT:
 			resp.id = id;
-			resp.flags |= SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+			resp.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
 			resp.error = 0;
 			resp.val = 0;
 			if (send_target(&resp, notifyfd) == -1)
