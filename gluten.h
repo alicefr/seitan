@@ -72,7 +72,7 @@ struct act_return {
 
 struct act_inject {
 	uint32_t newfd;
-	uint32_t old;
+	uint32_t oldfd;
 };
 
 struct action {
