@@ -9,6 +9,7 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
@@ -125,10 +126,22 @@ static void check_target_result(long ret, int err)
 	ck_assert_int_eq(close(pipefd[0]), 0);
 }
 
+void target_exit()
+{
+	int status;
+
+	waitpid(-1, &status, WUNTRACED | WNOHANG);
+	if (WEXITSTATUS(status) != 0) {
+		fprintf(stderr, "target process exited with an error\n");
+		exit(-1);
+	}
+}
+
 void setup()
 {
 	int ret;
 
+	signal (SIGCHLD, target_exit);
 	ck_assert_int_ne(pipe(pipefd), -1);
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
