@@ -198,7 +198,15 @@ int do_actions(struct action actions[], unsigned int n_actions, int pid,
 			resp.id = id;
 			resp.flags = 0;
 			resp.error = 0;
-			resp.val = actions[i].ret.value;
+			if (actions[i].ret.type == IMMEDIATE) {
+				resp.val = actions[i].ret.value;
+			} else if (actions[i].ret.value_p != NULL) {
+				resp.val = *(actions[i].ret.value_p);
+			} else {
+				fprintf(stderr, "empty reference for the return value");
+				return -1;
+			}
+
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
 			break;

@@ -52,6 +52,11 @@ enum action_type {
 	A_RETURN,
 };
 
+enum value_type {
+	IMMEDIATE,
+	REFERENCE,
+};
+
 struct act_call {
 	long nr;
 	void *args[6];
@@ -67,7 +72,11 @@ struct act_continue {
 };
 
 struct act_return {
-	int64_t value;
+	enum value_type type;
+	union {
+		int64_t value;
+		int64_t *value_p;
+	};
 };
 
 struct act_inject {
