@@ -279,26 +279,41 @@ END_TEST
 Suite *action_call_suite(void)
 {
 	Suite *s;
-	TCase *tactions;
-	TCase *tactions_fd;
+	int timeout = 30;
+	TCase *cont, *block, *ret;
+	TCase *inject, *inject_a;
 
 	s = suite_create("Perform actions");
-	tactions = tcase_create("actions");
-	tactions_fd = tcase_create("actions with file descriptor injection");
 
-	tcase_add_checked_fixture(tactions, setup_without_fd, teardown);
-	tcase_set_timeout(tactions, 30);
-	tcase_add_test(tactions, test_act_return);
-	tcase_add_test(tactions, test_act_block);
-	tcase_add_test(tactions, test_act_continue);
+	cont = tcase_create("a_continue");
+	tcase_add_checked_fixture(cont, setup_without_fd, teardown);
+	tcase_set_timeout(cont, timeout);
+	tcase_add_test(cont, test_act_continue);
+	suite_add_tcase(s, cont);
 
-	tcase_add_checked_fixture(tactions_fd, setup_fd, teardown);
-	tcase_set_timeout(tactions_fd, 30);
-	tcase_add_test(tactions_fd, test_act_inject);
-	tcase_add_test(tactions_fd, test_act_inject_a);
+	ret = tcase_create("a_return");
+	tcase_add_checked_fixture(ret, setup_without_fd, teardown);
+	tcase_set_timeout(ret, timeout);
+	tcase_add_test(ret, test_act_return);
+	suite_add_tcase(s, cont);
 
-	suite_add_tcase(s, tactions);
-	suite_add_tcase(s, tactions_fd);
+	block = tcase_create("a_block");
+	tcase_add_checked_fixture(block, setup_without_fd, teardown);
+	tcase_set_timeout(block, timeout);
+	tcase_add_test(block, test_act_block);
+	suite_add_tcase(s, block);
+
+	inject = tcase_create("a_inject");
+	tcase_add_checked_fixture(inject, setup_fd, teardown);
+	tcase_set_timeout(inject, timeout);
+	tcase_add_test(inject, test_act_inject);
+	suite_add_tcase(s, inject);
+
+	inject_a = tcase_create("a_inject_a");
+	tcase_add_checked_fixture(inject_a, setup_fd, teardown);
+	tcase_set_timeout(inject_a, timeout);
+	tcase_add_test(inject_a, test_act_inject_a);
+	suite_add_tcase(s, inject_a);
 
 	return s;
 }
