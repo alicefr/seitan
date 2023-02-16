@@ -1,3 +1,0 @@
-podman==4.3.0
-pytest==7.2.1
-waiting==1.4.1
