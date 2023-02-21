@@ -124,14 +124,16 @@ int get_fd_notifier(pid_t pid)
 	return notifier;
 }
 
-static void check_target_result(long ret, int err)
+static void check_target_result(long ret, int err, bool ignore_ret)
 {
 	int buf;
 
 	read(pipefd[0], &buf, 1);
-	ck_assert_msg(at->ret == ret,
-		      "expect return value %ld to be equal to %ld", at->ret,
-		      ret);
+	if (!ignore_ret)
+		ck_assert_msg(at->ret == ret,
+				"expect return value %ld to be equal to %ld",
+				at->ret,
+				ret);
 	ck_assert_int_eq(at->err, err);
 	ck_assert_int_eq(close(pipefd[0]), 0);
 }
@@ -227,7 +229,7 @@ START_TEST(test_act_block)
 	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
-	check_target_result(-1, 0);
+	check_target_result(-1, 0, false);
 }
 END_TEST
 
@@ -242,7 +244,7 @@ START_TEST(test_act_return)
 	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
-	check_target_result(1, 0);
+	check_target_result(1, 0, false);
 }
 END_TEST
 
@@ -258,7 +260,7 @@ START_TEST(test_act_return_ref)
 	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
-	check_target_result(v, 0);
+	check_target_result(v, 0, false);
 }
 END_TEST
 
