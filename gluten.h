@@ -77,7 +77,7 @@ struct act_return {
 	enum value_type type;
 	union {
 		int64_t value;
-		int64_t *value_p;
+		uint16_t value_off;
 	};
 };
 

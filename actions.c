@@ -211,14 +211,12 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions, int 
 			resp.id = id;
 			resp.flags = 0;
 			resp.error = 0;
-			if (actions[i].ret.type == IMMEDIATE) {
+			if (actions[i].ret.type == IMMEDIATE)
 				resp.val = actions[i].ret.value;
-			} else if (actions[i].ret.value_p != NULL) {
-				resp.val = *(actions[i].ret.value_p);
-			} else {
-				fprintf(stderr, "empty reference for the return value");
-				return -1;
-			}
+			else
+				memcpy(&resp.val, (uint16_t *)data +
+						actions[i].ret.value_off,
+						sizeof(resp.val));
 
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
