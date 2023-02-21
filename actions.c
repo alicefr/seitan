@@ -186,9 +186,9 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions, int 
 					return -1;
 			}
 			if (c.err != 0) {
-				resp.error = c.err;
+				resp.error = -1;
 				if (send_target(&resp, notifyfd) == -1)
-					return -1;
+					return c.err;
 			}
 			/*
 			 * The result of the call needs to be save as
