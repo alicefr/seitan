@@ -24,12 +24,11 @@ struct args_write_file {
 
 static void write_file(char *file, char *t, ssize_t size)
 {
-	ssize_t n;
 	int fd;
 
 	fd = open(file, O_CREAT | O_RDWR, S_IWUSR |S_IRUSR);
 	ck_assert_int_ge(fd, -1);
-	n = write(fd,t, size);
+	write(fd,t, size);
 	close(fd);
 }
 
@@ -41,7 +40,7 @@ static int write_file_get_fd(char *file, char *t, ssize_t size)
         fd = open(file, O_RDONLY, S_IWUSR);
         unlink(file);
         return fd;
-};
+}
 
 static int write_file_clone(void *a)
 {
@@ -105,14 +104,12 @@ START_TEST(test_with_open_read_ns)
 	char t[PATH_MAX] = "Hello Test";
 	struct args_write_file args = {
 		test_file, t, sizeof(t)};
-	struct ns_spec ns[NS_NUM];
 	struct act_call call;
 	int flags =  O_RDWR;
 	struct arg_clone c;
 	char buf[PATH_MAX];
 	unsigned i;
 	long count;
-	ssize_t n;
 	pid_t pid;
 	int ret;
 
@@ -153,7 +150,6 @@ START_TEST(test_with_read)
 	char buf[PATH_MAX];
 	unsigned i;
 	long count;
-	ssize_t n;
 	int fd, ret;
 
 	c.args = &call;
@@ -177,7 +173,6 @@ START_TEST(test_with_getppid)
 {
 	struct act_call call;
 	struct arg_clone c;
-	char buf[PATH_MAX];
 	unsigned i;
 	long pid = (long) getpid();
 	int ret;
