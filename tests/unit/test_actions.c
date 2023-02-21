@@ -304,20 +304,31 @@ START_TEST(test_act_call_ret)
 }
 END_TEST
 
-static void test_inject(struct action actions[], int n)
+static void test_inject(struct action actions[], int n, bool reference)
 {
+	uint16_t new_off = 2, old_off = 4;
 	int fd_inj;
 	int test_fd = 3;
 	int ret;
 
 	fd_inj = create_test_fd();
 	ck_assert_int_ge(fd_inj,0);
-	actions[0].inj.newfd.fd = fd_inj;
-	actions[0].inj.newfd.type = IMMEDIATE;
-	actions[0].inj.oldfd.fd = test_fd;
-	actions[0].inj.oldfd.type = IMMEDIATE;
+	if (reference) {
+		memcpy((uint16_t *)&tmp_data + new_off, &fd_inj, sizeof(fd_inj));
+		memcpy((uint16_t *)&tmp_data + old_off, &test_fd, sizeof(test_fd));
 
-	ret = do_actions(NULL, actions, n, -1, notifyfd, req.id);
+		actions[0].inj.newfd.fd_off = new_off;
+		actions[0].inj.newfd.type = REFERENCE;
+		actions[0].inj.oldfd.fd_off = old_off;
+		actions[0].inj.oldfd.type = REFERENCE;
+	} else {
+		actions[0].inj.newfd.fd = fd_inj;
+		actions[0].inj.newfd.type = IMMEDIATE;
+		actions[0].inj.oldfd.fd = test_fd;
+		actions[0].inj.oldfd.type = IMMEDIATE;
+	}
+
+	ret = do_actions(&tmp_data, actions, n, -1, notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_fd(pid, test_fd);
 }
@@ -325,14 +336,28 @@ static void test_inject(struct action actions[], int n)
 START_TEST(test_act_inject_a)
 {
 	struct action actions[] = {{.type = A_INJECT_A}	};
-	test_inject(actions, sizeof(actions) / sizeof(actions[0]));
+	test_inject(actions, sizeof(actions) / sizeof(actions[0]), false);
+}
+END_TEST
+
+START_TEST(test_act_inject_a_ref)
+{
+	struct action actions[] = {{.type = A_INJECT_A}	};
+	test_inject(actions, sizeof(actions) / sizeof(actions[0]), true);
 }
 END_TEST
 
 START_TEST(test_act_inject)
 {
 	struct action actions[] = { { .type = A_INJECT }};
-	test_inject(actions,sizeof(actions) / sizeof(actions[0]));
+	test_inject(actions,sizeof(actions) / sizeof(actions[0]), false);
+}
+END_TEST
+
+START_TEST(test_act_inject_ref)
+{
+	struct action actions[] = { { .type = A_INJECT }};
+	test_inject(actions,sizeof(actions) / sizeof(actions[0]), true);
 }
 END_TEST
 
@@ -375,12 +400,14 @@ Suite *action_call_suite(void)
 	tcase_add_checked_fixture(inject, setup_fd, teardown);
 	tcase_set_timeout(inject, timeout);
 	tcase_add_test(inject, test_act_inject);
+	tcase_add_test(inject, test_act_inject_ref);
 	suite_add_tcase(s, inject);
 
 	inject_a = tcase_create("a_inject_a");
 	tcase_add_checked_fixture(inject_a, setup_fd, teardown);
 	tcase_set_timeout(inject_a, timeout);
 	tcase_add_test(inject_a, test_act_inject_a);
+	tcase_add_test(inject_a, test_act_inject_a_ref);
 	suite_add_tcase(s, inject_a);
 
 	return s;
