@@ -164,7 +164,7 @@ int do_call(struct arg_clone *c)
 	return 0;
 }
 
-int do_actions(struct action actions[], unsigned int n_actions, int pid,
+int do_actions(void *data, struct action actions[], unsigned int n_actions, int pid,
 	       int notifyfd, uint64_t id)
 {
 	struct seccomp_notif_addfd resp_fd;

@@ -14,7 +14,7 @@ struct arg_clone {
 };
 
 int do_call(struct arg_clone *c);
-int do_actions(struct action actions[], unsigned int n_actions, int tpid,
+int do_actions(void *data, struct action actions[], unsigned int n_actions, int tpid,
                 int notifyfd, uint64_t id);
 #endif /* ACTIONS_H */
 

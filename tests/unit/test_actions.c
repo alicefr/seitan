@@ -209,7 +209,7 @@ START_TEST(test_act_continue)
 	struct action actions[] = {
 		{ .type = A_CONT },
 	};
-	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
+	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	ck_assert_int_eq(at->err, 0);
@@ -224,7 +224,7 @@ START_TEST(test_act_block)
 			.block = { .error = -1 },
 		},
 	};
-	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
+	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(-1, 0);
@@ -239,7 +239,7 @@ START_TEST(test_act_return)
 			.ret = { .type = IMMEDIATE, .value = 1 },
 		},
 	};
-	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
+	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0);
@@ -255,7 +255,7 @@ START_TEST(test_act_return_ref)
 			.ret = { .type = REFERENCE, .value_p = &v },
 		},
 	};
-	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
+	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(v, 0);
@@ -270,7 +270,7 @@ START_TEST(test_act_return_empty_ref)
 			.ret = { .type = REFERENCE, .value_p = NULL },
 		},
 	};
-	int ret = do_actions(actions, sizeof(actions) / sizeof(actions[0]), -1,
+	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
 			     notifyfd, req.id);
 	ck_assert_int_eq(ret, -1);
 }
@@ -287,7 +287,7 @@ static void test_inject(struct action actions[], int n)
 	actions[0].inj.newfd = fd_inj;
 	actions[0].inj.oldfd = test_fd;
 
-	ret = do_actions(actions, n, -1, notifyfd, req.id);
+	ret = do_actions(NULL, actions, n, -1, notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_fd(pid, test_fd);
 }
