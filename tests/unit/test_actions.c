@@ -278,6 +278,22 @@ START_TEST(test_act_return_empty_ref)
 }
 END_TEST
 
+START_TEST(test_act_call)
+{
+	struct action actions[] = {
+		{
+			.type = A_CALL,
+			.call = { .nr = __NR_getppid, .has_ret = false },
+		},
+		{ .type = A_CONT },
+	};
+	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
+			notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	check_target_result(1, 0, true);
+}
+END_TEST
+
 static void test_inject(struct action actions[], int n)
 {
 	int fd_inj;
@@ -312,7 +328,7 @@ Suite *action_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
-	TCase *cont, *block, *ret;
+	TCase *cont, *block, *ret, *call;
 	TCase *inject, *inject_a;
 
 	s = suite_create("Perform actions");
@@ -336,6 +352,12 @@ Suite *action_call_suite(void)
 	tcase_set_timeout(block, timeout);
 	tcase_add_test(block, test_act_block);
 	suite_add_tcase(s, block);
+
+	call = tcase_create("a_call");
+	tcase_add_checked_fixture(call, setup_without_fd, teardown);
+	tcase_set_timeout(call, timeout);
+	tcase_add_test(call, test_act_call);
+	suite_add_tcase(s, call);
 
 	inject = tcase_create("a_inject");
 	tcase_add_checked_fixture(inject, setup_fd, teardown);
