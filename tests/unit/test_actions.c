@@ -36,6 +36,8 @@ int pipefd[2];
 int nr = __NR_getpid;
 pid_t pid;
 
+uint16_t tmp_data[TMP_DATA_SIZE];
+
 static int install_notification_filter()
 {
 	int fd;
@@ -294,6 +296,25 @@ START_TEST(test_act_call)
 }
 END_TEST
 
+START_TEST(test_act_call_ret)
+{
+	struct action actions[] = {
+		{
+			.type = A_CALL,
+			.call = { .nr = __NR_getppid, .has_ret = true, .ret_off = 2 },
+		},
+		{ .type = A_CONT },
+	};
+	int ret = do_actions(&tmp_data, actions, sizeof(actions) / sizeof(actions[0]), -1,
+			notifyfd, req.id);
+	long r;
+	ck_assert_msg(ret == 0, strerror(errno));
+	check_target_result(1, 0, true);
+	memcpy(&r, &tmp_data[2], sizeof(r));
+	ck_assert_int_eq(r, getpid());
+}
+END_TEST
+
 static void test_inject(struct action actions[], int n)
 {
 	int fd_inj;
@@ -357,6 +378,7 @@ Suite *action_call_suite(void)
 	tcase_add_checked_fixture(call, setup_without_fd, teardown);
 	tcase_set_timeout(call, timeout);
 	tcase_add_test(call, test_act_call);
+	tcase_add_test(call, test_act_call_ret);
 	suite_add_tcase(s, call);
 
 	inject = tcase_create("a_inject");
