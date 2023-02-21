@@ -53,14 +53,16 @@ enum action_type {
 };
 
 enum value_type {
-	IMMEDIATE,
-	REFERENCE,
+       IMMEDIATE,
+       REFERENCE,
 };
 
 struct act_call {
 	long nr;
+	bool has_ret;
 	void *args[6];
 	struct act_context context;
+	uint16_t ret_off;
 };
 
 struct act_block {
