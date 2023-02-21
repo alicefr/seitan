@@ -9,6 +9,7 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
+CFLAGS += -DTMP_DATA_SIZE=1000
 CFLAGS += -Wall -Wextra -pedantic
 
 export CFLAGS
