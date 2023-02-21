@@ -195,7 +195,7 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions, int 
 			 * reference
 			 */
 			if (actions[i].call.has_ret) {
-				memcpy(data + actions[i].call.ret_off,
+				memcpy((uint16_t *)data + actions[i].call.ret_off,
 					   &c.ret, sizeof(c.ret));
 			}
 			break;
