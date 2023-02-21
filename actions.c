@@ -181,9 +181,22 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions, int 
 			c.args = &actions[i].call;
 			c.pid = pid;
 			if (do_call(&c) == -1) {
+				resp.error = -1;
+				if (send_target(&resp, notifyfd) == -1)
+					return -1;
+			}
+			if (c.err != 0) {
 				resp.error = c.err;
 				if (send_target(&resp, notifyfd) == -1)
 					return -1;
+			}
+			/*
+			 * The result of the call needs to be save as
+			 * reference
+			 */
+			if (actions[i].call.has_ret) {
+				memcpy(data + actions[i].call.ret_off,
+					   &c.ret, sizeof(c.ret));
 			}
 			break;
 		case A_BLOCK:
