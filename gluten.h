@@ -66,6 +66,7 @@ struct act_call {
 };
 
 struct act_block {
+	enum value_type type;
 	int32_t error;
 };
 
@@ -81,9 +82,18 @@ struct act_return {
 	};
 };
 
+struct fd_type {
+	enum value_type type;
+	union {
+		uint32_t fd;
+		uint16_t fd_off;
+	};
+
+};
+
 struct act_inject {
-	uint32_t newfd;
-	uint32_t oldfd;
+	struct fd_type newfd;
+	struct fd_type oldfd;
 };
 
 struct action {

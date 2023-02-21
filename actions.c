@@ -164,6 +164,27 @@ int do_call(struct arg_clone *c)
 	return 0;
 }
 
+static void set_inject_fields(uint64_t id, void *data,
+		const struct action *a,struct seccomp_notif_addfd *resp)
+{
+	const struct fd_type *new = &(a->inj).newfd;
+	const struct fd_type *old = &(a->inj).oldfd;
+
+	resp->flags = SECCOMP_ADDFD_FLAG_SETFD;
+	resp->id = id;
+	if (new->type == IMMEDIATE)
+		resp->newfd = new->fd;
+	else
+		memcpy(&resp->srcfd, (uint16_t *)data + old->fd_off,
+				sizeof(resp->srcfd));
+	if (old->type == IMMEDIATE)
+		resp->srcfd = old->fd;
+	else
+		memcpy(&resp->srcfd, (uint16_t *)data + old->fd_off,
+				sizeof(resp->srcfd));
+	resp->newfd_flags = 0;
+}
+
 int do_actions(void *data, struct action actions[], unsigned int n_actions, int pid,
 	       int notifyfd, uint64_t id)
 {
@@ -231,21 +252,13 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions, int 
 				return -1;
 			break;
 		case A_INJECT_A:
-			resp_fd.id = id;
-			resp_fd.flags = SECCOMP_ADDFD_FLAG_SEND;
-			resp_fd.newfd = actions[i].inj.newfd;
-			resp_fd.srcfd = actions[i].inj.oldfd;
-			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SETFD;
-			resp_fd.newfd_flags = 0;
+			set_inject_fields(id, data, &actions[i], &resp_fd);
+			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SEND;
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
 		case A_INJECT:
-			resp_fd.id = id;
-			resp_fd.newfd = actions[i].inj.newfd;
-			resp_fd.srcfd = actions[i].inj.oldfd;
-			resp_fd.flags = SECCOMP_ADDFD_FLAG_SETFD;
-			resp_fd.newfd_flags = 0;
+			set_inject_fields(id, data, &actions[i], &resp_fd);
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;

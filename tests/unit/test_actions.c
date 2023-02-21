@@ -312,8 +312,10 @@ static void test_inject(struct action actions[], int n)
 
 	fd_inj = create_test_fd();
 	ck_assert_int_ge(fd_inj,0);
-	actions[0].inj.newfd = fd_inj;
-	actions[0].inj.oldfd = test_fd;
+	actions[0].inj.newfd.fd = fd_inj;
+	actions[0].inj.newfd.type = IMMEDIATE;
+	actions[0].inj.oldfd.fd = test_fd;
+	actions[0].inj.oldfd.type = IMMEDIATE;
 
 	ret = do_actions(NULL, actions, n, -1, notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
