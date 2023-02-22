@@ -147,6 +147,43 @@ static int execute_syscall(void *args)
 	exit(0);
 }
 
+int copy_args(struct seccomp_notif *req, struct op_copy_args *copy, void *data,
+	      int notifier)
+{
+	char path[PATH_MAX];
+	unsigned int i;
+	ssize_t nread;
+	void *dest;
+	int fd;
+
+	snprintf(path, sizeof(path), "/proc/%d/mem", req->pid);
+	if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
+		perror("open mem");
+		return -1;
+	}
+
+	/*
+         * Avoid the TOCTOU and check if the read mappings are still valid
+         */
+	if (!is_cookie_valid(notifier, req->id)) {
+		fprintf(stderr, "the seccomp request isn't valid anymore\n");
+		return -1;
+	}
+
+	for (i = 0; i < 6; i++) {
+		if (!copy->args[i].need_copied)
+			continue;
+		dest = (uint16_t *)data + copy->args[i].args_off;
+		nread = pread(fd, dest, copy->args[i].size, req->data.args[i]);
+		if (nread < 0) {
+			perror("pread");
+			return -1;
+		}
+	}
+	close(fd);
+	return 0;
+}
+
 int do_call(struct arg_clone *c)
 {
 	char stack[STACK_SIZE];
@@ -187,8 +224,8 @@ static void set_inject_fields(uint64_t id, void *data, const struct op *a,
 	resp->newfd_flags = 0;
 }
 
-int do_operations(void *data, struct op operations[], unsigned int n_operations,
-	       int pid, int notifyfd, uint64_t id)
+int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
+		  unsigned int n_operations, int pid, int notifyfd, uint64_t id)
 {
 	struct seccomp_notif_addfd resp_fd;
 	struct seccomp_notif_resp resp;
@@ -266,8 +303,14 @@ int do_operations(void *data, struct op operations[], unsigned int n_operations,
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
+		case OP_COPY_ARGS:
+			if (copy_args(req, &operations[i].copy, data,
+				      notifyfd) < 0)
+				return -1;
+			break;
 		default:
-			fprintf(stderr, "unknow operation %d \n", operations[i].type);
+			fprintf(stderr, "unknow operation %d \n",
+				operations[i].type);
 		}
 	}
 	return 0;

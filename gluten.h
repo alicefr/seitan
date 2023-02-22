@@ -50,6 +50,7 @@ enum op_type {
 	OP_INJECT,
 	OP_INJECT_A,
 	OP_RETURN,
+	OP_COPY_ARGS,
 };
 
 enum value_type {
@@ -94,6 +95,16 @@ struct op_inject {
 	struct fd_type oldfd;
 };
 
+struct copy_arg {
+	uint16_t args_off;
+	bool need_copied;
+	size_t size;
+};
+
+struct op_copy_args {
+	struct copy_arg args[6];
+};
+
 struct op {
 	enum op_type type;
 	union {
@@ -102,6 +113,7 @@ struct op {
 		struct op_continue cont;
 		struct op_return ret;
 		struct op_inject inj;
+		struct op_copy_args copy;
 	};
 };
 #endif /* GLUTEN_H */
