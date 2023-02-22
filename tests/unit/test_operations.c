@@ -212,7 +212,7 @@ START_TEST(test_act_continue)
 	struct op operations[] = {
 		{ .type = OP_CONT },
 	};
-	int ret = do_operations(NULL, operations,
+	int ret = do_operations(NULL, operations, &req,
 			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
@@ -228,7 +228,7 @@ START_TEST(test_act_block)
 			.block = { .error = -1 },
 		},
 	};
-	int ret = do_operations(NULL, operations,
+	int ret = do_operations(NULL, operations, &req,
 			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
@@ -244,7 +244,7 @@ START_TEST(test_act_return)
 			.ret = { .type = IMMEDIATE, .value = 1 },
 		},
 	};
-	int ret = do_operations(NULL, operations,
+	int ret = do_operations(NULL, operations, &req,
 			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
@@ -264,7 +264,7 @@ START_TEST(test_act_return_ref)
 	};
 	memcpy((uint16_t *)&tmp_data + offset, &v, sizeof(v));
 
-	int ret = do_operations(&tmp_data, operations,
+	int ret = do_operations(&tmp_data, operations, &req,
 			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
@@ -281,7 +281,7 @@ START_TEST(test_act_call)
 		},
 		{ .type = OP_CONT },
 	};
-	int ret = do_operations(NULL, operations,
+	int ret = do_operations(NULL, operations, &req,
 			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
@@ -300,7 +300,7 @@ START_TEST(test_act_call_ret)
 		},
 		{ .type = OP_CONT },
 	};
-	int ret = do_operations(&tmp_data, operations,
+	int ret = do_operations(&tmp_data, operations, &req,
 			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	long r;
@@ -337,7 +337,7 @@ static void test_inject(struct op operations[], int n, bool reference)
 		operations[0].inj.oldfd.type = IMMEDIATE;
 	}
 
-	ret = do_operations(&tmp_data, operations, n, -1, notifyfd, req.id);
+	ret = do_operations(&tmp_data, operations, &req,n, -1, notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_fd(pid, test_fd);
 }
