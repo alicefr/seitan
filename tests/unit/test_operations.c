@@ -19,7 +19,7 @@
 #include <check.h>
 
 #include "../../gluten.h"
-#include "../../actions.h"
+#include "../../operations.h"
 #include "../../common.h"
 
 struct args_target {
@@ -209,11 +209,11 @@ void setup_fd()
 
 START_TEST(test_act_continue)
 {
-	struct action actions[] = {
-		{ .type = A_CONT },
+	struct op operations[] = {
+		{ .type = OP_CONT },
 	};
-	int ret = do_actions(NULL, actions,
-			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+	int ret = do_operations(NULL, operations,
+			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	ck_assert_int_eq(at->err, 0);
@@ -222,14 +222,14 @@ END_TEST
 
 START_TEST(test_act_block)
 {
-	struct action actions[] = {
+	struct op operations[] = {
 		{
-			.type = A_BLOCK,
+			.type = OP_BLOCK,
 			.block = { .error = -1 },
 		},
 	};
-	int ret = do_actions(NULL, actions,
-			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+	int ret = do_operations(NULL, operations,
+			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(-1, 0, false);
@@ -238,14 +238,14 @@ END_TEST
 
 START_TEST(test_act_return)
 {
-	struct action actions[] = {
+	struct op operations[] = {
 		{
-			.type = A_RETURN,
+			.type = OP_RETURN,
 			.ret = { .type = IMMEDIATE, .value = 1 },
 		},
 	};
-	int ret = do_actions(NULL, actions,
-			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+	int ret = do_operations(NULL, operations,
+			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, false);
@@ -256,16 +256,16 @@ START_TEST(test_act_return_ref)
 {
 	int64_t v = 2;
 	uint16_t offset = 4;
-	struct action actions[] = {
+	struct op operations[] = {
 		{
-			.type = A_RETURN,
+			.type = OP_RETURN,
 			.ret = { .type = REFERENCE, .value_off = offset },
 		},
 	};
 	memcpy((uint16_t *)&tmp_data + offset, &v, sizeof(v));
 
-	int ret = do_actions(&tmp_data, actions,
-			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+	int ret = do_operations(&tmp_data, operations,
+			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(v, 0, false);
@@ -274,15 +274,15 @@ END_TEST
 
 START_TEST(test_act_call)
 {
-	struct action actions[] = {
+	struct op operations[] = {
 		{
-			.type = A_CALL,
+			.type = OP_CALL,
 			.call = { .nr = __NR_getppid, .has_ret = false },
 		},
-		{ .type = A_CONT },
+		{ .type = OP_CONT },
 	};
-	int ret = do_actions(NULL, actions,
-			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+	int ret = do_operations(NULL, operations,
+			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, true);
@@ -291,17 +291,17 @@ END_TEST
 
 START_TEST(test_act_call_ret)
 {
-	struct action actions[] = {
+	struct op operations[] = {
 		{
-			.type = A_CALL,
+			.type = OP_CALL,
 			.call = { .nr = __NR_getppid,
 				  .has_ret = true,
 				  .ret_off = 2 },
 		},
-		{ .type = A_CONT },
+		{ .type = OP_CONT },
 	};
-	int ret = do_actions(&tmp_data, actions,
-			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+	int ret = do_operations(&tmp_data, operations,
+			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	long r;
 	ck_assert_msg(ret == 0, strerror(errno));
@@ -311,7 +311,7 @@ START_TEST(test_act_call_ret)
 }
 END_TEST
 
-static void test_inject(struct action actions[], int n, bool reference)
+static void test_inject(struct op operations[], int n, bool reference)
 {
 	uint16_t new_off = 2, old_off = 4;
 	int fd_inj;
@@ -326,58 +326,58 @@ static void test_inject(struct action actions[], int n, bool reference)
 		memcpy((uint16_t *)&tmp_data + old_off, &test_fd,
 		       sizeof(test_fd));
 
-		actions[0].inj.newfd.fd_off = new_off;
-		actions[0].inj.newfd.type = REFERENCE;
-		actions[0].inj.oldfd.fd_off = old_off;
-		actions[0].inj.oldfd.type = REFERENCE;
+		operations[0].inj.newfd.fd_off = new_off;
+		operations[0].inj.newfd.type = REFERENCE;
+		operations[0].inj.oldfd.fd_off = old_off;
+		operations[0].inj.oldfd.type = REFERENCE;
 	} else {
-		actions[0].inj.newfd.fd = fd_inj;
-		actions[0].inj.newfd.type = IMMEDIATE;
-		actions[0].inj.oldfd.fd = test_fd;
-		actions[0].inj.oldfd.type = IMMEDIATE;
+		operations[0].inj.newfd.fd = fd_inj;
+		operations[0].inj.newfd.type = IMMEDIATE;
+		operations[0].inj.oldfd.fd = test_fd;
+		operations[0].inj.oldfd.type = IMMEDIATE;
 	}
 
-	ret = do_actions(&tmp_data, actions, n, -1, notifyfd, req.id);
+	ret = do_operations(&tmp_data, operations, n, -1, notifyfd, req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_fd(pid, test_fd);
 }
 
 START_TEST(test_act_inject_a)
 {
-	struct action actions[] = { { .type = A_INJECT_A } };
-	test_inject(actions, sizeof(actions) / sizeof(actions[0]), false);
+	struct op operations[] = { { .type = OP_INJECT_A } };
+	test_inject(operations, sizeof(operations) / sizeof(operations[0]), false);
 }
 END_TEST
 
 START_TEST(test_act_inject_a_ref)
 {
-	struct action actions[] = { { .type = A_INJECT_A } };
-	test_inject(actions, sizeof(actions) / sizeof(actions[0]), true);
+	struct op operations[] = { { .type = OP_INJECT_A } };
+	test_inject(operations, sizeof(operations) / sizeof(operations[0]), true);
 }
 END_TEST
 
 START_TEST(test_act_inject)
 {
-	struct action actions[] = { { .type = A_INJECT } };
-	test_inject(actions, sizeof(actions) / sizeof(actions[0]), false);
+	struct op operations[] = { { .type = OP_INJECT } };
+	test_inject(operations, sizeof(operations) / sizeof(operations[0]), false);
 }
 END_TEST
 
 START_TEST(test_act_inject_ref)
 {
-	struct action actions[] = { { .type = A_INJECT } };
-	test_inject(actions, sizeof(actions) / sizeof(actions[0]), true);
+	struct op operations[] = { { .type = OP_INJECT } };
+	test_inject(operations, sizeof(operations) / sizeof(operations[0]), true);
 }
 END_TEST
 
-Suite *action_call_suite(void)
+Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
 	TCase *cont, *block, *ret, *call;
 	TCase *inject, *inject_a;
 
-	s = suite_create("Perform actions");
+	s = suite_create("Perform operations");
 
 	cont = tcase_create("a_continue");
 	tcase_add_checked_fixture(cont, setup_without_fd, teardown);
@@ -428,7 +428,7 @@ int main(void)
 	Suite *s;
 	SRunner *runner;
 
-	s = action_call_suite();
+	s = op_call_suite();
 	runner = srunner_create(s);
 
 	srunner_run_all(runner, CK_VERBOSE);

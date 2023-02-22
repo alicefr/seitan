@@ -36,20 +36,20 @@ enum ns_type {
 };
 
 /*
- * struct act_context - Description of the context where the call needs to be executed
+ * struct op_context - Description of the context where the call needs to be executed
  * @ns:	Descrption of the each namespace where the call needs to be executed
  */
-struct act_context {
+struct op_context {
 	struct ns_spec ns[sizeof(enum ns_type)];
 };
 
-enum action_type {
-	A_CALL,
-	A_BLOCK,
-	A_CONT,
-	A_INJECT,
-	A_INJECT_A,
-	A_RETURN,
+enum op_type {
+	OP_CALL,
+	OP_BLOCK,
+	OP_CONT,
+	OP_INJECT,
+	OP_INJECT_A,
+	OP_RETURN,
 };
 
 enum value_type {
@@ -57,23 +57,23 @@ enum value_type {
 	REFERENCE,
 };
 
-struct act_call {
+struct op_call {
 	long nr;
 	bool has_ret;
 	void *args[6];
-	struct act_context context;
+	struct op_context context;
 	uint16_t ret_off;
 };
 
-struct act_block {
+struct op_block {
 	int32_t error;
 };
 
-struct act_continue {
+struct op_continue {
 	bool cont;
 };
 
-struct act_return {
+struct op_return {
 	enum value_type type;
 	union {
 		int64_t value;
@@ -89,19 +89,19 @@ struct fd_type {
 	};
 };
 
-struct act_inject {
+struct op_inject {
 	struct fd_type newfd;
 	struct fd_type oldfd;
 };
 
-struct action {
-	enum action_type type;
+struct op {
+	enum op_type type;
 	union {
-		struct act_call call;
-		struct act_block block;
-		struct act_continue cont;
-		struct act_return ret;
-		struct act_inject inj;
+		struct op_call call;
+		struct op_block block;
+		struct op_continue cont;
+		struct op_return ret;
+		struct op_inject inj;
 	};
 };
 #endif /* GLUTEN_H */

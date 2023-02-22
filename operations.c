@@ -15,7 +15,7 @@
 #include <errno.h>
 
 #include "gluten.h"
-#include "actions.h"
+#include "operations.h"
 
 static bool is_cookie_valid(int notifyFd, uint64_t id)
 {
@@ -87,7 +87,7 @@ static void proc_ns_name(unsigned i, char *ns)
 	}
 }
 
-static int set_namespaces(const struct act_call *a, int tpid)
+static int set_namespaces(const struct op_call *a, int tpid)
 {
 	char path[PATH_MAX + 1];
 	char ns_name[PATH_MAX / 2];
@@ -131,7 +131,7 @@ static int set_namespaces(const struct act_call *a, int tpid)
 static int execute_syscall(void *args)
 {
 	struct arg_clone *a = (struct arg_clone *)args;
-	const struct act_call *c = a->args;
+	const struct op_call *c = a->args;
 
 	if (set_namespaces(a->args, a->pid) < 0) {
 		exit(EXIT_FAILURE);
@@ -166,7 +166,7 @@ int do_call(struct arg_clone *c)
 	return 0;
 }
 
-static void set_inject_fields(uint64_t id, void *data, const struct action *a,
+static void set_inject_fields(uint64_t id, void *data, const struct op *a,
 			      struct seccomp_notif_addfd *resp)
 {
 	const struct fd_type *new = &(a->inj).newfd;
@@ -187,7 +187,7 @@ static void set_inject_fields(uint64_t id, void *data, const struct action *a,
 	resp->newfd_flags = 0;
 }
 
-int do_actions(void *data, struct action actions[], unsigned int n_actions,
+int do_operations(void *data, struct op operations[], unsigned int n_operations,
 	       int pid, int notifyfd, uint64_t id)
 {
 	struct seccomp_notif_addfd resp_fd;
@@ -195,13 +195,13 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions,
 	struct arg_clone c;
 	unsigned int i;
 
-	for (i = 0; i < n_actions; i++) {
-		switch (actions[i].type) {
-		case A_CALL:
+	for (i = 0; i < n_operations; i++) {
+		switch (operations[i].type) {
+		case OP_CALL:
 			resp.id = id;
 			resp.val = 0;
 			resp.flags = 0;
-			c.args = &actions[i].call;
+			c.args = &operations[i].call;
 			c.pid = pid;
 			if (do_call(&c) == -1) {
 				resp.error = -1;
@@ -217,37 +217,37 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions,
 			 * The result of the call needs to be save as
 			 * reference
 			 */
-			if (actions[i].call.has_ret) {
+			if (operations[i].call.has_ret) {
 				memcpy((uint16_t *)data +
-					       actions[i].call.ret_off,
+					       operations[i].call.ret_off,
 				       &c.ret, sizeof(c.ret));
 			}
 			break;
-		case A_BLOCK:
+		case OP_BLOCK:
 			resp.id = id;
 			resp.val = 0;
 			resp.flags = 0;
-			resp.error = actions[i].block.error;
+			resp.error = operations[i].block.error;
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
 			break;
-		case A_RETURN:
+		case OP_RETURN:
 			resp.id = id;
 			resp.flags = 0;
 			resp.error = 0;
-			if (actions[i].ret.type == IMMEDIATE)
-				resp.val = actions[i].ret.value;
+			if (operations[i].ret.type == IMMEDIATE)
+				resp.val = operations[i].ret.value;
 			else
 				memcpy(&resp.val,
 				       (uint16_t *)data +
-					       actions[i].ret.value_off,
+					       operations[i].ret.value_off,
 				       sizeof(resp.val));
 
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
 			break;
 
-		case A_CONT:
+		case OP_CONT:
 			resp.id = id;
 			resp.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
 			resp.error = 0;
@@ -255,19 +255,19 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions,
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
 			break;
-		case A_INJECT_A:
-			set_inject_fields(id, data, &actions[i], &resp_fd);
+		case OP_INJECT_A:
+			set_inject_fields(id, data, &operations[i], &resp_fd);
 			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SEND;
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
-		case A_INJECT:
-			set_inject_fields(id, data, &actions[i], &resp_fd);
+		case OP_INJECT:
+			set_inject_fields(id, data, &operations[i], &resp_fd);
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
 		default:
-			fprintf(stderr, "unknow action %d \n", actions[i].type);
+			fprintf(stderr, "unknow operation %d \n", operations[i].type);
 		}
 	}
 	return 0;

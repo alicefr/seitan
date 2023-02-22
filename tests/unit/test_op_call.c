@@ -13,7 +13,7 @@
 #include <check.h>
 
 #include "../../gluten.h"
-#include "../../actions.h"
+#include "../../operations.h"
 
 struct args_write_file {
 	char *file;
@@ -102,7 +102,7 @@ START_TEST(test_with_open_read_ns)
 	char test_file[] = "/tmp/test.txt";
 	char t[PATH_MAX] = "Hello Test";
 	struct args_write_file args = { test_file, t, sizeof(t) };
-	struct act_call call;
+	struct op_call call;
 	int flags = O_RDWR;
 	struct arg_clone c;
 	char buf[PATH_MAX];
@@ -142,7 +142,7 @@ START_TEST(test_with_read)
 {
 	char test_file[] = "/tmp/test.txt";
 	char t[PATH_MAX] = "Hello Test";
-	struct act_call call;
+	struct op_call call;
 	struct arg_clone c;
 	char buf[PATH_MAX];
 	unsigned i;
@@ -168,7 +168,7 @@ END_TEST
 
 START_TEST(test_with_getppid)
 {
-	struct act_call call;
+	struct op_call call;
 	struct arg_clone c;
 	unsigned i;
 	long pid = (long)getpid();
@@ -185,19 +185,19 @@ START_TEST(test_with_getppid)
 }
 END_TEST
 
-Suite *action_call_suite(void)
+Suite *op_call_suite(void)
 {
 	Suite *s;
-	TCase *tactions;
+	TCase *tops;
 
-	s = suite_create("Perform actions call");
-	tactions = tcase_create("action calls");
+	s = suite_create("Perform ops call");
+	tops = tcase_create("op calls");
 
-	tcase_add_test(tactions, test_with_getppid);
-	tcase_add_test(tactions, test_with_read);
-	tcase_add_test(tactions, test_with_open_read_ns);
+	tcase_add_test(tops, test_with_getppid);
+	tcase_add_test(tops, test_with_read);
+	tcase_add_test(tops, test_with_open_read_ns);
 
-	suite_add_tcase(s, tactions);
+	suite_add_tcase(s, tops);
 
 	return s;
 }
@@ -208,7 +208,7 @@ int main(void)
 	Suite *s;
 	SRunner *runner;
 
-	s = action_call_suite();
+	s = op_call_suite();
 	runner = srunner_create(s);
 
 	srunner_run_all(runner, CK_VERBOSE);
