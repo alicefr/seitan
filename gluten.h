@@ -66,7 +66,6 @@ struct act_call {
 };
 
 struct act_block {
-	enum value_type type;
 	int32_t error;
 };
 
