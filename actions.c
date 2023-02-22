@@ -25,7 +25,8 @@ static bool is_cookie_valid(int notifyFd, uint64_t id)
 static int send_target(const struct seccomp_notif_resp *resp, int notifyfd)
 {
 	if (!is_cookie_valid(notifyfd, resp->id)) {
-		fprintf(stderr, "the response id isn't valid\ncheck if the targets has already terminated\n");
+		fprintf(stderr,
+			"the response id isn't valid\ncheck if the targets has already terminated\n");
 		return -1;
 	}
 	if (ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_SEND, resp) < 0) {
@@ -41,7 +42,8 @@ static int send_inject_target(const struct seccomp_notif_addfd *resp,
 			      int notifyfd)
 {
 	if (!is_cookie_valid(notifyfd, resp->id)) {
-		fprintf(stderr, "the response id isn't valid\ncheck if the targets has already terminated\n");
+		fprintf(stderr,
+			"the response id isn't valid\ncheck if the targets has already terminated\n");
 		return -1;
 	}
 	if (ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_ADDFD, resp) < 0) {
@@ -164,8 +166,8 @@ int do_call(struct arg_clone *c)
 	return 0;
 }
 
-static void set_inject_fields(uint64_t id, void *data,
-		const struct action *a,struct seccomp_notif_addfd *resp)
+static void set_inject_fields(uint64_t id, void *data, const struct action *a,
+			      struct seccomp_notif_addfd *resp)
 {
 	const struct fd_type *new = &(a->inj).newfd;
 	const struct fd_type *old = &(a->inj).oldfd;
@@ -176,17 +178,17 @@ static void set_inject_fields(uint64_t id, void *data,
 		resp->newfd = new->fd;
 	else
 		memcpy(&resp->srcfd, (uint16_t *)data + old->fd_off,
-				sizeof(resp->srcfd));
+		       sizeof(resp->srcfd));
 	if (old->type == IMMEDIATE)
 		resp->srcfd = old->fd;
 	else
 		memcpy(&resp->srcfd, (uint16_t *)data + old->fd_off,
-				sizeof(resp->srcfd));
+		       sizeof(resp->srcfd));
 	resp->newfd_flags = 0;
 }
 
-int do_actions(void *data, struct action actions[], unsigned int n_actions, int pid,
-	       int notifyfd, uint64_t id)
+int do_actions(void *data, struct action actions[], unsigned int n_actions,
+	       int pid, int notifyfd, uint64_t id)
 {
 	struct seccomp_notif_addfd resp_fd;
 	struct seccomp_notif_resp resp;
@@ -216,8 +218,9 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions, int 
 			 * reference
 			 */
 			if (actions[i].call.has_ret) {
-				memcpy((uint16_t *)data + actions[i].call.ret_off,
-					   &c.ret, sizeof(c.ret));
+				memcpy((uint16_t *)data +
+					       actions[i].call.ret_off,
+				       &c.ret, sizeof(c.ret));
 			}
 			break;
 		case A_BLOCK:
@@ -235,9 +238,10 @@ int do_actions(void *data, struct action actions[], unsigned int n_actions, int 
 			if (actions[i].ret.type == IMMEDIATE)
 				resp.val = actions[i].ret.value;
 			else
-				memcpy(&resp.val, (uint16_t *)data +
-						actions[i].ret.value_off,
-						sizeof(resp.val));
+				memcpy(&resp.val,
+				       (uint16_t *)data +
+					       actions[i].ret.value_off,
+				       sizeof(resp.val));
 
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;

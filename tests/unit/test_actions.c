@@ -70,7 +70,7 @@ static int install_notification_filter()
 
 static int create_test_fd()
 {
-	return open("/tmp", O_RDWR| O_TMPFILE );
+	return open("/tmp", O_RDWR | O_TMPFILE);
 }
 
 static int target()
@@ -133,9 +133,8 @@ static void check_target_result(long ret, int err, bool ignore_ret)
 	read(pipefd[0], &buf, 1);
 	if (!ignore_ret)
 		ck_assert_msg(at->ret == ret,
-				"expect return value %ld to be equal to %ld",
-				at->ret,
-				ret);
+			      "expect return value %ld to be equal to %ld",
+			      at->ret, ret);
 	ck_assert_int_eq(at->err, err);
 	ck_assert_int_eq(close(pipefd[0]), 0);
 }
@@ -153,7 +152,7 @@ void target_exit()
 
 static bool has_fd(int pid, int fd)
 {
-        char path[PATH_MAX + 1];
+	char path[PATH_MAX + 1];
 
 	snprintf(path, sizeof(path), "/proc/%d/fd/%d", pid, fd);
 	return access(path, F_OK) == 0;
@@ -172,11 +171,11 @@ void setup(bool check_fd)
 {
 	int ret;
 
-	signal (SIGCHLD, target_exit);
+	signal(SIGCHLD, target_exit);
 	ck_assert_int_ne(pipe(pipefd), -1);
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	at-> check_fd = check_fd;
+	at->check_fd = check_fd;
 	pid = do_clone(target, NULL);
 	ck_assert_int_ge(pid, 0);
 
@@ -213,8 +212,9 @@ START_TEST(test_act_continue)
 	struct action actions[] = {
 		{ .type = A_CONT },
 	};
-	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
-			     notifyfd, req.id);
+	int ret = do_actions(NULL, actions,
+			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	ck_assert_int_eq(at->err, 0);
 }
@@ -228,8 +228,9 @@ START_TEST(test_act_block)
 			.block = { .error = -1 },
 		},
 	};
-	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
-			     notifyfd, req.id);
+	int ret = do_actions(NULL, actions,
+			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(-1, 0, false);
 }
@@ -243,8 +244,9 @@ START_TEST(test_act_return)
 			.ret = { .type = IMMEDIATE, .value = 1 },
 		},
 	};
-	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
-			     notifyfd, req.id);
+	int ret = do_actions(NULL, actions,
+			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, false);
 }
@@ -262,8 +264,9 @@ START_TEST(test_act_return_ref)
 	};
 	memcpy((uint16_t *)&tmp_data + offset, &v, sizeof(v));
 
-	int ret = do_actions(&tmp_data, actions, sizeof(actions) / sizeof(actions[0]), -1,
-			     notifyfd, req.id);
+	int ret = do_actions(&tmp_data, actions,
+			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(v, 0, false);
 }
@@ -278,8 +281,9 @@ START_TEST(test_act_call)
 		},
 		{ .type = A_CONT },
 	};
-	int ret = do_actions(NULL, actions, sizeof(actions) / sizeof(actions[0]), -1,
-			notifyfd, req.id);
+	int ret = do_actions(NULL, actions,
+			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, true);
 }
@@ -290,12 +294,15 @@ START_TEST(test_act_call_ret)
 	struct action actions[] = {
 		{
 			.type = A_CALL,
-			.call = { .nr = __NR_getppid, .has_ret = true, .ret_off = 2 },
+			.call = { .nr = __NR_getppid,
+				  .has_ret = true,
+				  .ret_off = 2 },
 		},
 		{ .type = A_CONT },
 	};
-	int ret = do_actions(&tmp_data, actions, sizeof(actions) / sizeof(actions[0]), -1,
-			notifyfd, req.id);
+	int ret = do_actions(&tmp_data, actions,
+			     sizeof(actions) / sizeof(actions[0]), -1, notifyfd,
+			     req.id);
 	long r;
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, true);
@@ -312,10 +319,12 @@ static void test_inject(struct action actions[], int n, bool reference)
 	int ret;
 
 	fd_inj = create_test_fd();
-	ck_assert_int_ge(fd_inj,0);
+	ck_assert_int_ge(fd_inj, 0);
 	if (reference) {
-		memcpy((uint16_t *)&tmp_data + new_off, &fd_inj, sizeof(fd_inj));
-		memcpy((uint16_t *)&tmp_data + old_off, &test_fd, sizeof(test_fd));
+		memcpy((uint16_t *)&tmp_data + new_off, &fd_inj,
+		       sizeof(fd_inj));
+		memcpy((uint16_t *)&tmp_data + old_off, &test_fd,
+		       sizeof(test_fd));
 
 		actions[0].inj.newfd.fd_off = new_off;
 		actions[0].inj.newfd.type = REFERENCE;
@@ -335,29 +344,29 @@ static void test_inject(struct action actions[], int n, bool reference)
 
 START_TEST(test_act_inject_a)
 {
-	struct action actions[] = {{.type = A_INJECT_A}	};
+	struct action actions[] = { { .type = A_INJECT_A } };
 	test_inject(actions, sizeof(actions) / sizeof(actions[0]), false);
 }
 END_TEST
 
 START_TEST(test_act_inject_a_ref)
 {
-	struct action actions[] = {{.type = A_INJECT_A}	};
+	struct action actions[] = { { .type = A_INJECT_A } };
 	test_inject(actions, sizeof(actions) / sizeof(actions[0]), true);
 }
 END_TEST
 
 START_TEST(test_act_inject)
 {
-	struct action actions[] = { { .type = A_INJECT }};
-	test_inject(actions,sizeof(actions) / sizeof(actions[0]), false);
+	struct action actions[] = { { .type = A_INJECT } };
+	test_inject(actions, sizeof(actions) / sizeof(actions[0]), false);
 }
 END_TEST
 
 START_TEST(test_act_inject_ref)
 {
-	struct action actions[] = { { .type = A_INJECT }};
-	test_inject(actions,sizeof(actions) / sizeof(actions[0]), true);
+	struct action actions[] = { { .type = A_INJECT } };
+	test_inject(actions, sizeof(actions) / sizeof(actions[0]), true);
 }
 END_TEST
 

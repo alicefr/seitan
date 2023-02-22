@@ -81,7 +81,9 @@ static int seccomp(unsigned int operation, unsigned int flags, void *args)
 	return syscall(__NR_seccomp, operation, flags, args);
 }
 
-static void signal_handler(__attribute__((unused))int s){}
+static void signal_handler(__attribute__((unused)) int s)
+{
+}
 
 /**
  * main() - Entry point
@@ -111,7 +113,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	if (seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER,
-					&prog) < 0) {
+		    &prog) < 0) {
 		perror("seccomp");
 		exit(EXIT_FAILURE);
 	}
@@ -131,7 +133,7 @@ int main(int argc, char **argv)
 	pause();
 
 	execvpe(argv[arguments.program_index], &argv[arguments.program_index],
-			environ);
+		environ);
 	if (errno != ENOENT) {
 		perror("execvpe");
 		exit(EXIT_FAILURE);

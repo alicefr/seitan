@@ -53,8 +53,8 @@ enum action_type {
 };
 
 enum value_type {
-       IMMEDIATE,
-       REFERENCE,
+	IMMEDIATE,
+	REFERENCE,
 };
 
 struct act_call {
@@ -87,7 +87,6 @@ struct fd_type {
 		uint32_t fd;
 		uint16_t fd_off;
 	};
-
 };
 
 struct act_inject {

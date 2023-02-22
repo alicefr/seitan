@@ -86,23 +86,24 @@ static struct argp argp = { .options = options,
 static int nl_init(void)
 {
 	int s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_CONNECTOR);
-	struct sockaddr_nl sa = { .nl_family = AF_NETLINK,
-				  .nl_groups = CN_IDX_PROC,
-				  .nl_pid = getpid(),
-				};
+	struct sockaddr_nl sa = {
+		.nl_family = AF_NETLINK,
+		.nl_groups = CN_IDX_PROC,
+		.nl_pid = getpid(),
+	};
 	struct req_t {
 		struct nlmsghdr nlh;
 		struct cn_msg cnm;
 		enum proc_cn_mcast_op mop;
-	} __attribute__ ((packed, aligned(NLMSG_ALIGNTO))) req = {
-		.nlh.nlmsg_type		= NLMSG_DONE,
-		.nlh.nlmsg_pid		= getpid(),
+	} __attribute__((packed, aligned(NLMSG_ALIGNTO))) req = {
+		.nlh.nlmsg_type = NLMSG_DONE,
+		.nlh.nlmsg_pid = getpid(),
 
-		.cnm.id.idx		= CN_IDX_PROC,
-		.cnm.id.val		= CN_VAL_PROC,
-		.cnm.len		= sizeof(enum proc_cn_mcast_op),
+		.cnm.id.idx = CN_IDX_PROC,
+		.cnm.id.val = CN_VAL_PROC,
+		.cnm.len = sizeof(enum proc_cn_mcast_op),
 
-		.mop			= PROC_CN_MCAST_LISTEN,
+		.mop = PROC_CN_MCAST_LISTEN,
 	};
 
 	bind(s, (struct sockaddr *)&sa, sizeof(sa));
@@ -172,12 +173,13 @@ struct table {
 static struct table t[16];
 
 static int pidfd_send_signal(int pidfd, int sig, siginfo_t *info,
-		unsigned int flags)
+			     unsigned int flags)
 {
 	return syscall(__NR_pidfd_send_signal, pidfd, sig, info, flags);
 }
 
-static void unblock_eater(int pidfd){
+static void unblock_eater(int pidfd)
+{
 	if (pidfd_send_signal(pidfd, SIGCONT, NULL, 0) == -1) {
 		perror("pidfd_send_signal");
 		exit(EXIT_FAILURE);
@@ -197,10 +199,10 @@ int handle(struct seccomp_notif *req, int notifyfd)
 			break;
 	}
 
-	if (i == sizeof(t) / sizeof(t[0]))	/* Not found */
+	if (i == sizeof(t) / sizeof(t[0])) /* Not found */
 		return 1;
 
-	if (t[i].type != FD1_UNIX)		/* Not implemented yet */
+	if (t[i].type != FD1_UNIX) /* Not implemented yet */
 		return 1;
 
 	/* FD1_UNIX here */
@@ -215,9 +217,13 @@ int handle(struct seccomp_notif *req, int notifyfd)
 	if (!strcmp(s_un.sun_path, t[i].arg[0])) {
 		int own_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
-		struct seccomp_notif_addfd addfd = { .id = req->id,
-			.flags = SECCOMP_ADDFD_FLAG_SEND | SECCOMP_ADDFD_FLAG_SETFD,
-			.srcfd = own_fd, .newfd = fd_unix, };
+		struct seccomp_notif_addfd addfd = {
+			.id = req->id,
+			.flags = SECCOMP_ADDFD_FLAG_SEND |
+				 SECCOMP_ADDFD_FLAG_SETFD,
+			.srcfd = own_fd,
+			.newfd = fd_unix,
+		};
 
 		connect(own_fd, &s_un, sizeof(s_un));
 		ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd);
@@ -229,7 +235,6 @@ int handle(struct seccomp_notif *req, int notifyfd)
 
 int main(int argc, char **argv)
 {
-
 	int s = nl_init(), ret, pidfd, notifier;
 	char resp_b[BUFSIZ], req_b[BUFSIZ];
 	struct epoll_event ev, events[EPOLL_EVENTS];
@@ -240,7 +245,7 @@ int main(int argc, char **argv)
 	bool running = true;
 	int fd, epollfd;
 	int notifierfd;
-	int nevents,i;
+	int nevents, i;
 
 	arguments.pid = -1;
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
@@ -249,7 +254,8 @@ int main(int argc, char **argv)
 	close(fd);
 
 	if (arguments.pid < 0)
-		while ((ret = event(s)) == -EAGAIN);
+		while ((ret = event(s)) == -EAGAIN)
+			;
 	else
 		ret = arguments.pid;
 
@@ -262,7 +268,7 @@ int main(int argc, char **argv)
 	sleep(1);
 
 	snprintf(path, sizeof(path), "/proc/%d/fd", ret);
-	if ((notifierfd = find_fd_seccomp_notifier(path)) < 0){
+	if ((notifierfd = find_fd_seccomp_notifier(path)) < 0) {
 		fprintf(stderr, "failed getting fd of the notifier\n");
 		exit(EXIT_FAILURE);
 	}
@@ -278,15 +284,15 @@ int main(int argc, char **argv)
 	ev.events = EPOLLIN;
 	ev.data.fd = notifier;
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, notifier, &ev) == -1) {
-               perror("epoll_ctl: notifier");
-               exit(EXIT_FAILURE);
-        }
+		perror("epoll_ctl: notifier");
+		exit(EXIT_FAILURE);
+	}
 	/* Unblock seitan-loader */
 	unblock_eater(pidfd);
 
-	while(running) {
+	while (running) {
 		nevents = epoll_wait(epollfd, events, EPOLL_EVENTS, -1);
-		if (nevents < 0 ) {
+		if (nevents < 0) {
 			perror("epoll_wait");
 			exit(EXIT_FAILURE);
 		}
