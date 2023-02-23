@@ -232,7 +232,11 @@ START_TEST(test_act_block)
 			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
 			     req.id);
 	ck_assert_msg(ret == 0, strerror(errno));
-	check_target_result(-1, 0, false);
+	/*
+	 * The tests use getpid that returns the error with ret and it is always
+	 * successful
+	 */
+	check_target_result(operations[0].block.error, 1, false);
 }
 END_TEST
 
