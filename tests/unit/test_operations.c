@@ -15,6 +15,8 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <sys/mman.h>
+#include <sys/un.h>
+#include <sys/socket.h>
 
 #include <check.h>
 
@@ -214,6 +216,28 @@ void setup_fd()
 	setup();
 }
 
+void setup_target_connect()
+{
+	struct sockaddr_un addr;
+	socklen_t len;
+	int fd;
+
+	len = sizeof(char) * 108;
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	ck_assert_int_ge(fd, 0);
+	memset(&addr, 0, sizeof(addr));
+	strcpy(addr.sun_path, "/tmp/test.sock");
+	addr.sun_family = AF_UNIX;
+	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->check_fd = false;
+	at->nr = __NR_connect;
+	at->args[0] = &fd;
+	at->args[1] = &addr;
+	at->args[2] = &len;
+	setup();
+}
+
 START_TEST(test_act_continue)
 {
 	struct op operations[] = {
@@ -381,12 +405,46 @@ START_TEST(test_act_inject_ref)
 }
 END_TEST
 
+START_TEST(test_op_copy)
+{
+	struct op operations[] = {
+		{ .type = OP_COPY_ARGS },
+		{
+			.type = OP_RETURN,
+			.ret = { .type = IMMEDIATE, .value = 0 },
+		},
+	};
+	struct op_copy_args *o = &operations[0].copy;
+	struct sockaddr_un *addr;
+	int ret;
+
+	o->args[0] = (struct copy_arg){ .args_off = 0, .size = sizeof(int) };
+	o->args[1] =
+		(struct copy_arg){ .args_off = sizeof(int) / sizeof(uint16_t),
+				   .need_copied = true,
+				   .size = sizeof(struct sockaddr_un) };
+	o->args[2] = (struct copy_arg){ .args_off = o->args[1].args_off /
+						    sizeof(uint16_t),
+					.need_copied = false,
+					.size = sizeof(socklen_t) };
+	ret = do_operations(&tmp_data, operations, &req,
+			    sizeof(operations) / sizeof(operations[0]), -1,
+			    notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	check_target_result(0, 0, false);
+	addr = (struct sockaddr_un *)(tmp_data + o->args[1].args_off);
+	ck_assert_str_eq(addr->sun_path, "/tmp/test.sock");
+	ck_assert(addr->sun_family == AF_UNIX);
+}
+END_TEST
+
 Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
 	TCase *cont, *block, *ret, *call;
 	TCase *inject, *inject_a;
+	TCase *copy;
 
 	s = suite_create("Perform operations");
 
@@ -429,6 +487,12 @@ Suite *op_call_suite(void)
 	tcase_add_test(inject_a, test_act_inject_a);
 	tcase_add_test(inject_a, test_act_inject_a_ref);
 	suite_add_tcase(s, inject_a);
+
+	copy = tcase_create("op_copy");
+	tcase_add_checked_fixture(copy, setup_target_connect, teardown);
+	tcase_set_timeout(copy, 120);
+	tcase_add_test(copy, test_op_copy);
+	suite_add_tcase(s, copy);
 
 	return s;
 }
