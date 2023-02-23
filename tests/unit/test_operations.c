@@ -27,18 +27,19 @@ struct args_target {
 	int err;
 	bool check_fd;
 	int fd;
+	int nr;
+	void *args[6];
 };
 
 struct seccomp_notif req;
 int notifyfd;
 struct args_target *at;
 int pipefd[2];
-int nr = __NR_getpid;
 pid_t pid;
 
 uint16_t tmp_data[TMP_DATA_SIZE];
 
-static int install_notification_filter()
+static int install_notification_filter(int nr)
 {
 	int fd;
 	/* filter a single syscall for the tests */
@@ -76,11 +77,12 @@ static int create_test_fd()
 static int target()
 {
 	int buf = 0;
-	if (install_notification_filter() < 0) {
+	if (install_notification_filter(at->nr) < 0) {
 		return -1;
 	}
 
-	at->ret = getpid();
+	at->ret = syscall(at->nr, at->args[0], at->args[1], at->args[2],
+			  at->args[3], at->args[4], at->args[5], at->args[5]);
 	at->err = errno;
 	if (at->check_fd)
 		read(pipefd[0], &buf, 1);
@@ -167,20 +169,17 @@ static void check_target_fd(int pid, int fd)
 	close(pipefd[1]);
 }
 
-void setup(bool check_fd)
+void setup()
 {
 	int ret;
 
 	signal(SIGCHLD, target_exit);
 	ck_assert_int_ne(pipe(pipefd), -1);
-	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
-		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	at->check_fd = check_fd;
 	pid = do_clone(target, NULL);
 	ck_assert_int_ge(pid, 0);
 
 	/* Use write pipe to sync the target for checking the existance of the fd */
-	if (!check_fd)
+	if (!at->check_fd)
 		ck_assert_int_ne(close(pipefd[1]), -1);
 
 	notifyfd = get_fd_notifier(pid);
@@ -188,7 +187,7 @@ void setup(bool check_fd)
 	memset(&req, 0, sizeof(req));
 	ret = ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_RECV, &req);
 	ck_assert_msg(ret == 0, strerror(errno));
-	ck_assert_msg((req.data).nr == nr, "filter syscall nr: %d",
+	ck_assert_msg((req.data).nr == at->nr, "filter syscall nr: %d",
 		      (req.data).nr);
 }
 
@@ -200,11 +199,19 @@ void teardown()
 
 void setup_without_fd()
 {
-	setup(false);
+	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->check_fd = false;
+	at->nr = __NR_getpid;
+	setup();
 }
 void setup_fd()
 {
-	setup(true);
+	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->check_fd = true;
+	at->nr = __NR_getpid;
+	setup();
 }
 
 START_TEST(test_act_continue)
