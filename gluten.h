@@ -51,6 +51,7 @@ enum op_type {
 	OP_INJECT_A,
 	OP_RETURN,
 	OP_COPY_ARGS,
+	OP_END,
 };
 
 enum value_type {

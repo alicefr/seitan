@@ -311,6 +311,9 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 				      notifyfd) < 0)
 				return -1;
 			break;
+		case OP_END:
+			return 0;
+			break;
 		default:
 			fprintf(stderr, "unknow operation %d \n",
 				operations[i].type);
