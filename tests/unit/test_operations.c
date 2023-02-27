@@ -84,7 +84,7 @@ static int target()
 	}
 
 	at->ret = syscall(at->nr, at->args[0], at->args[1], at->args[2],
-			  at->args[3], at->args[4], at->args[5], at->args[5]);
+			  at->args[3], at->args[4], at->args[5]);
 	at->err = errno;
 	if (at->check_fd)
 		read(pipefd[0], &buf, 1);
@@ -232,9 +232,9 @@ void setup_target_connect()
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_connect;
-	at->args[0] = &fd;
-	at->args[1] = &addr;
-	at->args[2] = &len;
+	at->args[0] = (void *)(long)fd;
+	at->args[1] = (void *)&addr;
+	at->args[2] = (void *)(long)len;
 	setup();
 }
 
@@ -426,8 +426,9 @@ START_TEST(test_op_copy)
 		(struct copy_arg){ .args_off = sizeof(int) / sizeof(uint16_t),
 				   .type = REFERENCE,
 				   .size = sizeof(struct sockaddr_un) };
-	o->args[2] = (struct copy_arg){ .args_off = o->args[1].args_off /
-						    sizeof(uint16_t),
+	o->args[2] = (struct copy_arg){ .args_off = o->args[1].args_off +
+						    sizeof(struct sockaddr_un) /
+							    sizeof(uint16_t),
 					.type = IMMEDIATE,
 					.size = sizeof(socklen_t) };
 	ret = do_operations(&tmp_data, operations, &req,
