@@ -446,11 +446,66 @@ START_TEST(test_op_copy)
 }
 END_TEST
 
+START_TEST(test_op_cmp_eq)
+{
+	char s[30] = "Hello Test!!";
+	struct op operations[] = {
+		{ .type = OP_CMP,
+		  .cmp = { .s1_off = 0,
+			   .s2_off = sizeof(s) / sizeof(uint16_t),
+			   .size = sizeof(s),
+			   .jmp = 2 } },
+		{ .type = OP_CONT },
+		{ .type = OP_END },
+		{ .type = OP_BLOCK, .block = { .error = -1 } },
+	};
+	int ret;
+
+	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s1_off, &s, sizeof(s));
+	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s2_off, &s, sizeof(s));
+
+	ret = do_operations(&tmp_data, operations, &req,
+			    sizeof(operations) / sizeof(operations[0]), -1,
+			    notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	ck_assert_int_eq(at->err, 0);
+}
+END_TEST
+
+START_TEST(test_op_cmp_neq)
+{
+	char s1[30] = "Hello Test!!";
+	char s2[30] = "Hello World!!";
+	struct op operations[] = {
+		{ .type = OP_CMP,
+		  .cmp = { .s1_off = 0,
+			   .s2_off = sizeof(s1) / sizeof(uint16_t),
+			   .size = sizeof(s1),
+			   .jmp = 2 } },
+		{ .type = OP_CONT },
+		{ .type = OP_END },
+		{ .type = OP_BLOCK, .block = { .error = -1 } },
+	};
+	int ret;
+
+	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s1_off, &s1,
+	       sizeof(s1));
+	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s2_off, &s2,
+	       sizeof(s2));
+
+	ret = do_operations(&tmp_data, operations, &req,
+			    sizeof(operations) / sizeof(operations[0]), -1,
+			    notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	check_target_result(-1, 1, false);
+}
+END_TEST
+
 Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
-	TCase *cont, *block, *ret, *call;
+	TCase *cont, *block, *ret, *call, *cmp;
 	TCase *inject, *inject_a;
 	TCase *copy;
 
@@ -501,6 +556,13 @@ Suite *op_call_suite(void)
 	tcase_set_timeout(copy, 120);
 	tcase_add_test(copy, test_op_copy);
 	suite_add_tcase(s, copy);
+
+	cmp = tcase_create("op_cmp");
+	tcase_add_checked_fixture(cmp, setup_without_fd, teardown);
+	tcase_set_timeout(cmp, timeout);
+	tcase_add_test(cmp, test_op_cmp_eq);
+	tcase_add_test(cmp, test_op_cmp_neq);
+	suite_add_tcase(s, cmp);
 
 	return s;
 }
