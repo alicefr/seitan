@@ -52,6 +52,7 @@ enum op_type {
 	OP_RETURN,
 	OP_COPY_ARGS,
 	OP_END,
+	OP_CMP,
 };
 
 enum value_type {
@@ -106,6 +107,13 @@ struct op_copy_args {
 	struct copy_arg args[6];
 };
 
+struct op_cmp {
+	uint16_t s1_off;
+	uint16_t s2_off;
+	size_t size;
+	unsigned int jmp;
+};
+
 struct op {
 	enum op_type type;
 	union {
@@ -115,6 +123,7 @@ struct op {
 		struct op_return ret;
 		struct op_inject inj;
 		struct op_copy_args copy;
+		struct op_cmp cmp;
 	};
 };
 #endif /* GLUTEN_H */

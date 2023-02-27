@@ -313,6 +313,12 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 			break;
 		case OP_END:
 			return 0;
+		case OP_CMP:
+			if (memcmp((uint16_t *)data + operations[i].cmp.s1_off,
+				   (uint16_t *)data + operations[i].cmp.s2_off,
+				   operations[i].cmp.size) != 0) {
+				i = operations[i].cmp.jmp;
+			}
 			break;
 		default:
 			fprintf(stderr, "unknow operation %d \n",
