@@ -97,7 +97,7 @@ struct op_inject {
 
 struct copy_arg {
 	uint16_t args_off;
-	bool need_copied;
+	enum value_type type;
 	size_t size;
 };
 

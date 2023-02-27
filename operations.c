@@ -169,15 +169,18 @@ int copy_args(struct seccomp_notif *req, struct op_copy_args *copy, void *data,
 		fprintf(stderr, "the seccomp request isn't valid anymore\n");
 		return -1;
 	}
-
 	for (i = 0; i < 6; i++) {
-		if (!copy->args[i].need_copied)
-			continue;
-		dest = (uint16_t *)data + copy->args[i].args_off;
-		nread = pread(fd, dest, copy->args[i].size, req->data.args[i]);
-		if (nread < 0) {
-			perror("pread");
-			return -1;
+		if (copy->args[i].type == REFERENCE) {
+			dest = (uint16_t *)data + copy->args[i].args_off;
+			nread = pread(fd, dest, copy->args[i].size,
+				      req->data.args[i]);
+			if (nread < 0) {
+				perror("pread");
+				return -1;
+			}
+		} else {
+			memcpy((uint16_t *)data + copy->args[i].args_off,
+			       &req->data.args[i], copy->args[i].size);
 		}
 	}
 	close(fd);

@@ -416,16 +416,19 @@ START_TEST(test_op_copy)
 	};
 	struct op_copy_args *o = &operations[0].copy;
 	struct sockaddr_un *addr;
+	socklen_t *len, expect;
 	int ret;
 
-	o->args[0] = (struct copy_arg){ .args_off = 0, .size = sizeof(int) };
+	o->args[0] = (struct copy_arg){ .args_off = 0,
+					.type = IMMEDIATE,
+					.size = sizeof(int) };
 	o->args[1] =
 		(struct copy_arg){ .args_off = sizeof(int) / sizeof(uint16_t),
-				   .need_copied = true,
+				   .type = REFERENCE,
 				   .size = sizeof(struct sockaddr_un) };
 	o->args[2] = (struct copy_arg){ .args_off = o->args[1].args_off /
 						    sizeof(uint16_t),
-					.need_copied = false,
+					.type = IMMEDIATE,
 					.size = sizeof(socklen_t) };
 	ret = do_operations(&tmp_data, operations, &req,
 			    sizeof(operations) / sizeof(operations[0]), -1,
@@ -435,6 +438,10 @@ START_TEST(test_op_copy)
 	addr = (struct sockaddr_un *)(tmp_data + o->args[1].args_off);
 	ck_assert_str_eq(addr->sun_path, "/tmp/test.sock");
 	ck_assert(addr->sun_family == AF_UNIX);
+	expect = sizeof(addr->sun_path);
+	len = (socklen_t *)(tmp_data + o->args[2].args_off);
+	ck_assert_msg(*len == expect, "expect len %x to be equal to %x", *len,
+		      expect);
 }
 END_TEST
 
