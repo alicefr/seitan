@@ -187,6 +187,25 @@ int copy_args(struct seccomp_notif *req, struct op_copy_args *copy, void *data,
 	return 0;
 }
 
+static int resolve_fd(void *data, struct op_resolvedfd *resfd, pid_t pid)
+{
+	char fdpath[PATH_MAX], buf[PATH_MAX];
+	char *path = (char *)((uint16_t *)data + resfd->path_off);
+	int *fd = (int *)((uint16_t *)data + resfd->fd_off);
+	ssize_t nbytes;
+
+	snprintf(fdpath, PATH_MAX, "/proc/%d/fd/%d", pid, *fd);
+	if ((nbytes = readlink(fdpath, buf, resfd->path_size)) < 0) {
+		fprintf(stderr, "error reading %s\n", fdpath);
+		perror("readlink");
+		return -1;
+	}
+	if (strcmp(path, buf) == 0)
+		return 0;
+	else
+		return 1;
+}
+
 int do_call(struct arg_clone *c)
 {
 	char stack[STACK_SIZE];
@@ -234,6 +253,7 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 	struct seccomp_notif_resp resp;
 	struct arg_clone c;
 	unsigned int i;
+	int ret;
 
 	for (i = 0; i < n_operations; i++) {
 		switch (operations[i].type) {
@@ -319,6 +339,13 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 				   operations[i].cmp.size) != 0) {
 				i = operations[i].cmp.jmp;
 			}
+			break;
+		case OP_RESOLVEDFD:
+			ret = resolve_fd(data, &operations[i].resfd, pid);
+			if (ret == -1)
+				return -1;
+			else if (ret == 1)
+				i = operations[i].resfd.jmp;
 			break;
 		default:
 			fprintf(stderr, "unknow operation %d \n",

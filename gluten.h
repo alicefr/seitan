@@ -53,6 +53,7 @@ enum op_type {
 	OP_COPY_ARGS,
 	OP_END,
 	OP_CMP,
+	OP_RESOLVEDFD,
 };
 
 enum value_type {
@@ -114,6 +115,13 @@ struct op_cmp {
 	unsigned int jmp;
 };
 
+struct op_resolvedfd {
+	uint16_t fd_off;
+	uint16_t path_off;
+	size_t path_size;
+	unsigned int jmp;
+};
+
 struct op {
 	enum op_type type;
 	union {
@@ -124,6 +132,7 @@ struct op {
 		struct op_inject inj;
 		struct op_copy_args copy;
 		struct op_cmp cmp;
+		struct op_resolvedfd resfd;
 	};
 };
 #endif /* GLUTEN_H */
