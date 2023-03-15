@@ -24,10 +24,13 @@
 #include "../../operations.h"
 #include "../../common.h"
 
+#define MAX_TEST_PATH 250
+
 struct args_target {
 	long ret;
 	int err;
 	bool check_fd;
+	bool open_path;
 	int fd;
 	int nr;
 	void *args[6];
@@ -38,6 +41,7 @@ int notifyfd;
 struct args_target *at;
 int pipefd[2];
 pid_t pid;
+char path[] = "/tmp/test-seitan";
 
 uint16_t tmp_data[TMP_DATA_SIZE];
 
@@ -86,6 +90,12 @@ static int target()
 	at->ret = syscall(at->nr, at->args[0], at->args[1], at->args[2],
 			  at->args[3], at->args[4], at->args[5]);
 	at->err = errno;
+	if (at->open_path) {
+		if ((at->fd = open(path, O_CREAT | O_RDONLY)) < 0) {
+			perror("open");
+			return -1;
+		}
+	}
 	if (at->check_fd)
 		read(pipefd[0], &buf, 1);
 
@@ -212,6 +222,15 @@ void setup_fd()
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = true;
+	at->nr = __NR_getpid;
+	setup();
+}
+
+void setup_path()
+{
+	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->open_path = true;
 	at->nr = __NR_getpid;
 	setup();
 }
@@ -501,11 +520,61 @@ START_TEST(test_op_cmp_neq)
 }
 END_TEST
 
+START_TEST(test_op_resolvedfd_eq)
+{
+	struct op operations[] = {
+		{ .type = OP_RESOLVEDFD,
+		  .resfd = { .fd_off = 0,
+			     .path_off = sizeof(int) / sizeof(uint16_t),
+			     .path_size = sizeof(path),
+			     .jmp = 2 } },
+		{ .type = OP_CONT },
+		{ .type = OP_END },
+		{ .type = OP_BLOCK, .block = { .error = -1 } },
+	};
+
+	memcpy((uint16_t *)&tmp_data + operations[0].resfd.fd_off, &at->fd,
+	       sizeof(at->fd));
+	memcpy((uint16_t *)&tmp_data + operations[0].resfd.path_off, &path,
+	       sizeof(path));
+	int ret = do_operations(&tmp_data, operations, &req,
+				sizeof(operations) / sizeof(operations[0]), pid,
+				notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	check_target_result(-1, 1, false);
+}
+END_TEST
+
+START_TEST(test_op_resolvedfd_neq)
+{
+	char path2[] = "/tmp/seitan-test-wrong";
+	struct op operations[] = {
+		{ .type = OP_RESOLVEDFD,
+		  .resfd = { .fd_off = 0,
+			     .path_off = sizeof(int) / sizeof(uint16_t),
+			     .path_size = sizeof(path2),
+			     .jmp = 2 } },
+		{ .type = OP_CONT },
+		{ .type = OP_END },
+		{ .type = OP_BLOCK, .block = { .error = -1 } },
+	};
+	memcpy((uint16_t *)&tmp_data + operations[0].resfd.fd_off, &at->fd,
+	       sizeof(at->fd));
+	memcpy((uint16_t *)&tmp_data + operations[0].resfd.path_off, &path2,
+	       sizeof(path2));
+	int ret = do_operations(&tmp_data, operations, &req,
+				sizeof(operations) / sizeof(operations[0]), pid,
+				notifyfd, req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+}
+END_TEST
+
+
 Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
-	TCase *cont, *block, *ret, *call, *cmp;
+	TCase *cont, *block, *ret, *call, *cmp, *resolvedfd;
 	TCase *inject, *inject_a;
 	TCase *copy;
 
@@ -563,6 +632,13 @@ Suite *op_call_suite(void)
 	tcase_add_test(cmp, test_op_cmp_eq);
 	tcase_add_test(cmp, test_op_cmp_neq);
 	suite_add_tcase(s, cmp);
+
+	resolvedfd = tcase_create("op_resolvedfd");
+	tcase_add_checked_fixture(resolvedfd, setup_path, teardown);
+	tcase_set_timeout(resolvedfd, timeout);
+	tcase_add_test(resolvedfd, test_op_resolvedfd_eq);
+	tcase_add_test(resolvedfd, test_op_resolvedfd_neq);
+	suite_add_tcase(s, resolvedfd);
 
 	return s;
 }
