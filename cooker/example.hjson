@@ -1,0 +1,67 @@
+[
+  {
+    "match": [ /* qemu-pr-helper and similar */
+      { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "fd": { "ref": "fd" } } }
+    ],
+    "call": { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "ret": "y" } },
+    "inject": { "what": "fd", "new": { "ref": "y" }, "old": { "ref": "fd" }, "return": 0 }
+  },
+  {
+    "match": [ /* qemu creates a tap interface */
+      { "ioctl": { "path": "/dev/net/tun", "request": "TUNSETIFF", "ifr": { "name": "tap0", "flags": "IFF_TUN" } } }
+    ],
+    "limit": { "scope": "process", "count": 1 },
+    "call": { "ioctl": { "request": "TUNSETIFF", "path": "/dev/net/tun", "ifr": { "name": "tap0", "flags": "IFF_TUN", "ret": "x" } } },
+    "return": { "ref": "x" }
+  },
+  {
+    "match": [ /* CVE-2022-0185-style */
+      { "unshare": { "flags": { "has": { "newuser": true, "newnet": false } } } }
+    ],
+    "block": { }
+  },
+  {
+    "match": [ /* passt */
+      { "unshare": { "flags": { "has": [ "ipc", "mount", "uts", "pid" ] } } }
+    ],
+    "block": { }
+  },
+  {
+    "match": [ /* Giuseppe's example */
+      { "mknod": { "path": { "ref": "path" }, "mode": "c", "major": 1, "minor": { "in": [ 3, 5, 7, 8, 9 ], "ref": "minor" } } }
+    ],
+    "context": { "userns": "init", "mountns": "caller" },
+    "call": { "mknod": { "path": { "ref": "path" }, "mode": "c", "major": 1, "minor": { "ref": "minor" }, "ret": "x" } },
+    "inject": { "what": "fd", "new": { "ref": "x" } },
+    "return": { "ref": "x" }
+  }
+]
+
+/*
+ * INTFLAGS, LONGFLAGS, U32FLAGS
+ *
+ * "field": { "in": [ "ipc", "mount", "uts" ] }
+ *   flags & set
+ *   !!(flags & (ipc | mount | ns))
+ *
+ * "field": { "all": [ "ipc", "mount", "uts" ] }
+ *   flags & set == set
+ *   flags & (ipc | mount | ns) == (ipc | mount | ns)
+ *
+ * "field": { "not": [ "ipc", "mount", "uts" ] }
+ *   !(flags & set)
+ *
+ * "field": { "ipc": false, "mount": true, "uts": false }
+ *   flags & set == set
+ *   !(flags & ipc) && (flags & mount) && !(flags & utc)
+ *
+ * "field": { "ipc" }
+ *   flags == ipc
+ *
+ * INTMASK
+ *   value = (target value & known values)
+ *
+ * INT, LONG, U32
+ *   "arg": { "in": [ 0, 1 ] }
+ *   arg == 0 || arg == 1
+ */
