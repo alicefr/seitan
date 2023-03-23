@@ -34,6 +34,6 @@ unsigned int right_child(unsigned int parent_index);
 unsigned int create_bfp_program(struct syscall_entry table[],
 				struct sock_filter filter[],
 				unsigned int n_syscall);
-int convert_bpf(char *file, struct bpf_call *entries, int n);
+int convert_bpf(char *file, struct bpf_call *entries, int n, bool log);
 
 #endif

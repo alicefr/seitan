@@ -36,6 +36,8 @@
 #include <linux/seccomp.h>
 
 #include "common.h"
+#include "gluten.h"
+#include "operations.h"
 
 #define EPOLL_EVENTS 8
 #define errExit(msg)                \
@@ -259,24 +261,25 @@ int handle(struct seccomp_notif *req, int notifyfd)
 static int create_socket(const char *path)
 {
 	struct sockaddr_un addr;
-	const int optval = 1;
-	int fd;
+	int ret, conn;
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd < 0)
+		errExit("error creating UNIX socket");
 
-	if ((fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
-		errExit("socket");
-
-	if (strlen(path) >= sizeof(addr.sun_path))
-		errExit("path is invalid");
 	strcpy(addr.sun_path, path);
 	addr.sun_family = AF_UNIX;
-	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+	ret = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
+	if (ret < 0)
 		errExit("bind");
 
-	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) <
-	    0)
-		errExit("setsockopt");
+	ret = listen(fd, 1);
+	if (ret < 0)
+		errExit("listen");
+	conn = accept(fd, NULL, NULL);
+	if (conn < 0)
+		errExit("accept");
 
-	return fd;
+	return conn;
 }
 
 static int recvfd(int sockfd)
@@ -324,16 +327,16 @@ static int write_syscall(int fd, struct seccomp_notif *req)
 	char buf[1000];
 
 	/* TODO: Define format and print syscall with the right arguments */
-	snprintf(buf, sizeof(buf), "nr_syscall=%d", req->data.nr);
-	write(fd, buf, sizeof(buf));
+	snprintf(buf, sizeof(buf), "nr_syscall=%d\n", req->data.nr);
+	write(fd, buf, strlen(buf));
+	return 0;
 }
 
 int main(int argc, char **argv)
 {
 	int s = nl_init(), ret, pidfd, notifier;
-	char resp_b[BUFSIZ], req_b[BUFSIZ];
+	char req_b[BUFSIZ];
 	struct epoll_event ev, events[EPOLL_EVENTS];
-	struct seccomp_notif_resp *resp = (struct seccomp_notif_resp *)resp_b;
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
 	struct arguments arguments;
 	char path[PATH_MAX + 1];
@@ -352,8 +355,9 @@ int main(int argc, char **argv)
 
 	if (strcmp(arguments.output_file, "") > 0) {
 		output = true;
-		if ((fdout = open(arguments.output_file, O_CREAT | O_WRONLY)) <
-		    0)
+		unlink(arguments.output_file);
+		if ((fdout = open(arguments.output_file,
+				  O_CREAT | O_RDWR | O_TRUNC)) < 0)
 			errExit("open");
 	}
 
@@ -369,6 +373,7 @@ int main(int argc, char **argv)
 		/* Unblock seitan-loader */
 		unblock_eater(pidfd);
 	} else if (strcmp(arguments.socket, "") > 0) {
+		unlink(arguments.socket);
 		if ((fd = create_socket(arguments.socket)) < 0)
 			exit(EXIT_FAILURE);
 		if ((notifier = recvfd(fd)) < 0)
@@ -398,27 +403,33 @@ int main(int argc, char **argv)
 			perror("epoll_wait");
 			exit(EXIT_FAILURE);
 		}
-		/* TODO: Open syscall transformation table blob, actually handle
-		 * syscalls actions as parsed
-		 */
 		memset(req, 0, sizeof(*req));
+		if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_RECV, req) < 0)
+			errExit("recieving seccomp notification");
 		for (i = 0; i < nevents; ++i) {
 			if (events[i].events & EPOLLHUP) {
 				/* The notifier fd was closed by the target */
 				running = false;
 			} else if (notifier == events[i].data.fd) {
-				if (!handle(req, events[i].data.fd))
-					continue;
+				/*
+				 * TODO: remove until we parse correctly the
+				 * operations from the bytecode
+				 */
+				struct op operations[] = {
+					{ .type = OP_CONT },
+				};
+				if (do_operations(NULL, operations, req,
+						  sizeof(operations) /
+							  sizeof(operations[0]),
+						  req->pid, notifier,
+						  req->id) == -1)
+					errExit("failed executing operation");
 
-				resp->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
-				resp->id = req->id;
-				resp->error = 0;
-				resp->val = 0;
-
-				ioctl(notifier, SECCOMP_IOCTL_NOTIF_SEND, resp);
 				if (output)
 					write_syscall(fdout, req);
 			}
 		}
 	}
+	if (strcmp(arguments.socket, "") > 0)
+		unlink(arguments.socket);
 }

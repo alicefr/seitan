@@ -23,7 +23,8 @@ int main(int argc, char **argv)
 		perror("missing input file");
 		exit(EXIT_FAILURE);
 	}
-	ret = convert_bpf(argv[1], calls, sizeof(calls) / sizeof(calls[0]));
+	ret = convert_bpf(argv[1], calls, sizeof(calls) / sizeof(calls[0]),
+			  true);
 	if (ret < 0) {
 		perror("converting bpf program");
 		exit(EXIT_FAILURE);
