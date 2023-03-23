@@ -38,18 +38,31 @@
 #include "common.h"
 
 #define EPOLL_EVENTS 8
+#define errExit(msg)                \
+	do {                        \
+		perror(msg);        \
+		exit(EXIT_FAILURE); \
+	} while (0)
 
 static char doc[] = "Usage: seitan: setain -pid <pid> -i <input file> ";
 
 /* Seitan options */
 static struct argp_option options[] = {
 	{ "input", 'i', "FILE", 0, "Action input file", 0 },
-	{ "pid", 'p', "pid", 0, "Pid of process to monitor", 0 },
+	{ "output", 'o', "FILE", 0, "Log filtered syscall in the file", 0 },
+	{ "pid", 'p', "pid", 0,
+	  "Pid of process to monitor (cannot be used together with -socket)",
+	  0 },
+	{ "socket", 's', "/tmp/seitan.sock", 0,
+	  "Socket to pass the seccomp notifier fd (cannot be used together with -pid)",
+	  0 },
 	{ 0 }
 };
 
 struct arguments {
 	char *input_file;
+	char *output_file;
+	char *socket;
 	int pid;
 };
 
@@ -64,9 +77,19 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 	case 'i':
 		arguments->input_file = arg;
 		break;
+	case 'o':
+		arguments->output_file = arg;
+		break;
+	case 's':
+		arguments->socket = arg;
+		break;
 	case ARGP_KEY_END:
 		if (arguments->input_file == NULL)
 			argp_error(state, "missing input file");
+		if (strcmp(arguments->socket, "") > 0 && arguments->pid > 0)
+			argp_error(
+				state,
+				"the -socket and -pid options cannot be used together");
 		break;
 	default:
 		return ARGP_ERR_UNKNOWN;
@@ -233,6 +256,78 @@ int handle(struct seccomp_notif *req, int notifyfd)
 	return 1;
 }
 
+static int create_socket(const char *path)
+{
+	struct sockaddr_un addr;
+	const int optval = 1;
+	int fd;
+
+	if ((fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
+		errExit("socket");
+
+	if (strlen(path) >= sizeof(addr.sun_path))
+		errExit("path is invalid");
+	strcpy(addr.sun_path, path);
+	addr.sun_family = AF_UNIX;
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+		errExit("bind");
+
+	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) <
+	    0)
+		errExit("setsockopt");
+
+	return fd;
+}
+
+static int recvfd(int sockfd)
+{
+	struct msghdr msgh;
+	struct iovec iov;
+	int data, fd;
+	ssize_t nr;
+
+	union {
+		char buf[CMSG_SPACE(sizeof(int))];
+		struct cmsghdr align;
+	} controlMsg;
+	struct cmsghdr *cmsgp;
+
+	msgh.msg_name = NULL;
+	msgh.msg_namelen = 0;
+
+	msgh.msg_iov = &iov;
+	msgh.msg_iovlen = 1;
+	iov.iov_base = &data;
+	iov.iov_len = sizeof(int);
+
+	msgh.msg_control = controlMsg.buf;
+	msgh.msg_controllen = sizeof(controlMsg.buf);
+
+	nr = recvmsg(sockfd, &msgh, 0);
+	if (nr == -1)
+		errExit("recvmsg");
+
+	cmsgp = CMSG_FIRSTHDR(&msgh);
+
+	if (cmsgp == NULL || cmsgp->cmsg_len != CMSG_LEN(sizeof(int)) ||
+	    cmsgp->cmsg_level != SOL_SOCKET || cmsgp->cmsg_type != SCM_RIGHTS) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	memcpy(&fd, CMSG_DATA(cmsgp), sizeof(int));
+	return fd;
+}
+
+static int write_syscall(int fd, struct seccomp_notif *req)
+{
+	char buf[1000];
+
+	/* TODO: Define format and print syscall with the right arguments */
+	snprintf(buf, sizeof(buf), "nr_syscall=%d", req->data.nr);
+	write(fd, buf, sizeof(buf));
+}
+
 int main(int argc, char **argv)
 {
 	int s = nl_init(), ret, pidfd, notifier;
@@ -243,9 +338,11 @@ int main(int argc, char **argv)
 	struct arguments arguments;
 	char path[PATH_MAX + 1];
 	bool running = true;
+	bool output = false;
 	int fd, epollfd;
 	int notifierfd;
 	int nevents, i;
+	int fdout;
 
 	arguments.pid = -1;
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
@@ -253,29 +350,36 @@ int main(int argc, char **argv)
 	read(fd, t, sizeof(t));
 	close(fd);
 
-	if (arguments.pid < 0)
+	if (strcmp(arguments.output_file, "") > 0) {
+		output = true;
+		if ((fdout = open(arguments.output_file, O_CREAT | O_WRONLY)) <
+		    0)
+			errExit("open");
+	}
+
+	if (arguments.pid > 0) {
+		if ((pidfd = syscall(SYS_pidfd_open, arguments.pid, 0)) < 0)
+			errExit("pidfd_open");
+		snprintf(path, sizeof(path), "/proc/%d/fd", arguments.pid);
+		if ((notifierfd = find_fd_seccomp_notifier(path)) < 0)
+			errExit("failed getting fd of the notifier");
+		if ((notifier = syscall(SYS_pidfd_getfd, pidfd, notifierfd,
+					0)) < 0)
+			errExit("pidfd_getfd");
+		/* Unblock seitan-loader */
+		unblock_eater(pidfd);
+	} else if (strcmp(arguments.socket, "") > 0) {
+		if ((fd = create_socket(arguments.socket)) < 0)
+			exit(EXIT_FAILURE);
+		if ((notifier = recvfd(fd)) < 0)
+			exit(EXIT_FAILURE);
+	} else {
 		while ((ret = event(s)) == -EAGAIN)
 			;
-	else
-		ret = arguments.pid;
-
-	if (ret < 0)
-		exit(EXIT_FAILURE);
-	if ((pidfd = syscall(SYS_pidfd_open, ret, 0)) < 0) {
-		perror("pidfd_open");
-		exit(EXIT_FAILURE);
+		if (ret < 0)
+			exit(EXIT_FAILURE);
 	}
 	sleep(1);
-
-	snprintf(path, sizeof(path), "/proc/%d/fd", ret);
-	if ((notifierfd = find_fd_seccomp_notifier(path)) < 0) {
-		fprintf(stderr, "failed getting fd of the notifier\n");
-		exit(EXIT_FAILURE);
-	}
-	if ((notifier = syscall(SYS_pidfd_getfd, pidfd, notifierfd, 0)) < 0) {
-		perror("pidfd_getfd");
-		exit(EXIT_FAILURE);
-	}
 
 	if ((epollfd = epoll_create1(0)) < 0) {
 		perror("epoll_create");
@@ -287,8 +391,6 @@ int main(int argc, char **argv)
 		perror("epoll_ctl: notifier");
 		exit(EXIT_FAILURE);
 	}
-	/* Unblock seitan-loader */
-	unblock_eater(pidfd);
 
 	while (running) {
 		nevents = epoll_wait(epollfd, events, EPOLL_EVENTS, -1);
@@ -314,6 +416,8 @@ int main(int argc, char **argv)
 				resp->val = 0;
 
 				ioctl(notifier, SECCOMP_IOCTL_NOTIF_SEND, resp);
+				if (output)
+					write_syscall(fdout, req);
 			}
 		}
 	}
