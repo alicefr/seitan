@@ -2,10 +2,10 @@
 
 /* SEITAN - Syscall Expressive Interpreter, Transformer and Notifier
  *
- * eater.c - Load BPF program and execute binary
+ * src/eater/eater.c - Load BPF program and execute binary
  *
  * Copyright (c) 2022 Red Hat GmbH
- * Author: Stefano Brivio <sbrivio@redhat.com>
+ * Authors: Stefano Brivio <sbrivio@redhat.com>, Alice Frosi <afrosi@redhat.com>
  */
 
 #define _GNU_SOURCE

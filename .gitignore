@@ -1,6 +1,8 @@
 seitan
-seitan-eater
+eater
+cooker
 bpf_dbg
+build
 numbers.h
 tests-utils/test-syscalls
 tests-utils/test-server

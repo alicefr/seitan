@@ -9,9 +9,10 @@
 
 SRCS := calls.c emit.c gluten.c main.c parse.c parson.c util.c calls/net.c
 HEADERS := calls.h cooker.h emit.h gluten.h parse.h parson.h util.h calls/net.h
+BIN := $(OUTDIR)cooker
 
 cooker: $(SRCS) $(HEADERS)
-	$(CC) -O0 -g -Wall -Wextra -pedantic -std=c99 -o cooker $(SRCS)
+	$(CC) -O0 -g -Wall -Wextra -pedantic -std=c99 -o $(BIN) $(SRCS)
 
 all: cooker
 

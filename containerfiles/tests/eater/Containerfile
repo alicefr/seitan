@@ -2,7 +2,7 @@ FROM fedora:37
 
 RUN mkdir -p /var/run/test-filters
 
-COPY ./seitan-eater /usr/bin/seitan-eater
+COPY ./eater /usr/bin/eater
 COPY ./tests-utils/test-syscalls /usr/local/bin/test-syscalls
 # Filter without syscalls
 COPY ./test.bpf /var/run/test-filters/test.bpf
@@ -11,4 +11,4 @@ COPY ./test.bpf /var/run/test-filters/test.bpf
 RUN chmod -R 0777 /var/run/test-filters && \
 	chmod 0777 /var/run/test-filters/*
 
-ENTRYPOINT ["/usr/bin/seitan-eater"]
+ENTRYPOINT ["/usr/bin/eater"]

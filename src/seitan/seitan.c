@@ -2,10 +2,10 @@
 
 /* SEITAN - Syscall Expressive Interpreter, Transformer and Notifier
  *
- * seitan.c - Wait for processes, listen for syscalls, handle them
+ * src/seitan/seitan.c - Wait for processes, listen for syscalls, handle them
  *
  * Copyright (c) 2022 Red Hat GmbH
- * Author: Stefano Brivio <sbrivio@redhat.com>
+ * Author: Stefano Brivio <sbrivio@redhat.com>, Alice Frosi <afrosi@redhat.com>
  */
 
 #define _GNU_SOURCE
