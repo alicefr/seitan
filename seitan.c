@@ -177,22 +177,6 @@ static int event(int s)
 	return -EAGAIN;
 }
 
-enum transform {
-	NONE,
-	FD1_UNIX,
-	FDRET_SRC,
-	DEV_CHECK,
-};
-
-struct table {
-	enum transform type;
-	long number;
-
-	char arg[6][1024];
-};
-
-static struct table t[16];
-
 static int pidfd_send_signal(int pidfd, int sig, siginfo_t *info,
 			     unsigned int flags)
 {
@@ -205,53 +189,6 @@ static void unblock_eater(int pidfd)
 		perror("pidfd_send_signal");
 		exit(EXIT_FAILURE);
 	}
-}
-
-int handle(struct seccomp_notif *req, int notifyfd)
-{
-	char path[PATH_MAX + 1];
-	struct sockaddr_un s_un;
-	int fd_unix;
-	unsigned i;
-	int mem;
-
-	for (i = 0; i < sizeof(t) / sizeof(t[0]); i++) {
-		if (t[i].number == req->data.nr)
-			break;
-	}
-
-	if (i == sizeof(t) / sizeof(t[0])) /* Not found */
-		return 1;
-
-	if (t[i].type != FD1_UNIX) /* Not implemented yet */
-		return 1;
-
-	/* FD1_UNIX here */
-	snprintf(path, sizeof(path), "/proc/%i/mem", req->pid);
-	fd_unix = req->data.args[0];
-
-	mem = open(path, O_RDONLY);
-	lseek(mem, req->data.args[1], SEEK_SET);
-	read(mem, &s_un, sizeof(s_un));
-	close(mem);
-
-	if (!strcmp(s_un.sun_path, t[i].arg[0])) {
-		int own_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-
-		struct seccomp_notif_addfd addfd = {
-			.id = req->id,
-			.flags = SECCOMP_ADDFD_FLAG_SEND |
-				 SECCOMP_ADDFD_FLAG_SETFD,
-			.srcfd = own_fd,
-			.newfd = fd_unix,
-		};
-
-		connect(own_fd, &s_un, sizeof(s_un));
-		ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd);
-		return 0;
-	}
-
-	return 1;
 }
 
 static int create_socket(const char *path)
@@ -346,7 +283,7 @@ int main(int argc, char **argv)
 	arguments.pid = -1;
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
-	read(fd, t, sizeof(t));
+	/* TODO: Load bytecode */
 	close(fd);
 
 	if (strcmp(arguments.output_file, "") > 0) {
