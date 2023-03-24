@@ -1,3 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# seitan - Syscall Expressive Interpreter, Transformer and Notifier
+#
+# Copyright 2023 Red Hat GmbH
+# Author: Alice Frosi <afrosi@redhat.com>
+
 #!/usr/bin/env python3
 
 from podman import PodmanClient
