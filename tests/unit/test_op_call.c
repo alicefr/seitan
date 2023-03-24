@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright 2023 Red Hat GmbH
+ * Author: Alice Frosi <afrosi@redhat.com>
+ */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,8 +17,8 @@
 
 #include <check.h>
 
-#include "../../gluten.h"
-#include "../../operations.h"
+#include "gluten.h"
+#include "operations.h"
 
 struct args_write_file {
 	char *file;

@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright 2023 Red Hat GmbH
+ * Author: Alice Frosi <afrosi@redhat.com>
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,8 +10,8 @@
 
 #include <check.h>
 
-#include "../../filter.h"
-#include "../../disasm.h"
+#include "filter.h"
+#include "disasm.h"
 
 long nr = 42;
 

@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright 2023 Red Hat GmbH
+ * Author: Alice Frosi <afrosi@redhat.com>
+ */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,9 +25,9 @@
 
 #include <check.h>
 
-#include "../../gluten.h"
-#include "../../operations.h"
-#include "../../common.h"
+#include "gluten.h"
+#include "operations.h"
+#include "common.h"
 
 #define MAX_TEST_PATH 250
 

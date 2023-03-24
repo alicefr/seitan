@@ -1,16 +1,49 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright 2023 Red Hat GmbH
+# Author: Alice Frosi <afrosi@redhat.com>
+
+COMMON_DIR := ../../common
+OP_DIR := ../../
+COOKER_DIR := ../../seitan-cooker
+DBG_DIR := ../../debug
+
+SRCS_FILTER := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c
+HEADERS_FILTER := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h
+
+HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h
+SRCS_OP_CALL := $(OP_DIR)/operations.c
+
+HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
+		   $(COMMON_DIR)/common.h
+SRCS_OP := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c
+
+TARGET := $(shell $(CC) -dumpmachine)
+TARGET_ARCH := $(shell echo $(TARGET) | cut -f1 -d- | tr [A-Z] [a-z])
+TARGET_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/powerpc/ppc/')
+
+AUDIT_ARCH := $(shell echo $(TARGET_ARCH) | tr [a-z] [A-Z] | sed 's/^ARM.*/ARM/')
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
+
+CFLAGS += -Wall -Wextra -pedantic
+CFLAGS += -I$(COMMON_DIR) -I$(OP_DIR) -I$(COOKER_DIR) -I$(DBG_DIR)
 CFLAGS += -lcheck
+CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH) -DTMP_DATA_SIZE=1000
 
 test: test-filter test-operations test-op-call
-test-filter: test-filter.c
-	$(CC) $(CFLAGS) -o test-filter ../../filter.c ../../disasm.c test-filter.c
-	./test-filter
 
-test-op-call: test_op_call.c ../../operations.c ../../operations.h ../../gluten.h
-	$(CC) $(CFLAGS) -o test-op-call ../../operations.c test_op_call.c
-	./test-op-call
+test-filter: test-filter.c $(SRCS_FILTER) $(HEADERS_FILTER)
+	$(CC) $(CFLAGS) -o test-filter $(SRCS_FILTER) \
+		test-filter.c
+		./test-filter
 
-test-operations: test_operations.c ../../operations.c ../../operations.h ../../common.h
-	$(CC) $(CFLAGS) -o test-operations \
-		../../common.c ../../operations.c \
+test-op-call: test_op_call.c $(SRCS_OP_CALL) $(HEADERS_OP_CALL)
+	$(CC) $(CFLAGS) -o test-op-call $(SRCS_OP_CALL) \
+		test_op_call.c
+		./test-op-call
+
+test-operations: test_operations.c $(SRCS_OP) $(HEADERS_OP_CALL)
+	$(CC) $(CFLAGS) -o test-operations $(SRCS_OP) \
 		test_operations.c
 	./test-operations
