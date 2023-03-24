@@ -26,7 +26,7 @@ cooker:
 eater:
 	$(MAKE) -C seitan-eater
 
-seitan:
+seitan: $(SRCS) $(HEADERS)
 	$(CC) $(CFLAGS) -o $(BIN) $(SRCS)
 
 debug:
