@@ -7,28 +7,35 @@
 
 DIR := $(shell pwd)
 OUTDIR ?= $(DIR)/
-
 export OUTDIR
+
+COMMON_DIR := $(DIR)/common
+BIN := $(OUTDIR)seitan
+SRCS := seitan.c $(COMMON_DIR)/common.c operations.c
+HEADERS := $(COMMON_DIR)/common.h $(COMMON_DIR)/gluten.h operations.h
+
+CFLAGS += -DTMP_DATA_SIZE=1000
+CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
 
 all: cooker eater seitan
 
 cooker:
-	$(MAKE) -C src/cooker
+	$(MAKE) -C seitan-cooker
 
 eater:
-	$(MAKE) -C src/eater
+	$(MAKE) -C seitan-eater
 
 seitan:
-	$(MAKE) -C src/seitan
+	$(CC) $(CFLAGS) -o $(BIN) $(SRCS)
 
 debug:
-	$(MAKE) -C src/debug
+	$(MAKE) -C debug
 
 clean:
-	$(MAKE) -C src/cooker clean
-	$(MAKE) -C src/seitan clean
-	$(MAKE) -C src/eater clean
-	$(MAKE) -C src/debug clean
+	rm -f $(BIN)
+	$(MAKE) -C cooker clean
+	$(MAKE) -C eater clean
+	$(MAKE) -C debug clean
 
 numbers.h:
 	./scripts/nr_syscalls.sh
