@@ -38,13 +38,9 @@
 #include "common.h"
 #include "gluten.h"
 #include "operations.h"
+#include "util.h"
 
 #define EPOLL_EVENTS 8
-#define errExit(msg)                \
-	do {                        \
-		perror(msg);        \
-		exit(EXIT_FAILURE); \
-	} while (0)
 
 static char doc[] = "Usage: seitan: setain -pid <pid> -i <input file> ";
 
@@ -264,20 +260,20 @@ static int create_socket(const char *path)
 	int ret, conn;
 	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (fd < 0)
-		errExit("error creating UNIX socket");
+		die("  error creating UNIX socket");
 
 	strcpy(addr.sun_path, path);
 	addr.sun_family = AF_UNIX;
 	ret = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
 	if (ret < 0)
-		errExit("bind");
+		die("  bind");
 
 	ret = listen(fd, 1);
 	if (ret < 0)
-		errExit("listen");
+		die("  listen");
 	conn = accept(fd, NULL, NULL);
 	if (conn < 0)
-		errExit("accept");
+		die("  accept");
 
 	return conn;
 }
@@ -308,7 +304,7 @@ static int recvfd(int sockfd)
 
 	nr = recvmsg(sockfd, &msgh, 0);
 	if (nr == -1)
-		errExit("recvmsg");
+		die("  recvmsg");
 
 	cmsgp = CMSG_FIRSTHDR(&msgh);
 
@@ -358,18 +354,18 @@ int main(int argc, char **argv)
 		unlink(arguments.output_file);
 		if ((fdout = open(arguments.output_file,
 				  O_CREAT | O_RDWR | O_TRUNC)) < 0)
-			errExit("open");
+			die("  open");
 	}
 
 	if (arguments.pid > 0) {
 		if ((pidfd = syscall(SYS_pidfd_open, arguments.pid, 0)) < 0)
-			errExit("pidfd_open");
+			die("  pidfd_open");
 		snprintf(path, sizeof(path), "/proc/%d/fd", arguments.pid);
 		if ((notifierfd = find_fd_seccomp_notifier(path)) < 0)
-			errExit("failed getting fd of the notifier");
+			die("  failed getting fd of the notifier");
 		if ((notifier = syscall(SYS_pidfd_getfd, pidfd, notifierfd,
 					0)) < 0)
-			errExit("pidfd_getfd");
+			die("  pidfd_getfd");
 		/* Unblock seitan-loader */
 		unblock_eater(pidfd);
 	} else if (strcmp(arguments.socket, "") > 0) {
@@ -405,7 +401,7 @@ int main(int argc, char **argv)
 		}
 		memset(req, 0, sizeof(*req));
 		if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_RECV, req) < 0)
-			errExit("recieving seccomp notification");
+			die("  recieving seccomp notification");
 		for (i = 0; i < nevents; ++i) {
 			if (events[i].events & EPOLLHUP) {
 				/* The notifier fd was closed by the target */
@@ -423,7 +419,7 @@ int main(int argc, char **argv)
 							  sizeof(operations[0]),
 						  req->pid, notifier,
 						  req->id) == -1)
-					errExit("failed executing operation");
+					die("  failed executing operation");
 
 				if (output)
 					write_syscall(fdout, req);

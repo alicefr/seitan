@@ -12,7 +12,8 @@ export OUTDIR
 COMMON_DIR := $(DIR)/common
 BIN := $(OUTDIR)seitan
 SRCS := seitan.c $(COMMON_DIR)/common.c operations.c
-HEADERS := $(COMMON_DIR)/common.h $(COMMON_DIR)/gluten.h operations.h
+HEADERS := $(COMMON_DIR)/common.h $(COMMON_DIR)/gluten.h \
+	   $(COMMON_DIR)/util.h operations.h
 
 CFLAGS += -DTMP_DATA_SIZE=1000
 CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
