@@ -185,10 +185,8 @@ static int pidfd_send_signal(int pidfd, int sig, siginfo_t *info,
 
 static void unblock_eater(int pidfd)
 {
-	if (pidfd_send_signal(pidfd, SIGCONT, NULL, 0) == -1) {
-		perror("pidfd_send_signal");
-		exit(EXIT_FAILURE);
-	}
+	if (pidfd_send_signal(pidfd, SIGCONT, NULL, 0) == -1)
+		die("  pidfd_send_signal");
 }
 
 static int create_socket(const char *path)
@@ -308,9 +306,9 @@ int main(int argc, char **argv)
 	} else if (strcmp(arguments.socket, "") > 0) {
 		unlink(arguments.socket);
 		if ((fd = create_socket(arguments.socket)) < 0)
-			exit(EXIT_FAILURE);
+			die("  creating the socket");
 		if ((notifier = recvfd(fd)) < 0)
-			exit(EXIT_FAILURE);
+			die("  failed recieving the notifier fd");
 	} else {
 		while ((ret = event(s)) == -EAGAIN)
 			;
@@ -319,23 +317,17 @@ int main(int argc, char **argv)
 	}
 	sleep(1);
 
-	if ((epollfd = epoll_create1(0)) < 0) {
-		perror("epoll_create");
-		exit(EXIT_FAILURE);
-	}
+	if ((epollfd = epoll_create1(0)) < 0)
+		die("  epoll_create");
 	ev.events = EPOLLIN;
 	ev.data.fd = notifier;
-	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, notifier, &ev) == -1) {
-		perror("epoll_ctl: notifier");
-		exit(EXIT_FAILURE);
-	}
+	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, notifier, &ev) == -1)
+		die("  epoll_ctl: notifier");
 
 	while (running) {
 		nevents = epoll_wait(epollfd, events, EPOLL_EVENTS, -1);
-		if (nevents < 0) {
-			perror("epoll_wait");
-			exit(EXIT_FAILURE);
-		}
+		if (nevents < 0)
+			die("  waiting for seccomp events");
 		memset(req, 0, sizeof(*req));
 		if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_RECV, req) < 0)
 			die("  recieving seccomp notification");
