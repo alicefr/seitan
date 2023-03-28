@@ -10,7 +10,7 @@
 COMMON_DIR :=../common
 SRCS := $(COMMON_DIR)/common.c eater.c
 HEADERS := $(COMMON_DIR)/common.h
-BIN := $(OUTDIR)eater
+BIN := $(OUTDIR)seitan-eater
 CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
 
 eater: $(SRCS) $(HEADERS)

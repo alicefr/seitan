@@ -20,11 +20,13 @@ CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
 
 all: cooker eater seitan
 
+.PHONY: cooker
 cooker:
-	$(MAKE) -C seitan-cooker
+	$(MAKE) -C cooker
 
+.PHONY: eater
 eater:
-	$(MAKE) -C seitan-eater
+	$(MAKE) -C eater
 
 seitan: $(SRCS) $(HEADERS)
 	$(CC) $(CFLAGS) -o $(BIN) $(SRCS)
