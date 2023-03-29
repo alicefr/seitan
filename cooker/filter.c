@@ -152,26 +152,57 @@ int construct_table(const struct bpf_call *entries, int n,
 	return tn;
 }
 
-static unsigned get_n_args(const struct syscall_entry *table)
+static unsigned get_n_args_syscall_entry(const struct bpf_call *entry)
 {
-	unsigned i, k, n;
-	n = 0;
-	for (i = 0; i < table->count; i++)
-		for (k = 0; k < 6; k++)
-			if ((table->entry + i)->check_arg[k])
-				n++;
+	unsigned i, n = 0;
+
+	for (i = 0; i < 6; i++)
+		if (entry->check_arg[i])
+			n++;
 	return n;
 }
 
-static unsigned int get_total_args(const struct syscall_entry table[],
-				   unsigned int n_syscall)
+static unsigned get_n_args_syscall(const struct syscall_entry *table)
 {
-	unsigned int i, n;
-	n = 0;
-	for (i = 0; i < n_syscall; i++) {
-		n += get_n_args(&table[i]);
-	}
+	unsigned i, n = 0;
+
+	for (i = 0; i < table->count; i++)
+		n += get_n_args_syscall_entry(table->entry + i);
+
 	return n;
+}
+
+static unsigned int get_total_args_instr(const struct syscall_entry table[],
+					 unsigned int n_syscall)
+{
+	unsigned i, k, j, n = 0, total_instr = 0;
+	const struct syscall_entry *t = &table[0];
+	const struct bpf_call *entry;
+
+	for (j = 0; j < n_syscall; j++) {
+		t = &table[j];
+		for (i = 0; i < t->count; i++) {
+			entry = t->entry + i;
+			n = 0;
+			for (k = 0; k < 6; k++) {
+				if (entry->check_arg[k])
+					n++;
+			}
+			total_instr += n;
+			/* If there is at least an arguments then there is an additional
+		 * instruction for the notification
+		 */
+			if (n > 0)
+				total_instr++;
+		}
+	}
+	return total_instr;
+}
+
+static bool check_args_syscall_entry(const struct bpf_call *entry){
+	return entry->check_arg[0] || entry->check_arg[1] ||
+	       entry->check_arg[2] || entry->check_arg[3] ||
+	       entry->check_arg[4] || entry->check_arg[5];
 }
 
 unsigned int create_bpf_program_log(struct sock_filter filter[])
@@ -193,10 +224,12 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 				unsigned int n_syscall)
 {
 	unsigned int offset_left, offset_right;
+	const struct bpf_call *entry;
 	unsigned int n_args, n_nodes;
 	unsigned int notify, accept;
 	unsigned int i, j, k, size;
 	unsigned int next_offset;
+	unsigned int next_args_off;
 	int nodes[MAX_JUMPS];
 
 	create_lookup_nodes(nodes, n_syscall);
@@ -205,7 +238,7 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	/* No nodes if there is a single syscall */
 	n_nodes = (1 << count_shift_right(n_syscall - 1)) - 1;
 
-	n_args = get_total_args(table, n_syscall);
+	n_args = get_total_args_instr(table, n_syscall);
 
 	accept = 2 + n_nodes + 2 * n_syscall + n_args + 1;
 	notify = 2 + n_nodes + 2 * n_syscall + n_args + 2;
@@ -239,22 +272,36 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	for (i = 0; i < n_syscall; i++) {
 		filter[size++] = (struct sock_filter)EQ(
 			table[i].nr, next_offset, accept - size);
-		next_offset += get_n_args(&table[i]);
+		next_offset += get_n_args_syscall(&table[i]);
 	}
 
 	/*
-	 * Insert args. Evaluate every args, if it doesn't match continue with
-	 * the following, otherwise notify.
+	 * Insert args. It sequentially checks all the arguments for a syscall
+	 * entry. If a check on the argument isn't equal then it jumps to
+	 * check the following entry of the syscall and its arguments.
 	 */
 	for (i = 0; i < n_syscall; i++) {
 		for (j = 0; j < (table[i]).count; j++) {
+			unsigned n_checks = 0;
+			entry = table[i].entry + j;
+			next_args_off = get_n_args_syscall_entry(entry);
 			for (k = 0; k < 6; k++)
-				if ((table[i].entry + j)->check_arg[k]) {
+				if (entry->check_arg[k]) {
 					filter[size++] = (struct sock_filter)EQ(
 						(table[i].entry + j)->args[k],
-						notify - size, 0);
+						0, next_args_off - n_checks);
+					n_checks++;
 				}
+			/* If there is at least an argument, it needs to notify
+			 * if all the arguments checks have passed.
+			 */
+			if (check_args_syscall_entry(entry))
+				filter[size++] = (struct sock_filter)JUMPA(
+					notify - size);
 		}
+		/* At this point none of the checks was positive, it jumps to
+		 * the default behavior
+		 */
 		filter[size++] = (struct sock_filter)JUMPA(accept - size);
 	}
 
