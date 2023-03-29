@@ -4,7 +4,7 @@
 
 COMMON_DIR := ../../common
 OP_DIR := ../../
-COOKER_DIR := ../../seitan-cooker
+COOKER_DIR := ../../cooker
 DBG_DIR := ../../debug
 
 SRCS_FILTER := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c
