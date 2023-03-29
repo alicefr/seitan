@@ -83,16 +83,17 @@ START_TEST(test_single_instr_two_args)
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 				  (offsetof(struct seccomp_data, arch))),
 		/* l1 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 5),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 6),
 		/* l2 */
 		BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 			 (offsetof(struct seccomp_data, nr))),
-		/* l3 */ EQ(nr, 0, 3),
-		/* l4 */ EQ(123, 3, 0),
-		/* l5 */ EQ(321, 2, 0),
-		/* l6 */ JUMPA(0),
-		/* l7 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
-		/* l8 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
+		/* l3 */ EQ(nr, 0, 4),
+		/* l4 */ EQ(123, 0, 2),
+		/* l5 */ EQ(321, 0, 1),
+		/* l6 */ JUMPA(2),
+		/* l7 */ JUMPA(0),
+		/* l8 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+		/* l9 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 	};
 
 	size = create_bfp_program(table, result,
@@ -224,7 +225,7 @@ START_TEST(test_multiple_instr_with_args)
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 				  (offsetof(struct seccomp_data, arch))),
 		/* l1 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 22),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 24),
 		/* l2 */
 		BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 			 (offsetof(struct seccomp_data, nr))),
@@ -237,25 +238,32 @@ START_TEST(test_multiple_instr_with_args)
 		/* l6 */ JGE(43, 4, 3),
 		/* l7 */ JGE(45, 5, 4),
 		/* l8 */ JGE(46, 6, 5),
-		/* l9 */ JUMPA(14),
+		/* l9 */ JUMPA(16),
 		/* -------- leaves ------- */
-		/* l10 */ EQ(42, 4, 13),
-		/* l11 */ EQ(43, 6, 12),
-		/* l12 */ EQ(44, 6, 11),
-		/* l13 */ EQ(45, 6, 10),
-		/* l14 */ EQ(46, 8, 9),
+		/* l10 */ EQ(42, 4, 15),
+		/* l11 */ EQ(43, 6, 14),
+		/* l12 */ EQ(44, 6, 13),
+		/* l13 */ EQ(45, 6, 12),
+		/* l14 */ EQ(46, 8, 11),
 		/* ------- args ---------- */
-		/* l15 */ EQ(123, 9, 0),
-		/* l16 */ EQ(321, 8, 0),
-		/* l17 */ JUMPA(6),
-		/* l18 */ JUMPA(5),
-		/* l19 */ JUMPA(4),
-		/* l20 */ EQ(123, 4, 0),
-		/* l21 */ EQ(321, 3, 0),
-		/* l22 */ JUMPA(1),
-		/* l23 */ JUMPA(0),
-		/* l24 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
-		/* l25 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
+		/* l15 */ EQ(123, 0, 2),
+		/* l16 */ EQ(321, 0, 1),
+		/* l17 */ JUMPA(9), /* notify */
+		/* l18 */ JUMPA(7),
+		/* ----- end call42 ------ */
+		/* l19 */ JUMPA(6),
+		/* ----- end call43 ------ */
+		/* l20 */ JUMPA(5),
+		/* ----- end call44 ------ */
+		/* l21 */ EQ(123, 0, 2),
+		/* l22 */ EQ(321, 0, 1),
+		/* l23 */ JUMPA(3), /* notify */
+		/* l24 */ JUMPA(1),
+		/* ----- end call45 ------ */
+		/* l25 */ JUMPA(0),
+		/* ----- end call46 ------ */
+		/* l26 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+		/* l27 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 	};
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 
@@ -298,7 +306,7 @@ START_TEST(test_multiple_instance_same_instr)
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 				  (offsetof(struct seccomp_data, arch))),
 		/* l1 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 22),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 26),
 		/* l2 */
 		BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 			 (offsetof(struct seccomp_data, nr))),
@@ -311,25 +319,34 @@ START_TEST(test_multiple_instance_same_instr)
 		/* l6 */ JGE(43, 4, 3),
 		/* l7 */ JGE(45, 5, 4),
 		/* l8 */ JGE(46, 6, 5),
-		/* l9 */ JUMPA(14),
+		/* l9 */ JUMPA(18),
 		/* -------- leaves ------- */
-		/* l10 */ EQ(42, 4, 13),
-		/* l11 */ EQ(43, 6, 12),
-		/* l12 */ EQ(44, 6, 11),
-		/* l13 */ EQ(45, 6, 10),
-		/* l14 */ EQ(46, 8, 9),
+		/* l10 */ EQ(42, 4, 17),
+		/* l11 */ EQ(43, 6, 16),
+		/* l12 */ EQ(44, 6, 15),
+		/* l13 */ EQ(45, 6, 14),
+		/* l14 */ EQ(46, 8, 13),
 		/* ------- args ---------- */
-		/* l15 */ EQ(123, 9, 0),
-		/* l16 */ EQ(321, 8, 0),
-		/* l17 */ JUMPA(6),
-		/* l18 */ JUMPA(5),
-		/* l21 */ JUMPA(4),
-		/* l19 */ EQ(123, 4, 0),
-		/* l20 */ EQ(321, 3, 0),
-		/* l22 */ JUMPA(1),
-		/* l23 */ JUMPA(0),
-		/* l24 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
-		/* l25 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
+		/* l15 */ EQ(123, 0, 1),
+		/* l16 */ JUMPA(12), /* notify */
+		/* l17 */ EQ(321, 0, 1),
+		/* l18 */ JUMPA(10), /* notify */
+		/* l19 */ JUMPA(8),
+		/* ----- end call42 ------ */
+		/* l20 */ JUMPA(7),
+		/* ----- end call43 ------ */
+		/* l21 */ JUMPA(6),
+		/* ----- end call44 ------ */
+		/* l22 */ EQ(123, 0, 1),
+		/* l23 */ JUMPA(5), /* notify */
+		/* l24 */ EQ(321, 0, 1),
+		/* l25 */ JUMPA(3), /* notify */
+		/* l26 */ JUMPA(1),
+		/* ----- end call45 ------ */
+		/* l27 */ JUMPA(0),
+		/* ----- end call46 ------ */
+		/* l28 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+		/* l29 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 	};
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 
