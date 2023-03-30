@@ -17,14 +17,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <argp.h>
-#include <sys/prctl.h>
-#include <sys/syscall.h>
-#include <sys/socket.h>
 #include <signal.h>
-
-#include <linux/audit.h>
-#include <linux/filter.h>
-#include <linux/seccomp.h>
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -76,11 +69,6 @@ static struct argp argp = { .options = options,
 			    .help_filter = NULL,
 			    .argp_domain = NULL };
 
-static int seccomp(unsigned int operation, unsigned int flags, void *args)
-{
-	return syscall(__NR_seccomp, operation, flags, args);
-}
-
 static void signal_handler(__attribute__((unused)) int s)
 {
 }
@@ -96,27 +84,16 @@ int main(int argc, char **argv)
 {
 	struct sock_filter filter[1024];
 	struct arguments arguments;
-	struct sock_fprog prog;
 	struct sigaction act;
-	size_t n;
 	int fd, flags;
+	size_t n;
 
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
 	n = read(fd, filter, sizeof(filter));
 	close(fd);
 
-	prog.filter = filter;
-	prog.len = (unsigned short)(n / sizeof(filter[0]));
-	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-		perror("prctl");
-		exit(EXIT_FAILURE);
-	}
-	if (seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER,
-		    &prog) < 0) {
-		perror("seccomp");
-		exit(EXIT_FAILURE);
-	}
+	install_filter(filter, (unsigned short)(n / sizeof(filter[0])));
 	/*
 	 * close-on-exec flag is set for the file descriptor by seccomp.
 	 * We want to preserve the fd on the exec in this way we are able

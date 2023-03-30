@@ -7,8 +7,8 @@ OP_DIR := ../../
 COOKER_DIR := ../../cooker
 DBG_DIR := ../../debug
 
-SRCS_FILTER := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c
-HEADERS_FILTER := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h
+SRCS_FILTER := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c $(COMMON_DIR)/common.c
+HEADERS_FILTER := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h $(COMMON_DIR)/common.h
 
 HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h
 SRCS_OP_CALL := $(OP_DIR)/operations.c

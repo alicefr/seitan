@@ -28,6 +28,7 @@
 #include "gluten.h"
 #include "operations.h"
 #include "common.h"
+#include "util.h"
 
 #define MAX_TEST_PATH 250
 
@@ -64,20 +65,8 @@ static int install_notification_filter(int nr)
 		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 		BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
 	};
-	struct sock_fprog prog;
-
-	prog.filter = filter;
-	prog.len = (unsigned short)(sizeof(filter) / sizeof(filter[0]));
-	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-		perror("prctl");
-		return -1;
-	}
-	if ((fd = syscall(__NR_seccomp, SECCOMP_SET_MODE_FILTER,
-			  SECCOMP_FILTER_FLAG_NEW_LISTENER, &prog)) < 0) {
-		perror("seccomp");
-		return -1;
-	}
-	return fd;
+	return install_filter(
+		&filter, (unsigned short)(sizeof(filter) / sizeof(filter[0])));
 }
 
 static int create_test_fd()

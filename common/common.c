@@ -5,6 +5,15 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <sys/socket.h>
+
+#include <linux/audit.h>
+#include <linux/seccomp.h>
+
+#include "util.h"
+#include "common.h"
 
 int find_fd_seccomp_notifier(const char *path)
 {
@@ -48,4 +57,25 @@ int find_fd_seccomp_notifier(const char *path)
 	}
 	fprintf(stderr, "seccomp notifier not found in %s\n", path);
 	return -1;
+}
+
+static int seccomp(unsigned int operation, unsigned int flags, void *args)
+{
+	return syscall(__NR_seccomp, operation, flags, args);
+}
+
+int install_filter(struct sock_filter *filter, unsigned short len)
+{
+	struct sock_fprog prog;
+	int fd;
+
+	prog.filter = filter;
+	prog.len = len;
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
+		die("  prctl");
+	if ((fd = seccomp(SECCOMP_SET_MODE_FILTER,
+			  SECCOMP_FILTER_FLAG_NEW_LISTENER, &prog)) < 0)
+		die("  seccomp");
+
+	return fd;
 }
