@@ -13,9 +13,9 @@ HEADERS_FILTER := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h $(COMMON_DIR)/commo
 HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h
 SRCS_OP_CALL := $(OP_DIR)/operations.c
 
-HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
-		   $(COMMON_DIR)/common.h
-SRCS_OP := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c
+HEADERS_OP := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
+		   $(COMMON_DIR)/common.h testutil.h
+SRCS_OP := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c
 
 TARGET := $(shell $(CC) -dumpmachine)
 TARGET_ARCH := $(shell echo $(TARGET) | cut -f1 -d- | tr [A-Z] [a-z])
@@ -43,7 +43,7 @@ test-op-call: test_op_call.c $(SRCS_OP_CALL) $(HEADERS_OP_CALL)
 		test_op_call.c
 		./test-op-call
 
-test-operations: test_operations.c $(SRCS_OP) $(HEADERS_OP_CALL)
+test-operations: test_operations.c $(SRCS_OP) $(HEADERS_OP)
 	$(CC) $(CFLAGS) -o test-operations $(SRCS_OP) \
 		test_operations.c
 	./test-operations
