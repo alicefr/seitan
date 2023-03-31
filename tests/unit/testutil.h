@@ -41,5 +41,6 @@ void check_target_result(long ret, int err, bool ignore_ret);
 void setup();
 void teardown();
 int install_notification_filter(struct args_target *at);
+void continue_target();
 
 #endif /* TESTUTIL_H */

@@ -7,8 +7,13 @@ OP_DIR := ../../
 COOKER_DIR := ../../cooker
 DBG_DIR := ../../debug
 
-SRCS_FILTER := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c $(COMMON_DIR)/common.c
-HEADERS_FILTER := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h $(COMMON_DIR)/common.h
+SRCS_FILTER_BUILD := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c $(COMMON_DIR)/common.c
+HEADERS_FILTER_BUILD := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h $(COMMON_DIR)/common.h
+
+SRCS_FILTER := $(COOKER_DIR)/filter.c $(COMMON_DIR)/common.c util.c \
+	       $(DBG_DIR)/disasm.c
+HEADERS_FILTER := $(COOKER_DIR)/filter.h $(COMMON_DIR)/common.h \
+		  $(DBG_DIR)/disasm.h testutil.h
 
 HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h
 SRCS_OP_CALL := $(OP_DIR)/operations.c
@@ -33,10 +38,15 @@ CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH) -DTMP_DATA_SIZE=1000
 
 test: test-filter test-operations test-op-call
 
-test-filter-build: test_filter_build.c $(SRCS_FILTER) $(HEADERS_FILTER)
+test-filter-build: test_filter_build.c $(SRCS_FILTER_BUILD) $(HEADERS_FILTER_BUILD)
 	$(CC) $(CFLAGS) -o test-filter-build $(SRCS_FILTER) \
 		test_filter_build.c
 		./test-filter-build
+
+test-filter: test_filter.c $(SRCS_FILTER) $(HEADERS_FILTER)
+	        $(CC) $(CFLAGS) -o test-filter $(SRCS_FILTER) \
+                test_filter.c
+		./test-filter
 
 test-op-call: test_op_call.c $(SRCS_OP_CALL) $(HEADERS_OP_CALL)
 	$(CC) $(CFLAGS) -o test-op-call $(SRCS_OP_CALL) \

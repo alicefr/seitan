@@ -155,6 +155,21 @@ void check_target_result(long ret, int err, bool ignore_ret)
 	ck_assert_int_eq(close(pipefd[0]), 0);
 }
 
+void continue_target()
+{
+	struct seccomp_notif_resp resp;
+	int ret;
+
+	ret = ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_ID_VALID, &req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	resp.id = req.id;
+	resp.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+	resp.error = 0;
+	resp.val = 0;
+	ret = ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_SEND, &resp);
+	ck_assert_msg(ret == 0, strerror(errno));
+}
+
 void setup()
 {
 	int ret;
