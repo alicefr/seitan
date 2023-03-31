@@ -172,41 +172,61 @@ static unsigned get_n_args_syscall(const struct syscall_entry *table)
 	return n;
 }
 
+static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
+{
+	const struct bpf_call *entry;
+	bool has_arg = false;
+	unsigned n = 0, total_instr = 0;
+
+	for (unsigned int i = 0; i < table->count; i++) {
+		entry = table->entry + i;
+		n = 0;
+
+		/* For every argument there are 2 instructions, one to
+		* load the value and the second to evaluate the
+		* argument
+		*/
+		for (unsigned int k = 0; k < 6; k++) {
+			if (entry->check_arg[k]) {
+				n += 2;
+			}
+		}
+		total_instr += n;
+		if (n > 0) {
+			has_arg = true;
+			total_instr++;
+		}
+	}
+	if (has_arg)
+		total_instr++;
+
+	return total_instr;
+}
+
 static unsigned int get_total_args_instr(const struct syscall_entry table[],
 					 unsigned int n_syscall)
 {
-	unsigned i, k, j, n = 0, total_instr = 0;
-	const struct syscall_entry *t = &table[0];
-	const struct bpf_call *entry;
+	unsigned i, n = 0;
 
-	for (j = 0; j < n_syscall; j++) {
-		t = &table[j];
-		for (i = 0; i < t->count; i++) {
-			entry = t->entry + i;
-			n = 0;
-			/* For every argument there are 2 instructions, one to
-			 * load the value and the second to evaluate the
-			 * argument
-			 */
-			for (k = 0; k < 6; k++) {
-				if (entry->check_arg[k])
-					n += 2;
-			}
-			total_instr += n;
-			/* If there is at least an arguments then there is an additional
-		 * instruction for the notification
-		 */
-			if (n > 0)
-				total_instr++;
-		}
+	for (i = 0; i < n_syscall; i++) {
+			n += get_n_args_syscall_instr(&table[i]);
 	}
-	return total_instr;
+	return n;
 }
 
 static bool check_args_syscall_entry(const struct bpf_call *entry){
 	return entry->check_arg[0] || entry->check_arg[1] ||
 	       entry->check_arg[2] || entry->check_arg[3] ||
 	       entry->check_arg[4] || entry->check_arg[5];
+}
+
+static bool check_args_syscall(const struct syscall_entry *table)
+{
+	for (unsigned int i = 0; i < table->count; i++) {
+		if (check_args_syscall_entry(table->entry + i))
+			return true;
+	}
+	return false;
 }
 
 unsigned int create_bpf_program_log(struct sock_filter filter[])
@@ -232,20 +252,22 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	unsigned int n_args, n_nodes;
 	unsigned int notify, accept;
 	unsigned int i, j, k, size;
-	unsigned int next_offset;
+	unsigned int next_offset, offset;
 	unsigned int next_args_off;
 	int nodes[MAX_JUMPS];
 
 	create_lookup_nodes(nodes, n_syscall);
 
+	/* First 3 checks */
 	size = 3;
 	/* No nodes if there is a single syscall */
 	n_nodes = (1 << count_shift_right(n_syscall - 1)) - 1;
 
 	n_args = get_total_args_instr(table, n_syscall);
 
-	accept = 2 + n_nodes + 2 * n_syscall + n_args + 1;
-	notify = 2 + n_nodes + 2 * n_syscall + n_args + 2;
+	/* pre-check instruction + load syscall number (4 instructions) */
+	accept = 3 + n_nodes + n_syscall + n_args;
+	notify = accept + 1;
 
 	/* Pre */
 	/* cppcheck-suppress badBitmaskCheck */
@@ -274,8 +296,15 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	next_offset = n_syscall - 1;
 	/* Insert leaves */
 	for (i = 0; i < n_syscall; i++) {
-		filter[size++] = (struct sock_filter)EQ(
-			table[i].nr, next_offset, accept - size);
+		/* If the syscall doesn't have any arguments, jump directly to
+		 * the notification
+		 */
+		if (check_args_syscall(&table[i]))
+			offset = next_offset;
+		else
+			offset = notify - size - 1;
+		filter[size++] = (struct sock_filter)EQ(table[i].nr, offset,
+							accept - size);
 		next_offset += get_n_args_syscall(&table[i]);
 	}
 
@@ -285,11 +314,12 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	 * check the following entry of the syscall and its arguments.
 	 */
 	for (i = 0; i < n_syscall; i++) {
+		bool has_arg = false;
 		for (j = 0; j < (table[i]).count; j++) {
 			unsigned n_checks = 0;
 			entry = table[i].entry + j;
 			next_args_off = get_n_args_syscall_entry(entry);
-			for (k = 0; k < 6; k++)
+			for (k = 0; k < 6; k++) {
 				if (entry->check_arg[k]) {
 					filter[size++] = (struct sock_filter)
 						LOAD((offsetof(
@@ -299,18 +329,19 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 						(table[i].entry + j)->args[k],
 						0, next_args_off - n_checks);
 					n_checks++;
+					has_arg = true;
 				}
-			/* If there is at least an argument, it needs to notify
-			 * if all the arguments checks have passed.
-			 */
-			if (check_args_syscall_entry(entry))
+			}
+			if (check_args_syscall_entry(table[i].entry))
 				filter[size++] = (struct sock_filter)JUMPA(
 					notify - size);
 		}
 		/* At this point none of the checks was positive, it jumps to
 		 * the default behavior
 		 */
-		filter[size++] = (struct sock_filter)JUMPA(accept - size);
+		if (has_arg)
+			filter[size++] =
+				(struct sock_filter)JUMPA(accept - size);
 	}
 
 	/* Seccomp accept and notify instruction */

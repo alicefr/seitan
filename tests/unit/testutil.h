@@ -42,5 +42,6 @@ void setup();
 void teardown();
 int install_notification_filter(struct args_target *at);
 void continue_target();
+void mock_syscall_target();
 
 #endif /* TESTUTIL_H */

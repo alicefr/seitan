@@ -170,6 +170,21 @@ void continue_target()
 	ck_assert_msg(ret == 0, strerror(errno));
 }
 
+void mock_syscall_target()
+{
+	struct seccomp_notif_resp resp;
+	int ret;
+
+	ret = ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_ID_VALID, &req.id);
+	ck_assert_msg(ret == 0, strerror(errno));
+	resp.id = req.id;
+	resp.flags = 0;
+	resp.error = 0;
+	resp.val = 0;
+	ret = ioctl(notifyfd, SECCOMP_IOCTL_NOTIF_SEND, &resp);
+	ck_assert_msg(ret == 0, strerror(errno));
+}
+
 void setup()
 {
 	int ret;
