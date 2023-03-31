@@ -37,7 +37,6 @@ static int generate_install_filter(struct args_target *at)
 		}
 	}
 	size = create_bfp_program(table, filter, 1);
-	//bpf_disasm_all(filter, size);
 	return install_filter(filter, size);
 }
 
