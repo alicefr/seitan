@@ -184,9 +184,13 @@ static unsigned int get_total_args_instr(const struct syscall_entry table[],
 		for (i = 0; i < t->count; i++) {
 			entry = t->entry + i;
 			n = 0;
+			/* For every argument there are 2 instructions, one to
+			 * load the value and the second to evaluate the
+			 * argument
+			 */
 			for (k = 0; k < 6; k++) {
 				if (entry->check_arg[k])
-					n++;
+					n += 2;
 			}
 			total_instr += n;
 			/* If there is at least an arguments then there is an additional
@@ -287,6 +291,10 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 			next_args_off = get_n_args_syscall_entry(entry);
 			for (k = 0; k < 6; k++)
 				if (entry->check_arg[k]) {
+					filter[size++] = (struct sock_filter)
+						LOAD((offsetof(
+							struct seccomp_data,
+							args[k])));
 					filter[size++] = (struct sock_filter)EQ(
 						(table[i].entry + j)->args[k],
 						0, next_args_off - n_checks);
