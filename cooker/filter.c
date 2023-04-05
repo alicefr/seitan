@@ -9,6 +9,7 @@
 
 #include "numbers.h"
 #include "filter.h"
+#include "util.h"
 
 #define N_SYSCALL sizeof(numbers) / sizeof(numbers[0])
 
@@ -157,7 +158,7 @@ static unsigned get_n_args_syscall_entry(const struct bpf_call *entry)
 	unsigned i, n = 0;
 
 	for (i = 0; i < 6; i++)
-		if (entry->check_arg[i])
+		if (entry->args[i].type != NO_CHECK)
 			n++;
 	return n;
 }
@@ -181,22 +182,35 @@ static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 	for (unsigned int i = 0; i < table->count; i++) {
 		entry = table->entry + i;
 		n = 0;
-
-		/* For every argument there are 2 instructions, one to
-		* load the value and the second to evaluate the
-		* argument
-		*/
 		for (unsigned int k = 0; k < 6; k++) {
-			if (entry->check_arg[k]) {
+			switch (entry->args[k].type) {
+			case U32:
+				/* For 32 bit arguments: 2 instructions,
+				 * 1 for loading the value and
+				 * 1 for evaluating the  argument */
 				n += 2;
+				break;
+			case U64:
+				/* For 64 bit arguments: 4 instructions, for
+				 * loading and evaluating the high and low 32
+				 * bits chuncks.
+				*/
+				n += 4;
+				break;
+			case NO_CHECK:
+				break;
 			}
 		}
 		total_instr += n;
+		/* If there at least an argument, then there is the jump to the
+		 * notification */
 		if (n > 0) {
 			has_arg = true;
 			total_instr++;
 		}
 	}
+	/* If there at least an argument for that syscall, then there is the jump to the
+	* accept */
 	if (has_arg)
 		total_instr++;
 
@@ -215,9 +229,12 @@ static unsigned int get_total_args_instr(const struct syscall_entry table[],
 }
 
 static bool check_args_syscall_entry(const struct bpf_call *entry){
-	return entry->check_arg[0] || entry->check_arg[1] ||
-	       entry->check_arg[2] || entry->check_arg[3] ||
-	       entry->check_arg[4] || entry->check_arg[5];
+	return entry->args[0].type != NO_CHECK ||
+	       entry->args[1].type != NO_CHECK ||
+	       entry->args[2].type != NO_CHECK ||
+	       entry->args[3].type != NO_CHECK ||
+	       entry->args[4].type != NO_CHECK ||
+	       entry->args[5].type != NO_CHECK;
 }
 
 static bool check_args_syscall(const struct syscall_entry *table)
@@ -240,6 +257,21 @@ unsigned int create_bpf_program_log(struct sock_filter filter[])
 						 SECCOMP_RET_USER_NOTIF);
 	filter[3] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
 						 SECCOMP_RET_ALLOW);
+	return 4;
+}
+
+static unsigned int eq_u64_filter(struct sock_filter filter[], int idx,
+				  uint64_t v, unsigned int jtrue,
+				  unsigned int jfalse)
+{
+	uint32_t hi = get_hi(v);
+	uint32_t lo = get_lo(v);
+
+	filter[0] = (struct sock_filter)LOAD(LO_ARG(idx));
+	filter[1] = (struct sock_filter)EQ(lo, 0, jfalse);
+	filter[2] = (struct sock_filter)LOAD(HI_ARG(idx));
+	filter[3] = (struct sock_filter)EQ(hi, jtrue, jfalse);
+
 	return 4;
 }
 
@@ -320,16 +352,33 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 			entry = table[i].entry + j;
 			next_args_off = get_n_args_syscall_entry(entry);
 			for (k = 0; k < 6; k++) {
-				if (entry->check_arg[k]) {
+				offset = next_args_off - n_checks;
+				switch (entry->args[k].type) {
+				case NO_CHECK:
+					break;
+				case U64:
+					size += eq_u64_filter(
+						&filter[size], k,
+						entry->args[k].value.v64, 0,
+						offset);
+					n_checks++;
+					has_arg = true;
+					break;
+				case U32:
 					filter[size++] = (struct sock_filter)
 						LOAD((offsetof(
 							struct seccomp_data,
 							args[k])));
 					filter[size++] = (struct sock_filter)EQ(
-						(table[i].entry + j)->args[k],
-						0, next_args_off - n_checks);
+						entry->args[k].value.v32, 0,
+						offset);
 					n_checks++;
 					has_arg = true;
+					break;
+				default:
+					fprintf(stderr,
+						"value for args not recognized\n");
+					return -1;
 				}
 			}
 			if (check_args_syscall_entry(table[i].entry))

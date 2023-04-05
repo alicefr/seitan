@@ -29,7 +29,7 @@ int notifyfd;
 struct args_target *at;
 int pipefd[2];
 pid_t pid;
-char path[] = "/tmp/test-seitan";
+char path[PATH_MAX] = "/tmp/test-seitan";
 uint16_t tmp_data[TMP_DATA_SIZE];
 
 int install_notification_filter(struct args_target *at)
@@ -58,7 +58,7 @@ int target()
 
 	at->ret = syscall(at->nr, at->args[0], at->args[1], at->args[2],
                           at->args[3], at->args[4], at->args[5]);
-        at->err = errno;
+	at->err = errno;
         if (at->open_path) {
                 if ((at->fd = open(path, O_CREAT | O_RDONLY)) < 0) {
                         perror("open");
@@ -185,13 +185,21 @@ void mock_syscall_target()
 	ck_assert_msg(ret == 0, strerror(errno));
 }
 
+void set_args_no_check(struct args_target *at)
+{
+	for (unsigned int i = 0; i < 6; i++)
+		at->arg_type[i] = NO_CHECK;
+}
+
 void setup()
 {
 	int ret;
 
 	signal(SIGCHLD, target_exit);
 	ck_assert_int_ne(pipe(pipefd), -1);
-	pid = do_clone(target, NULL);
+	if (at->target == NULL)
+		at->target = target;
+	pid = do_clone(at->target, NULL);
 	ck_assert_int_ge(pid, 0);
 
 	/* Use write pipe to sync the target for checking the existance of the fd */

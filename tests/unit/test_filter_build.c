@@ -71,7 +71,8 @@ START_TEST(test_single_instr_two_args)
 		{
 			.name = "test1",
 			.args = { 0, 123, 321, 0, 0, 0 },
-			.check_arg = { false, true, true, false, false, false },
+			.check_arg = { NO_CHECK, U32, U32, NO_CHECK, NO_CHECK,
+				       NO_CHECK },
 		},
 	};
 	struct syscall_entry table[] = {
@@ -198,12 +199,14 @@ START_TEST(test_multiple_instr_with_args)
 	struct bpf_call calls[] = {
 		{ .name = "test1",
 		  .args = { 0, 123, 321, 0, 0, 0 },
-		  .check_arg = { false, true, true, false, false, false } },
+		  .check_arg = { NO_CHECK, U32, U32, NO_CHECK, NO_CHECK,
+				 NO_CHECK } },
 		{ .name = "test2" },
 		{ .name = "test3" },
 		{ .name = "test4",
 		  .args = { 0, 123, 321, 0, 0, 0 },
-		  .check_arg = { false, true, true, false, false, false } },
+		  .check_arg = { NO_CHECK, U32, U32, NO_CHECK, NO_CHECK,
+				 NO_CHECK } },
 		{ .name = "test5" },
 	};
 	struct syscall_entry table[] = {
@@ -272,18 +275,22 @@ START_TEST(test_multiple_instance_same_instr)
 	struct bpf_call calls[] = {
 		{ .name = "test1",
 		  .args = { 0, 123, 0, 0, 0, 0 },
-		  .check_arg = { false, true, false, false, false, false } },
+		  .check_arg = { NO_CHECK, U32, NO_CHECK, NO_CHECK, NO_CHECK,
+				 NO_CHECK } },
 		{ .name = "test1",
 		  .args = { 0, 0, 321, 0, 0, 0 },
-		  .check_arg = { false, false, true, false, false, false } },
+		  .check_arg = { NO_CHECK, NO_CHECK, U32, NO_CHECK, NO_CHECK,
+				 NO_CHECK } },
 		{ .name = "test2" },
 		{ .name = "test3" },
 		{ .name = "test4",
 		  .args = { 0, 123, 0, 0, 0, 0 },
-		  .check_arg = { false, true, false, false, false, false } },
+		  .check_arg = { NO_CHECK, U32, NO_CHECK, NO_CHECK, NO_CHECK,
+				 NO_CHECK } },
 		{ .name = "test4",
 		  .args = { 0, 0, 321, 0, 0, 0 },
-		  .check_arg = { false, false, true, false, false, false } },
+		  .check_arg = { NO_CHECK, NO_CHECK, U32, NO_CHECK, NO_CHECK,
+				 NO_CHECK } },
 		{ .name = "test5" },
 	};
 	struct syscall_entry table[] = {
