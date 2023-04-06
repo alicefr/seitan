@@ -38,22 +38,30 @@ CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH) -DTMP_DATA_SIZE=1000
 
 test: test-filter test-operations test-op-call
 
-test-filter-build: test_filter_build.c $(SRCS_FILTER_BUILD) $(HEADERS_FILTER_BUILD)
-	$(CC) $(CFLAGS) -o test-filter-build $(SRCS_FILTER) \
+build-filter-build: test_filter_build.c $(SRCS_FILTER_BUILD) $(HEADERS_FILTER_BUILD)
+	$(CC) $(CFLAGS) -o filter-build $(SRCS_FILTER) \
 		test_filter_build.c
-		./test-filter-build
 
-test-filter: test_filter.c $(SRCS_FILTER) $(HEADERS_FILTER)
-	        $(CC) $(CFLAGS) -o test-filter $(SRCS_FILTER) \
+test-filter-build: build-filter-build
+	./filter-build
+
+build-filter: test_filter.c $(SRCS_FILTER) $(HEADERS_FILTER)
+	        $(CC) $(CFLAGS) -o filter $(SRCS_FILTER) \
                 test_filter.c
-		./test-filter
 
-test-op-call: test_op_call.c $(SRCS_OP_CALL) $(HEADERS_OP_CALL)
-	$(CC) $(CFLAGS) -o test-op-call $(SRCS_OP_CALL) \
+test-filter: build-filter
+	./filter
+
+build-op-call: test_op_call.c $(SRCS_OP_CALL) $(HEADERS_OP_CALL)
+	$(CC) $(CFLAGS) -o op-call $(SRCS_OP_CALL) \
 		test_op_call.c
-		./test-op-call
 
-test-operations: test_operations.c $(SRCS_OP) $(HEADERS_OP)
-	$(CC) $(CFLAGS) -o test-operations $(SRCS_OP) \
+test-op-call: build-op-call
+	./op-call
+
+build-operations: test_operations.c $(SRCS_OP) $(HEADERS_OP)
+	$(CC) $(CFLAGS) -o operations $(SRCS_OP) \
 		test_operations.c
-	./test-operations
+
+test-operations: build-operations
+	./operations
