@@ -158,7 +158,7 @@ static unsigned get_n_args_syscall_entry(const struct bpf_call *entry)
 	unsigned i, n = 0;
 
 	for (i = 0; i < 6; i++)
-		if (entry->args[i].type != NO_CHECK)
+		if (entry->args[i].cmp != NO_CHECK)
 			n++;
 	return n;
 }
@@ -183,6 +183,8 @@ static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 		entry = table->entry + i;
 		n = 0;
 		for (unsigned int k = 0; k < 6; k++) {
+			if (entry->args[k].cmp == NO_CHECK)
+				continue;
 			switch (entry->args[k].type) {
 			case U32:
 				/* For 32 bit arguments: 2 instructions,
@@ -196,8 +198,6 @@ static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 				 * bits chuncks.
 				*/
 				n += 4;
-				break;
-			case NO_CHECK:
 				break;
 			}
 		}
@@ -229,12 +229,11 @@ static unsigned int get_total_args_instr(const struct syscall_entry table[],
 }
 
 static bool check_args_syscall_entry(const struct bpf_call *entry){
-	return entry->args[0].type != NO_CHECK ||
-	       entry->args[1].type != NO_CHECK ||
-	       entry->args[2].type != NO_CHECK ||
-	       entry->args[3].type != NO_CHECK ||
-	       entry->args[4].type != NO_CHECK ||
-	       entry->args[5].type != NO_CHECK;
+	return entry->args[0].cmp != NO_CHECK ||
+	       entry->args[1].cmp != NO_CHECK ||
+	       entry->args[2].cmp != NO_CHECK ||
+	       entry->args[3].cmp != NO_CHECK ||
+	       entry->args[4].cmp != NO_CHECK || entry->args[5].cmp != NO_CHECK;
 }
 
 static bool check_args_syscall(const struct syscall_entry *table)
@@ -352,10 +351,10 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 			entry = table[i].entry + j;
 			next_args_off = get_n_args_syscall_entry(entry);
 			for (k = 0; k < 6; k++) {
+				if (entry->args[k].cmp == NO_CHECK)
+					continue;
 				offset = next_args_off - n_checks;
 				switch (entry->args[k].type) {
-				case NO_CHECK:
-					break;
 				case U64:
 					size += eq_u64_filter(
 						&filter[size], k,

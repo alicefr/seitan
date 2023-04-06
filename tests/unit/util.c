@@ -188,7 +188,7 @@ void mock_syscall_target()
 void set_args_no_check(struct args_target *at)
 {
 	for (unsigned int i = 0; i < 6; i++)
-		at->arg_type[i] = NO_CHECK;
+		at->cmp[i] = NO_CHECK;
 }
 
 void setup()

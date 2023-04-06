@@ -33,16 +33,20 @@
 #define MAX_JUMPS 128
 #define EMPTY -1
 
-enum arg_type { NO_CHECK, U32, U64 };
+enum arg_type { U32, U64 };
 
 union arg_value {
 	uint32_t v32;
 	uint64_t v64;
 };
 
+enum arg_cmp { NO_CHECK, EQ, NE, LE, LT, GE, GT, AND_EQ, AND_NE };
+
 struct arg {
-	enum arg_type type;
 	union arg_value value;
+	enum arg_type type;
+	enum arg_cmp cmp;
+	union arg_value op2;
 };
 
 struct bpf_call {

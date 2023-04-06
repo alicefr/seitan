@@ -68,12 +68,13 @@ START_TEST(test_single_instr_two_args)
 	unsigned int size;
 	long nr = 42;
 	struct bpf_call calls[] = {
-		{
-			.name = "test1",
-			.args = { 0, 123, 321, 0, 0, 0 },
-			.check_arg = { NO_CHECK, U32, U32, NO_CHECK, NO_CHECK,
-				       NO_CHECK },
-		},
+		{ .name = "test1",
+		  .args = { [1] = { .cmp = EQ,
+				    .value = { .v32 = 123 },
+				    .type = U32 },
+			    [2] = { .cmp = EQ,
+				    .value = { .v32 = 321 },
+				    .type = U32 } } },
 	};
 	struct syscall_entry table[] = {
 		{ .count = 1, .nr = nr, .entry = &calls[0] },
@@ -198,15 +199,21 @@ START_TEST(test_multiple_instr_with_args)
 	unsigned int size;
 	struct bpf_call calls[] = {
 		{ .name = "test1",
-		  .args = { 0, 123, 321, 0, 0, 0 },
-		  .check_arg = { NO_CHECK, U32, U32, NO_CHECK, NO_CHECK,
-				 NO_CHECK } },
+		  .args = { [1] = { .cmp = EQ,
+				    .value = { .v32 = 123 },
+				    .type = U32 },
+			    [2] = { .cmp = EQ,
+				    .value = { .v32 = 321 },
+				    .type = U32 } } },
 		{ .name = "test2" },
 		{ .name = "test3" },
 		{ .name = "test4",
-		  .args = { 0, 123, 321, 0, 0, 0 },
-		  .check_arg = { NO_CHECK, U32, U32, NO_CHECK, NO_CHECK,
-				 NO_CHECK } },
+		  .args = { [1] = { .cmp = EQ,
+				    .value = { .v32 = 123 },
+				    .type = U32 },
+			    [2] = { .cmp = EQ,
+				    .value = { .v32 = 321 },
+				    .type = U32 } } },
 		{ .name = "test5" },
 	};
 	struct syscall_entry table[] = {
@@ -274,23 +281,23 @@ START_TEST(test_multiple_instance_same_instr)
 	unsigned int size;
 	struct bpf_call calls[] = {
 		{ .name = "test1",
-		  .args = { 0, 123, 0, 0, 0, 0 },
-		  .check_arg = { NO_CHECK, U32, NO_CHECK, NO_CHECK, NO_CHECK,
-				 NO_CHECK } },
+		  .args = { [1] = { .cmp = EQ,
+				    .value = { .v32 = 123 },
+				    .type = U32 } } },
 		{ .name = "test1",
-		  .args = { 0, 0, 321, 0, 0, 0 },
-		  .check_arg = { NO_CHECK, NO_CHECK, U32, NO_CHECK, NO_CHECK,
-				 NO_CHECK } },
+		  .args = { [2] = { .cmp = EQ,
+				    .value = { .v32 = 321 },
+				    .type = U32 } } },
 		{ .name = "test2" },
 		{ .name = "test3" },
 		{ .name = "test4",
-		  .args = { 0, 123, 0, 0, 0, 0 },
-		  .check_arg = { NO_CHECK, U32, NO_CHECK, NO_CHECK, NO_CHECK,
-				 NO_CHECK } },
+		  .args = { [1] = { .cmp = EQ,
+				    .value = { .v32 = 123 },
+				    .type = U32 } } },
 		{ .name = "test4",
-		  .args = { 0, 0, 321, 0, 0, 0 },
-		  .check_arg = { NO_CHECK, NO_CHECK, U32, NO_CHECK, NO_CHECK,
-				 NO_CHECK } },
+		  .args = { [2] = { .cmp = EQ,
+				    .value = { .v32 = 321 },
+				    .type = U32 } } },
 		{ .name = "test5" },
 	};
 	struct syscall_entry table[] = {

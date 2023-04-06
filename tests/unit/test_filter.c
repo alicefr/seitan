@@ -32,10 +32,10 @@ static int generate_install_filter(struct args_target *at)
 
 	for (i = 0; i < 6; i++) {
 		if (at->args[i] == NULL) {
-			calls[0].args[i].type = NO_CHECK;
+			calls[0].args[i].cmp = NO_CHECK;
 			continue;
 		}
-		switch (at->arg_type[i]) {
+		switch (at->type[i]) {
 		case U32:
 			calls[0].args[i].value.v32 = (uint32_t)at->args[i];
 			calls[0].args[i].type = U32;
@@ -44,13 +44,9 @@ static int generate_install_filter(struct args_target *at)
 			calls[0].args[i].value.v64 = (uint64_t)at->args[i];
 			calls[0].args[i].type = U64;
 			break;
-		case NO_CHECK:
-			calls[0].args[i].type = NO_CHECK;
-			break;
 		}
 	}
 	size = create_bfp_program(table, filter, 1);
-	bpf_disasm_all(filter, size);
 	return install_filter(filter, size);
 }
 
@@ -76,7 +72,7 @@ START_TEST(with_getsid)
 	at->nr = __NR_getsid;
 	set_args_no_check(at);
 	at->args[0] = &id;
-	at->arg_type[0] = U32;
+	at->type[0] = U32;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -93,9 +89,9 @@ START_TEST(with_getpriority)
 	at->nr = __NR_getpriority;
 	set_args_no_check(at);
 	at->args[0] = &which;
-	at->arg_type[0] = U32;
+	at->type[0] = U32;
 	at->args[1] = &who;
-	at->arg_type[0] = U32;
+	at->type[0] = U32;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -121,7 +117,7 @@ static void test_lseek(off_t offset)
 	at->target = target_lseek;
 	set_args_no_check(at);
 	at->args[1] = offset;
-	at->arg_type[1] = U64;
+	at->type[1] = U64;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();

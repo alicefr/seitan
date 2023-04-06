@@ -19,7 +19,8 @@ struct args_target {
         bool open_path;
         int fd;
         int nr;
-	enum arg_type arg_type[6];
+	enum arg_cmp cmp[6];
+	enum arg_type type[6];
 	void *args[6];
 	int (*install_filter)(struct args_target *at);
 	int (*target)(void *);
