@@ -77,9 +77,12 @@ void setup_target_connect()
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_connect;
-	at->args[0] = (void *)(long)fd;
-	at->args[1] = (void *)&addr;
-	at->args[2] = (void *)(long)len;
+	at->args[0].value.v32 = fd;
+	at->args[0].type = U32;
+	at->args[1].value.v64 = &addr;
+	at->args[1].type = U64;
+	at->args[2].value.v32 = len;
+	at->args[2].type = U32;
 	at->install_filter = install_notification_filter;
 	setup();
 }

@@ -22,7 +22,6 @@
 
 static int generate_install_filter(struct args_target *at)
 {
-	unsigned int i;
 	struct bpf_call calls[1];
 	struct syscall_entry table[] = {
 		{ .count = 1, .nr = at->nr, .entry = &calls[0] }
@@ -30,23 +29,7 @@ static int generate_install_filter(struct args_target *at)
 	struct sock_filter filter[30];
 	unsigned int size;
 
-	for (i = 0; i < 6; i++) {
-		if (at->args[i] == NULL) {
-			calls[0].args[i].cmp = NO_CHECK;
-			continue;
-		}
-		calls[0].args[i].cmp = at->cmp[i];
-		switch (at->type[i]) {
-		case U32:
-			calls[0].args[i].value.v32 = (uint32_t)at->args[i];
-			calls[0].args[i].type = U32;
-			break;
-		case U64:
-			calls[0].args[i].value.v64 = (uint64_t)at->args[i];
-			calls[0].args[i].type = U64;
-			break;
-		}
-	}
+	memcpy(&calls[0].args, &at->args, sizeof(calls[0].args));
 	size = create_bfp_program(table, filter, 1);
 	return install_filter(filter, size);
 }
@@ -72,9 +55,9 @@ START_TEST(with_getsid)
 	at->check_fd = false;
 	at->nr = __NR_getsid;
 	set_args_no_check(at);
-	at->args[0] = &id;
-	at->type[0] = U32;
-	at->cmp[0] = EQ;
+	at->args[0].type = U32;
+	at->args[0].value.v32 = id;
+	at->args[0].cmp = EQ;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -83,19 +66,19 @@ END_TEST
 
 START_TEST(with_getpriority)
 {
-	int which = 12345;
+	int which = 0x12345;
 	id_t who = PRIO_PROCESS;
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_getpriority;
 	set_args_no_check(at);
-	at->args[0] = &which;
-	at->type[0] = U32;
-	at->cmp[0] = EQ;
-	at->args[1] = &who;
-	at->type[1] = U32;
-	at->cmp[1] = EQ;
+	at->args[0].value.v32 = which;
+	at->args[0].type = U32;
+	at->args[0].cmp = EQ;
+	at->args[1].value.v32 = who;
+	at->args[1].type = U32;
+	at->args[1].cmp = EQ;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -108,7 +91,7 @@ static int target_lseek()
 
 	/* Open the device on the target, but the arg0 isn't in the filter */
 	ck_assert_int_ge(fd, 0);
-	at->args[0] = (void *)(long)fd;
+	at->args[0].value.v64 = fd;
 	return target();
 }
 
@@ -120,8 +103,9 @@ static void test_lseek(off_t offset)
 	at->nr = __NR_lseek;
 	at->target = target_lseek;
 	set_args_no_check(at);
-	at->args[1] = (void *)offset;
-	at->type[1] = U64;
+	at->args[1].value.v64 = offset;
+	at->args[1].type = U64;
+	at->args[1].cmp = EQ;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
