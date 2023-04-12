@@ -371,6 +371,8 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	unsigned int notify, accept;
 	unsigned int i, j, k, size;
 	unsigned int next_offset, offset;
+	unsigned int next_args_off;
+	unsigned n_checks;
 	int nodes[MAX_JUMPS];
 
 	create_lookup_nodes(nodes, n_syscall);
@@ -433,9 +435,11 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	for (i = 0; i < n_syscall; i++) {
 		bool has_arg = false;
 		for (j = 0; j < (table[i]).count; j++) {
-			unsigned n_checks = 0;
+			n_checks = 0;
 			entry = table[i].entry + j;
+			next_args_off = get_n_args_syscall_entry(entry);
 			for (k = 0; k < 6; k++) {
+				offset = next_args_off - n_checks;
 				switch (entry->args[k].cmp) {
 				case NO_CHECK:
 					continue;
