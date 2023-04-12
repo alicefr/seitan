@@ -38,7 +38,7 @@ CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH) -DTMP_DATA_SIZE=1000
 
 test: test-filter test-operations test-op-call
 
-build-filter-build: test_filter_build.c $(SRCS_FILTER_BUILD) $(HEADERS_FILTER_BUILD)
+build-filter-build: test_filter_build.c $ (SRCS_FILTER_BUILD) $(HEADERS_FILTER_BUILD)
 	$(CC) $(CFLAGS) -o filter-build $(SRCS_FILTER) \
 		test_filter_build.c
 
@@ -65,3 +65,6 @@ build-operations: test_operations.c $(SRCS_OP) $(HEADERS_OP)
 
 test-operations: build-operations
 	./operations
+
+clean:
+	rm -f operations  op-call filter filter-build

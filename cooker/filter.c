@@ -259,19 +259,106 @@ unsigned int create_bpf_program_log(struct sock_filter filter[])
 	return 4;
 }
 
-static unsigned int eq_u64_filter(struct sock_filter filter[], int idx,
-				  uint64_t v, unsigned int jtrue,
-				  unsigned int jfalse)
+static unsigned int eq(struct sock_filter filter[], int idx,
+		       const struct bpf_call *entry, unsigned int jtrue,
+		       unsigned int jfalse)
 {
-	uint32_t hi = get_hi(v);
-	uint32_t lo = get_lo(v);
+	unsigned int size = 0;
+	uint32_t hi, lo;
 
-	filter[0] = (struct sock_filter)LOAD(LO_ARG(idx));
-	filter[1] = (struct sock_filter)EQ(lo, 0, jfalse);
-	filter[2] = (struct sock_filter)LOAD(HI_ARG(idx));
-	filter[3] = (struct sock_filter)EQ(hi, jtrue, jfalse);
+	switch (entry->args[idx].type) {
+	case U64:
+		hi = get_hi((entry->args[idx]).value.v64);
+		lo = get_lo((entry->args[idx]).value.v64);
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)EQ(lo, 0, jfalse);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		filter[size++] = (struct sock_filter)EQ(hi, jtrue, jfalse);
+		break;
+	case U32:
 
-	return 4;
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)EQ(
+			entry->args[idx].value.v32, jtrue, jfalse);
+		break;
+	}
+
+	return size;
+}
+
+static unsigned int gt(struct sock_filter filter[], int idx,
+		       const struct bpf_call *entry, unsigned int jtrue,
+		       unsigned int jfalse)
+{
+	unsigned int size = 0;
+	uint32_t hi, lo;
+
+	switch (entry->args[idx].type) {
+	case U64:
+		hi = get_hi((entry->args[idx]).value.v64);
+		lo = get_lo((entry->args[idx]).value.v64);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		filter[size++] = (struct sock_filter)GT(hi, jtrue, jfalse);
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)GT(lo, jtrue, jfalse);
+		break;
+	case U32:
+
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)GT(
+			entry->args[idx].value.v32, jtrue, jfalse);
+		break;
+	}
+
+	return size;
+}
+
+static unsigned int lt(struct sock_filter filter[], int idx,
+		       const struct bpf_call *entry, unsigned int jtrue,
+		       unsigned int jfalse)
+{
+	unsigned int size = 0;
+	uint32_t hi, lo;
+
+	switch (entry->args[idx].type) {
+	case U64:
+		hi = get_hi((entry->args[idx]).value.v64);
+		lo = get_lo((entry->args[idx]).value.v64);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		filter[size++] = (struct sock_filter)LT(hi, jtrue, jfalse);
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LT(lo, jtrue, jfalse);
+		break;
+	case U32:
+
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LT(
+			entry->args[idx].value.v32, jtrue, jfalse);
+		break;
+	}
+
+	return size;
+}
+
+static unsigned int neq(struct sock_filter filter[], int idx,
+			const struct bpf_call *entry, unsigned int jtrue,
+			unsigned int jfalse)
+{
+	return eq(filter, idx, entry, jfalse, jtrue);
+}
+
+static unsigned int ge(struct sock_filter filter[], int idx,
+		       const struct bpf_call *entry, unsigned int jtrue,
+		       unsigned int jfalse)
+{
+	return lt(filter, idx, entry, jfalse, jtrue);
+}
+
+static unsigned int le(struct sock_filter filter[], int idx,
+		       const struct bpf_call *entry, unsigned int jtrue,
+		       unsigned int jfalse)
+{
+	return gt(filter, idx, entry, jfalse, jtrue);
 }
 
 unsigned int create_bfp_program(struct syscall_entry table[],
@@ -284,7 +371,6 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	unsigned int notify, accept;
 	unsigned int i, j, k, size;
 	unsigned int next_offset, offset;
-	unsigned int next_args_off;
 	int nodes[MAX_JUMPS];
 
 	create_lookup_nodes(nodes, n_syscall);
@@ -349,36 +435,21 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 		for (j = 0; j < (table[i]).count; j++) {
 			unsigned n_checks = 0;
 			entry = table[i].entry + j;
-			next_args_off = get_n_args_syscall_entry(entry);
 			for (k = 0; k < 6; k++) {
-				if (entry->args[k].cmp == NO_CHECK)
+				switch (entry->args[k].cmp) {
+				case NO_CHECK:
 					continue;
-				offset = next_args_off - n_checks;
-				switch (entry->args[k].type) {
-				case U64:
-					size += eq_u64_filter(
-						&filter[size], k,
-						entry->args[k].value.v64, 0,
-						offset);
-					n_checks++;
-					has_arg = true;
-					break;
-				case U32:
-					filter[size++] = (struct sock_filter)
-						LOAD((offsetof(
-							struct seccomp_data,
-							args[k])));
-					filter[size++] = (struct sock_filter)EQ(
-						entry->args[k].value.v32, 0,
-						offset);
-					n_checks++;
-					has_arg = true;
+				case EQ:
+					size += eq(&filter[size], k, entry, 0,
+						   offset);
 					break;
 				default:
 					fprintf(stderr,
-						"value for args not recognized\n");
-					return -1;
+						"operation not recognized\n");
+					continue;
 				}
+				n_checks++;
+				has_arg = true;
 			}
 			if (check_args_syscall_entry(table[i].entry))
 				filter[size++] = (struct sock_filter)JUMPA(

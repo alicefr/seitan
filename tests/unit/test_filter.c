@@ -35,6 +35,7 @@ static int generate_install_filter(struct args_target *at)
 			calls[0].args[i].cmp = NO_CHECK;
 			continue;
 		}
+		calls[0].args[i].cmp = at->cmp[i];
 		switch (at->type[i]) {
 		case U32:
 			calls[0].args[i].value.v32 = (uint32_t)at->args[i];
@@ -73,6 +74,7 @@ START_TEST(with_getsid)
 	set_args_no_check(at);
 	at->args[0] = &id;
 	at->type[0] = U32;
+	at->cmp[0] = EQ;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -90,8 +92,10 @@ START_TEST(with_getpriority)
 	set_args_no_check(at);
 	at->args[0] = &which;
 	at->type[0] = U32;
+	at->cmp[0] = EQ;
 	at->args[1] = &who;
-	at->type[0] = U32;
+	at->type[1] = U32;
+	at->cmp[1] = EQ;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -104,7 +108,7 @@ static int target_lseek()
 
 	/* Open the device on the target, but the arg0 isn't in the filter */
 	ck_assert_int_ge(fd, 0);
-	at->args[0] = fd;
+	at->args[0] = (void *)(long)fd;
 	return target();
 }
 
@@ -116,7 +120,7 @@ static void test_lseek(off_t offset)
 	at->nr = __NR_lseek;
 	at->target = target_lseek;
 	set_args_no_check(at);
-	at->args[1] = offset;
+	at->args[1] = (void *)offset;
 	at->type[1] = U64;
 	at->install_filter = generate_install_filter;
 	setup();

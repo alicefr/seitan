@@ -27,6 +27,11 @@
 	BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, (nr), (right), (left))
 #define JUMPA(jump) BPF_JUMP(BPF_JMP | BPF_JA, (jump), 0, 0)
 #define EQ(x, a1, a2) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (x), (a1), (a2))
+#define NEQ(x, a1, a2) EQ((x), (a2), (a1))
+#define GT(x, a1, a2) BPF_JUMP(BPF_JMP + BPF_JGT + BPF_K, (x), (a1), (a2))
+#define GE(x, a1, a2) BPF_JUMP(BPF_JMP + BPF_JGE + BPF_K, (x), (a1), (a2))
+#define LT(x, a1, a2) GE((x), (a2), (a1))
+#define LE(x, a1, a2) GT((x), (a2), (a1))
 #define LOAD(x) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, (x))
 #define MAX_FILTER 1024
 
