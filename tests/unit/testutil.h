@@ -20,6 +20,7 @@ struct args_target {
         int fd;
         int nr;
 	struct arg args[6];
+	void *targs[6];
 	int (*install_filter)(struct args_target *at);
 	int (*target)(void *);
 };

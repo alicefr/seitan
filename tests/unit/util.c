@@ -49,31 +49,15 @@ int install_notification_filter(struct args_target *at)
 		filter, (unsigned short)(sizeof(filter) / sizeof(filter[0])));
 }
 
-static void parse_args_target(void *args[])
-{
-	for (unsigned int i = 0; i < 6; i++) {
-		switch (at->args[i].type) {
-		case U64:
-			args[i] = (void *)at->args[i].value.v64;
-			break;
-		case U32:
-			args[i] = (void *)(long)at->args[i].value.v32;
-			break;
-		}
-	}
-}
-
 int target()
 {
-	void *args[6];
 	int buf = 0;
 	if (at->install_filter(at) < 0) {
 		return -1;
 	}
 
-	parse_args_target(args);
-	at->ret = syscall(at->nr, args[0], args[1], args[2], args[3], args[4],
-			  args[5]);
+	at->ret = syscall(at->nr, at->targs[0], at->targs[1], at->targs[2],
+			  at->targs[3], at->targs[4], at->targs[5]);
 	at->err = errno;
         if (at->open_path) {
                 if ((at->fd = open(path, O_CREAT | O_RDONLY)) < 0) {

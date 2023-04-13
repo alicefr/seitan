@@ -100,7 +100,6 @@ START_TEST(test_single_instr_two_args)
 	};
 	size = create_bfp_program(table, result,
 				  sizeof(table) / sizeof(table[0]));
-	bpf_disasm_all(result, size);
 	ck_assert_uint_eq(size, sizeof(expected) / sizeof(expected[0]));
 	ck_assert(filter_eq(expected, result,
 			    sizeof(expected) / sizeof(expected[0])));

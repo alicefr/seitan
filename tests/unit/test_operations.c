@@ -64,10 +64,8 @@ void setup_path()
 void setup_target_connect()
 {
 	struct sockaddr_un addr;
-	socklen_t len;
 	int fd;
 
-	len = sizeof(char) * 108;
 	fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	ck_assert_int_ge(fd, 0);
 	memset(&addr, 0, sizeof(addr));
@@ -77,12 +75,9 @@ void setup_target_connect()
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_connect;
-	at->args[0].value.v32 = fd;
-	at->args[0].type = U32;
-	at->args[1].value.v64 = &addr;
-	at->args[1].type = U64;
-	at->args[2].value.v32 = len;
-	at->args[2].type = U32;
+	at->targs[0] = (void *)(long)fd;
+	at->targs[1] = (void *)&addr;
+	at->targs[2] = (void *)(long)(sizeof(char) * 108);
 	at->install_filter = install_notification_filter;
 	setup();
 }

@@ -58,6 +58,24 @@ START_TEST(with_getsid)
 	at->args[0].type = U32;
 	at->args[0].value.v32 = id;
 	at->args[0].cmp = EQ;
+	at->targs[0] = (void *)(long)id;
+	at->install_filter = generate_install_filter;
+	setup();
+	mock_syscall_target();
+}
+END_TEST
+
+START_TEST(with_getsid_gt)
+{
+	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->check_fd = false;
+	at->nr = __NR_getsid;
+	set_args_no_check(at);
+	at->args[0].type = U32;
+	at->args[0].value.v32 = 0x1;
+	at->args[0].cmp = GT;
+	at->targs[0] = (void *)(long)0x10;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -79,6 +97,8 @@ START_TEST(with_getpriority)
 	at->args[1].value.v32 = who;
 	at->args[1].type = U32;
 	at->args[1].cmp = EQ;
+	at->targs[0] = (void *)(long)which;
+	at->targs[1] = (void *)(long)who;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -91,7 +111,7 @@ static int target_lseek()
 
 	/* Open the device on the target, but the arg0 isn't in the filter */
 	ck_assert_int_ge(fd, 0);
-	at->args[0].value.v64 = fd;
+	at->targs[0] = (void *)(long)fd;
 	return target();
 }
 
@@ -106,6 +126,7 @@ static void test_lseek(off_t offset)
 	at->args[1].value.v64 = offset;
 	at->args[1].type = U64;
 	at->args[1].cmp = EQ;
+	at->targs[1] = (void *)(long)offset;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -127,7 +148,7 @@ Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
-	TCase *simple, *args32, *args64;
+	TCase *simple, *args32, *args64, *gt32;
 
 	s = suite_create("Test filter with target");
 
@@ -150,6 +171,12 @@ Suite *op_call_suite(void)
 	tcase_add_test(args64, with_lseek_lo);
 	tcase_add_test(args64, with_lseek_hi);
 	suite_add_tcase(s, args64);
+
+	gt32 = tcase_create("with args 32 bit and gt");
+	tcase_add_checked_fixture(gt32, NULL, teardown);
+	tcase_set_timeout(gt32, timeout);
+	tcase_add_test(gt32, with_getsid_gt);
+	suite_add_tcase(s, gt32);
 
 	return s;
 }
