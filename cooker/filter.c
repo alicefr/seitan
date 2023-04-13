@@ -447,9 +447,27 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 					size += eq(&filter[size], k, entry, 0,
 						   offset);
 					break;
+				case NE:
+					size += neq(&filter[size], k, entry, 0,
+						    offset);
+					break;
+				case GT:
+					size += gt(&filter[size], k, entry, 0,
+						   offset);
+					break;
+				case LT:
+					size += lt(&filter[size], k, entry, 0,
+						   offset);
+					break;
+				case GE:
+					size += ge(&filter[size], k, entry, 0,
+						   offset);
+					break;
+				case LE:
+					size += le(&filter[size], k, entry, 0,
+						   offset);
+					break;
 				default:
-					fprintf(stderr,
-						"operation not recognized\n");
 					continue;
 				}
 				n_checks++;
