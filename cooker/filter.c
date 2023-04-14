@@ -298,7 +298,7 @@ static unsigned int gt(struct sock_filter filter[], int idx,
 		hi = get_hi((entry->args[idx]).value.v64);
 		lo = get_lo((entry->args[idx]).value.v64);
 		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
-		filter[size++] = (struct sock_filter)GT(hi, jtrue, jfalse);
+		filter[size++] = (struct sock_filter)GT(hi, jtrue + 2, 0);
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)GT(lo, jtrue, jfalse);
 		break;
@@ -325,7 +325,7 @@ static unsigned int lt(struct sock_filter filter[], int idx,
 		hi = get_hi((entry->args[idx]).value.v64);
 		lo = get_lo((entry->args[idx]).value.v64);
 		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
-		filter[size++] = (struct sock_filter)LT(hi, jtrue, jfalse);
+		filter[size++] = (struct sock_filter)LT(hi, jtrue + 2, jfalse);
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)LT(lo, jtrue, jfalse);
 		break;
