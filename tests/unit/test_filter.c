@@ -31,6 +31,7 @@ static int generate_install_filter(struct args_target *at)
 
 	memcpy(&calls[0].args, &at->args, sizeof(calls[0].args));
 	size = create_bfp_program(table, filter, 1);
+	bpf_disasm_all(filter, size);
 	return install_filter(filter, size);
 }
 
@@ -47,9 +48,9 @@ START_TEST(no_args)
 }
 END_TEST
 
-START_TEST(with_getsid)
+static void test_with_getsid(enum arg_cmp cmp, int v)
 {
-	int id = 12345;
+	int id = 0x10;
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
@@ -57,28 +58,42 @@ START_TEST(with_getsid)
 	set_args_no_check(at);
 	at->args[0].type = U32;
 	at->args[0].value.v32 = id;
-	at->args[0].cmp = EQ;
-	at->targs[0] = (void *)(long)id;
+	at->args[0].cmp = cmp;
+	if (cmp == EQ)
+		at->targs[0] = (void *)(long)id;
+	else
+		at->targs[0] = (void *)(long)v;
 	at->install_filter = generate_install_filter;
 	setup();
-	mock_syscall_target();
+}
+
+START_TEST(with_getsid)
+{
+	test_with_getsid(EQ, 0);
 }
 END_TEST
 
 START_TEST(with_getsid_gt)
 {
-	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
-		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	at->check_fd = false;
-	at->nr = __NR_getsid;
-	set_args_no_check(at);
-	at->args[0].type = U32;
-	at->args[0].value.v32 = 0x1;
-	at->args[0].cmp = GT;
-	at->targs[0] = (void *)(long)0x10;
-	at->install_filter = generate_install_filter;
-	setup();
-	mock_syscall_target();
+	test_with_getsid(GT, 0x100);
+}
+END_TEST
+
+START_TEST(with_getsid_lt)
+{
+	test_with_getsid(LE, 0x1);
+}
+END_TEST
+
+START_TEST(with_getsid_ge)
+{
+	test_with_getsid(GE, 0x10);
+}
+END_TEST
+
+START_TEST(with_getsid_le)
+{
+	test_with_getsid(LE, 0x10);
 }
 END_TEST
 
@@ -115,7 +130,7 @@ static int target_lseek()
 	return target();
 }
 
-static void test_lseek(off_t offset)
+static void test_lseek(enum arg_cmp cmp, off_t offset, off_t v)
 {
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -125,8 +140,11 @@ static void test_lseek(off_t offset)
 	set_args_no_check(at);
 	at->args[1].value.v64 = offset;
 	at->args[1].type = U64;
-	at->args[1].cmp = EQ;
-	at->targs[1] = (void *)(long)offset;
+	at->args[1].cmp = cmp;
+	if (cmp == EQ)
+		at->targs[1] = (void *)(long)offset;
+	else
+		at->targs[1] = (void *)(long)v;
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -134,13 +152,61 @@ static void test_lseek(off_t offset)
 
 START_TEST(with_lseek_lo)
 {
-	test_lseek(0x1);
+	test_lseek(EQ, 0x1, 0);
 }
 END_TEST
 
 START_TEST(with_lseek_hi)
 {
-	test_lseek(0x0000000100000000);
+	test_lseek(EQ, 0x0000000100000000, 0);
+}
+END_TEST
+
+START_TEST(with_lseek_lo_gt)
+{
+	test_lseek(GT, 0x1, 0x10);
+}
+END_TEST
+
+START_TEST(with_lseek_hi_gt)
+{
+	test_lseek(GT, 0x100000000, 0x200000000);
+}
+END_TEST
+
+START_TEST(with_lseek_lo_lt)
+{
+	test_lseek(LT, 0x10, 0x1);
+}
+END_TEST
+
+START_TEST(with_lseek_hi_lt)
+{
+	test_lseek(LT, 0x200000000, 0x100000000);
+}
+END_TEST
+
+START_TEST(with_lseek_lo_ge)
+{
+	test_lseek(GE, 0x1, 0x1);
+}
+END_TEST
+
+START_TEST(with_lseek_hi_ge)
+{
+	test_lseek(GE, 0x100000000, 0x100000000);
+}
+END_TEST
+
+START_TEST(with_lseek_lo_le)
+{
+	test_lseek(LE, 0x1, 0x1);
+}
+END_TEST
+
+START_TEST(with_lseek_hi_le)
+{
+	test_lseek(LE, 0x200000000, 0x200000000);
 }
 END_TEST
 
@@ -148,7 +214,7 @@ Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
-	TCase *simple, *args32, *args64, *gt32;
+	TCase *simple, *args32, *args64, *cmp32, *cmp64;
 
 	s = suite_create("Test filter with target");
 
@@ -172,11 +238,27 @@ Suite *op_call_suite(void)
 	tcase_add_test(args64, with_lseek_hi);
 	suite_add_tcase(s, args64);
 
-	gt32 = tcase_create("with args 32 bit and gt");
-	tcase_add_checked_fixture(gt32, NULL, teardown);
-	tcase_set_timeout(gt32, timeout);
-	tcase_add_test(gt32, with_getsid_gt);
-	suite_add_tcase(s, gt32);
+	cmp32 = tcase_create("with args 32 bit and comparison operations");
+	tcase_add_checked_fixture(cmp32, NULL, teardown);
+	tcase_set_timeout(cmp32, timeout);
+	tcase_add_test(cmp32, with_getsid_gt);
+	tcase_add_test(cmp32, with_getsid_lt);
+	tcase_add_test(cmp32, with_getsid_ge);
+	tcase_add_test(cmp32, with_getsid_le);
+	suite_add_tcase(s, cmp32);
+
+	cmp64 = tcase_create("with args 64 bit and comparison operations");
+	tcase_add_checked_fixture(cmp64, NULL, teardown);
+	tcase_set_timeout(cmp64, timeout);
+	tcase_add_test(cmp64, with_lseek_lo_gt);
+	tcase_add_test(cmp64, with_lseek_hi_gt);
+	tcase_add_test(cmp64, with_lseek_lo_lt);
+	tcase_add_test(cmp64, with_lseek_hi_lt);
+	tcase_add_test(cmp64, with_lseek_lo_ge);
+	tcase_add_test(cmp64, with_lseek_hi_ge);
+	tcase_add_test(cmp64, with_lseek_lo_le);
+	tcase_add_test(cmp64, with_lseek_hi_le);
+	suite_add_tcase(s, cmp64);
 
 	return s;
 }
