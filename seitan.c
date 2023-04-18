@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <signal.h>
+#include <getopt.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
@@ -26,7 +27,6 @@
 #include <sys/un.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
-#include <argp.h>
 #include <linux/netlink.h>
 #include <linux/connector.h>
 #include <linux/cn_proc.h>
@@ -42,19 +42,12 @@
 
 #define EPOLL_EVENTS 8
 
-static char doc[] = "Usage: seitan: setain -pid <pid> -i <input file> ";
-
 /* Seitan options */
-static struct argp_option options[] = {
-	{ "input", 'i', "FILE", 0, "Action input file", 0 },
-	{ "output", 'o', "FILE", 0, "Log filtered syscall in the file", 0 },
-	{ "pid", 'p', "pid", 0,
-	  "Pid of process to monitor (cannot be used together with -socket)",
-	  0 },
-	{ "socket", 's', "/tmp/seitan.sock", 0,
-	  "Socket to pass the seccomp notifier fd (cannot be used together with -pid)",
-	  0 },
-	{ 0 }
+static struct option options[] = {
+	{ "input", required_argument, NULL, 'i' },
+	{ "output", optional_argument, NULL, 'o' },
+	{ "pid", optional_argument, NULL, 'p' },
+	{ "socket", optional_argument, NULL, 's' },
 };
 
 struct arguments {
@@ -64,45 +57,53 @@ struct arguments {
 	int pid;
 };
 
-static error_t parse_opt(int key, char *arg, struct argp_state *state)
+static void usage()
 {
-	struct arguments *arguments = state->input;
-
-	switch (key) {
-	case 'p':
-		arguments->pid = atoi(arg);
-		break;
-	case 'i':
-		arguments->input_file = arg;
-		break;
-	case 'o':
-		arguments->output_file = arg;
-		break;
-	case 's':
-		arguments->socket = arg;
-		break;
-	case ARGP_KEY_END:
-		if (arguments->input_file == NULL)
-			argp_error(state, "missing input file");
-		if (strcmp(arguments->socket, "") > 0 && arguments->pid > 0)
-			argp_error(
-				state,
-				"the -socket and -pid options cannot be used together");
-		break;
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-
-	return 0;
+	printf("seitan: monitor for processes on seccomp events and executor for actions\n"
+	       "Example:  setain -pid <pid> -i <input file>\n"
+	       "Usage:\n"
+	       "\t-i, --input:\tAction input file\n"
+	       "\t-o, --output:\tLog filtered syscall in the file\n"
+	       "\t-p, --pid:\tPid of process to monitor (cannot be used together with socket)\n"
+	       "\t-s, --socket:\tSocket to pass the seccomp notifier fd (cannot be used together with pid)\n");
+	exit(EXIT_FAILURE);
 }
 
-static struct argp argp = { .options = options,
-			    .parser = parse_opt,
-			    .args_doc = NULL,
-			    .doc = doc,
-			    .children = NULL,
-			    .help_filter = NULL,
-			    .argp_domain = NULL };
+static void parse(int argc, char **argv, struct arguments *arguments)
+{
+	int option_index = 0;
+	int oc;
+	if (arguments == NULL)
+		fprintf(stderr, "Empty args\n");
+	while ((oc = getopt_long(argc, argv, ":i:o:p:s:", options,
+				 &option_index)) != -1) {
+		switch (oc) {
+		case 'p':
+			arguments->pid = atoi(optarg);
+			break;
+		case 'i':
+			arguments->input_file = optarg;
+			break;
+		case 'o':
+			arguments->output_file = optarg;
+			break;
+		case 's':
+			arguments->socket = optarg;
+			break;
+		default:
+			usage();
+		}
+	}
+	if (arguments->input_file == NULL) {
+		fprintf(stderr, "missing input file\n");
+		usage();
+	}
+	if (arguments->socket != NULL && arguments->pid > 0) {
+		fprintf(stderr,
+			"the socket and pid options cannot be used together\n");
+		usage();
+	}
+}
 
 static int nl_init(void)
 {
@@ -279,12 +280,12 @@ int main(int argc, char **argv)
 	int fdout;
 
 	arguments.pid = -1;
-	argp_parse(&argp, argc, argv, 0, 0, &arguments);
+	parse(argc, argv, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
 	/* TODO: Load bytecode */
 	close(fd);
 
-	if (strcmp(arguments.output_file, "") > 0) {
+	if (arguments.output_file != NULL) {
 		output = true;
 		unlink(arguments.output_file);
 		if ((fdout = open(arguments.output_file,
@@ -303,7 +304,7 @@ int main(int argc, char **argv)
 			die("  pidfd_getfd");
 		/* Unblock seitan-loader */
 		unblock_eater(pidfd);
-	} else if (strcmp(arguments.socket, "") > 0) {
+	} else if (arguments.socket != NULL) {
 		unlink(arguments.socket);
 		if ((fd = create_socket(arguments.socket)) < 0)
 			die("  creating the socket");

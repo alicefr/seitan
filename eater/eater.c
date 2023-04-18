@@ -14,60 +14,63 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <getopt.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <argp.h>
 #include <signal.h>
 
 #include <dirent.h>
 #include <sys/stat.h>
 
 #include "common.h"
+static struct option options[] = {
+	{ "input", required_argument, NULL, 'i' },
+	{ 0, 0, 0, 0 },
+};
 
 extern char **environ;
 
-static char doc[] =
-	"Usage: seitan-eater: setain-eater -i <input file> -- program args1 args2...";
-
 /* Eater options */
-static struct argp_option options[] = { { "input", 'i', "FILE", 0,
-					  "BPF filter input file", 0 },
-					{ 0 } };
-
 struct arguments {
 	char *input_file;
 	unsigned int program_index;
 };
 
-static error_t parse_opt(int key, char *arg, struct argp_state *state)
+static void usage()
 {
-	struct arguments *arguments = state->input;
-
-	if (state->quoted == 0)
-		arguments->program_index = state->next + 1;
-	switch (key) {
-	case 'i':
-		if (state->quoted == 0)
-			arguments->input_file = arg;
-		break;
-	case ARGP_KEY_END:
-		if (arguments->input_file == NULL)
-			argp_error(state, "missing input file");
-		if (state->argv[arguments->program_index] == NULL)
-			argp_error(state, "missing program");
-		break;
-	}
-
-	return 0;
+	printf("seitan-eater: installer for the BPF filter before launching the process\n"
+	       "Example: seitan-eater: setain-eater -i <input file> -- program args1 args2...;\n"
+	       "Usage:\n"
+	       "\t-i, --input:\tAction input file\n");
+	exit(EXIT_FAILURE);
 }
 
-static struct argp argp = { .options = options,
-			    .parser = parse_opt,
-			    .args_doc = NULL,
-			    .doc = doc,
-			    .children = NULL,
-			    .help_filter = NULL,
-			    .argp_domain = NULL };
+static void parse(int argc, char **argv, struct arguments *arguments)
+{
+	int index = 0;
+	int oc;
+
+	arguments->program_index = 0;
+	while ((oc = getopt_long(argc, argv, "i:", options, &index)) != -1) {
+		switch (oc) {
+		case 'i':
+			arguments->input_file = optarg;
+			break;
+		case '?':
+			fprintf(stderr, "unknow option %c\n", optopt);
+			usage();
+		}
+	}
+	arguments->program_index = optind;
+	if (arguments->input_file == NULL) {
+		fprintf(stderr, "missing input file\n");
+		usage();
+	}
+	if (strcmp(argv[optind - 1], "--") != 0) {
+		fprintf(stderr, "missing program\n");
+		usage();
+	}
+}
 
 static void signal_handler(__attribute__((unused)) int s)
 {
@@ -88,7 +91,7 @@ int main(int argc, char **argv)
 	int fd, flags;
 	size_t n;
 
-	argp_parse(&argp, argc, argv, 0, 0, &arguments);
+	parse(argc, argv, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
 	n = read(fd, filter, sizeof(filter));
 	close(fd);
