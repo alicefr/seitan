@@ -187,17 +187,25 @@ static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 				continue;
 			switch (entry->args[k].type) {
 			case U32:
-				/* For 32 bit arguments: 2 instructions,
-				 * 1 for loading the value and
-				 * 1 for evaluating the  argument */
-				n += 2;
+				/* For 32 bit arguments
+				 * comparison instructions (2):
+				 *   1 loading the value + 1 for evaluation
+				 * arithemtic instructions (3):
+				 *   1 loading the value + 1 for the operation + 1 for evaluation
+				 */
+				if (entry->args[k].cmp == AND_EQ)
+					n += 3;
+				else
+					n += 2;
 				break;
 			case U64:
-				/* For 64 bit arguments: 4 instructions, for
-				 * loading and evaluating the high and low 32
-				 * bits chuncks.
+				/* For 64 bit arguments: 32 instructions * 2
+				 * for loading and evaluating the high and low 32 bits chuncks.
 				*/
-				n += 4;
+				if (entry->args[k].cmp == AND_EQ)
+					n += 6;
+				else
+					n += 4;
 				break;
 			}
 		}
@@ -361,6 +369,38 @@ static unsigned int le(struct sock_filter filter[], int idx,
 	return gt(filter, idx, entry, jfalse, jtrue);
 }
 
+static unsigned int and_eq (struct sock_filter filter[], int idx,
+			    const struct bpf_call *entry, unsigned int jtrue,
+			    unsigned int jfalse)
+{
+	unsigned int size = 0;
+
+	switch (entry->args[idx].type) {
+	case U64:
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)AND(
+			get_lo(entry->args[idx].op2.v64));
+		filter[size++] = (struct sock_filter)EQ(
+			get_lo((entry->args[idx]).value.v64), 0, jfalse);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		filter[size++] = (struct sock_filter)AND(
+			get_hi(entry->args[idx].op2.v64));
+		filter[size++] = (struct sock_filter)EQ(
+			get_hi(entry->args[idx].value.v64), jtrue, jfalse);
+		break;
+	case U32:
+
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] =
+			(struct sock_filter)AND(entry->args[idx].op2.v32);
+		filter[size++] = (struct sock_filter)EQ(
+			entry->args[idx].value.v32, jtrue, jfalse);
+		break;
+	}
+
+	return size;
+}
+
 unsigned int create_bfp_program(struct syscall_entry table[],
 				struct sock_filter filter[],
 				unsigned int n_syscall)
@@ -467,8 +507,14 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 					size += le(&filter[size], k, entry, 0,
 						   offset);
 					break;
-				default:
-					continue;
+				case AND_EQ:
+					size += and_eq (&filter[size], k, entry,
+							0, offset);
+					break;
+				case AND_NE:
+					fprintf(stderr,
+						"AND_NE not supported yet\n");
+					break;
 				}
 				n_checks++;
 				has_arg = true;

@@ -33,6 +33,7 @@
 #define LT(x, a1, a2) GE((x), (a2), (a1))
 #define LE(x, a1, a2) GT((x), (a2), (a1))
 #define LOAD(x) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, (x))
+#define AND(x) BPF_STMT(BPF_ALU | BPF_AND | BPF_IMM, (x))
 #define MAX_FILTER 1024
 
 #define MAX_JUMPS 128
