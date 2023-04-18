@@ -443,7 +443,8 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 	const struct bpf_call *entry;
 	unsigned int n_args, n_nodes;
 	unsigned int notify, accept;
-	unsigned int i, j, k, size;
+	unsigned int i, j, k;
+	unsigned int size = 0;
 	unsigned int next_offset, offset;
 	unsigned int next_args_off;
 	unsigned n_checks;
@@ -451,27 +452,27 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 
 	create_lookup_nodes(nodes, n_syscall);
 
-	/* First 3 checks */
-	size = 3;
 	/* No nodes if there is a single syscall */
 	n_nodes = (1 << count_shift_right(n_syscall - 1)) - 1;
 
 	n_args = get_total_args_instr(table, n_syscall);
 
-	/* pre-check instruction + load syscall number (4 instructions) */
-	accept = 3 + n_nodes + n_syscall + n_args;
-	notify = accept + 1;
-
 	/* Pre */
 	/* cppcheck-suppress badBitmaskCheck */
-	filter[0] = (struct sock_filter)BPF_STMT(
+	filter[size++] = (struct sock_filter)BPF_STMT(
 		BPF_LD | BPF_W | BPF_ABS,
 		(offsetof(struct seccomp_data, arch)));
-	filter[1] = (struct sock_filter)BPF_JUMP(
-		BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, accept - 2);
+	filter[size++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
+						      SEITAN_AUDIT_ARCH, 1, 0);
+	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
+						      SECCOMP_RET_ALLOW);
 	/* cppcheck-suppress badBitmaskCheck */
-	filter[2] = (struct sock_filter)BPF_STMT(
+	filter[size++] = (struct sock_filter)BPF_STMT(
 		BPF_LD | BPF_W | BPF_ABS, (offsetof(struct seccomp_data, nr)));
+
+	/* pre-check instruction + load syscall number (4 instructions) */
+	accept = size + n_nodes + n_syscall;
+	notify = accept + 1;
 
 	/* Insert nodes */
 	for (i = 0; i < n_nodes; i++) {
@@ -486,20 +487,23 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 		}
 	}
 
-	next_offset = n_syscall - 1;
+	next_offset = n_syscall + 1;
 	/* Insert leaves */
 	for (i = 0; i < n_syscall; i++) {
-		/* If the syscall doesn't have any arguments, jump directly to
-		 * the notification
-		 */
+		/* If the syscall doesn't have any arguments, then notify */
 		if (check_args_syscall(&table[i]))
 			offset = next_offset;
 		else
 			offset = notify - size - 1;
 		filter[size++] = (struct sock_filter)EQ(table[i].nr, offset,
 							accept - size);
-		next_offset += get_n_args_syscall(&table[i]);
+		next_offset += get_n_args_syscall_instr(&table[i]) - 1;
 	}
+	/* Seccomp accept and notify instruction */
+	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
+						      SECCOMP_RET_ALLOW);
+	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
+						      SECCOMP_RET_USER_NOTIF);
 
 	/*
 	 * Insert args. It sequentially checks all the arguments for a syscall
@@ -555,22 +559,18 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 				has_arg = true;
 			}
 			if (check_args_syscall_entry(table[i].entry))
-				filter[size++] = (struct sock_filter)JUMPA(
-					notify - size);
+				filter[size++] = (struct sock_filter)BPF_STMT(
+					BPF_RET | BPF_K,
+					SECCOMP_RET_USER_NOTIF);
 		}
 		/* At this point none of the checks was positive, it jumps to
 		 * the default behavior
 		 */
 		if (has_arg)
-			filter[size++] =
-				(struct sock_filter)JUMPA(accept - size);
+			filter[size++] = (struct sock_filter)BPF_STMT(
+				BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 	}
 
-	/* Seccomp accept and notify instruction */
-	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						      SECCOMP_RET_ALLOW);
-	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						      SECCOMP_RET_USER_NOTIF);
 	return size;
 }
 
