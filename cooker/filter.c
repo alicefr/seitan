@@ -163,16 +163,6 @@ static unsigned get_n_args_syscall_entry(const struct bpf_call *entry)
 	return n;
 }
 
-static unsigned get_n_args_syscall(const struct syscall_entry *table)
-{
-	unsigned i, n = 0;
-
-	for (i = 0; i < table->count; i++)
-		n += get_n_args_syscall_entry(table->entry + i);
-
-	return n;
-}
-
 static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 {
 	const struct bpf_call *entry;
@@ -225,17 +215,6 @@ static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 		total_instr++;
 
 	return total_instr;
-}
-
-static unsigned int get_total_args_instr(const struct syscall_entry table[],
-					 unsigned int n_syscall)
-{
-	unsigned i, n = 0;
-
-	for (i = 0; i < n_syscall; i++) {
-			n += get_n_args_syscall_instr(&table[i]);
-	}
-	return n;
 }
 
 static bool check_args_syscall_entry(const struct bpf_call *entry){
@@ -440,22 +419,19 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 				unsigned int n_syscall)
 {
 	unsigned int offset_left, offset_right;
-	const struct bpf_call *entry;
-	unsigned int n_args, n_nodes;
-	unsigned int notify, accept;
-	unsigned int i, j, k;
-	unsigned int size = 0;
+	unsigned int n_nodes, notify, accept;
 	unsigned int next_offset, offset;
+	const struct bpf_call *entry;
+	unsigned int size = 0;
 	unsigned int next_args_off;
-	unsigned n_checks;
 	int nodes[MAX_JUMPS];
+	unsigned int i, j, k;
+	unsigned n_checks;
 
 	create_lookup_nodes(nodes, n_syscall);
 
 	/* No nodes if there is a single syscall */
 	n_nodes = (1 << count_shift_right(n_syscall - 1)) - 1;
-
-	n_args = get_total_args_instr(table, n_syscall);
 
 	/* Pre */
 	/* cppcheck-suppress badBitmaskCheck */
