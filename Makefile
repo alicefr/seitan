@@ -13,7 +13,7 @@ COMMON_DIR := $(DIR)/common
 BIN := $(OUTDIR)seitan
 SRCS := seitan.c $(COMMON_DIR)/common.c operations.c
 HEADERS := $(COMMON_DIR)/common.h $(COMMON_DIR)/gluten.h \
-	   $(COMMON_DIR)/util.h operations.h
+	   $(COMMON_DIR)/numbers.h $(COMMON_DIR)/util.h operations.h
 
 CFLAGS += -DTMP_DATA_SIZE=1000
 CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
@@ -21,7 +21,7 @@ CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
 all: cooker eater seitan
 
 .PHONY: cooker
-cooker:
+cooker: numbers.h
 	$(MAKE) -C cooker
 
 .PHONY: eater
