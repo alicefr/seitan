@@ -193,7 +193,8 @@ static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 				 * arithemtic instructions (3):
 				 *   1 loading the value + 1 for the operation + 1 for evaluation
 				 */
-				if (entry->args[k].cmp == AND_EQ)
+				if (entry->args[k].cmp == AND_EQ ||
+				    entry->args[k].cmp == AND_NE)
 					n += 3;
 				else
 					n += 2;
@@ -202,7 +203,8 @@ static unsigned int get_n_args_syscall_instr(const struct syscall_entry *table)
 				/* For 64 bit arguments: 32 instructions * 2
 				 * for loading and evaluating the high and low 32 bits chuncks.
 				*/
-				if (entry->args[k].cmp == AND_EQ)
+				if (entry->args[k].cmp == AND_EQ ||
+				    entry->args[k].cmp == AND_NE)
 					n += 6;
 				else
 					n += 4;
@@ -401,6 +403,38 @@ static unsigned int and_eq (struct sock_filter filter[], int idx,
 	return size;
 }
 
+static unsigned int and_ne(struct sock_filter filter[], int idx,
+			   const struct bpf_call *entry, unsigned int jtrue,
+			   unsigned int jfalse)
+{
+	unsigned int size = 0;
+
+	switch (entry->args[idx].type) {
+	case U64:
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)AND(
+			get_lo(entry->args[idx].op2.v64));
+		filter[size++] = (struct sock_filter)EQ(
+			get_lo((entry->args[idx]).value.v64), 0, jtrue + 3);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		filter[size++] = (struct sock_filter)AND(
+			get_hi(entry->args[idx].op2.v64));
+		filter[size++] = (struct sock_filter)EQ(
+			get_hi(entry->args[idx].value.v64), jfalse, jtrue);
+		break;
+	case U32:
+
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] =
+			(struct sock_filter)AND(entry->args[idx].op2.v32);
+		filter[size++] = (struct sock_filter)EQ(
+			entry->args[idx].value.v32, jfalse, jtrue);
+		break;
+	}
+
+	return size;
+}
+
 unsigned int create_bfp_program(struct syscall_entry table[],
 				struct sock_filter filter[],
 				unsigned int n_syscall)
@@ -512,8 +546,9 @@ unsigned int create_bfp_program(struct syscall_entry table[],
 							0, offset);
 					break;
 				case AND_NE:
-					fprintf(stderr,
-						"AND_NE not supported yet\n");
+					size += and_ne(&filter[size], k, entry,
+						       0, offset);
+
 					break;
 				}
 				n_checks++;
