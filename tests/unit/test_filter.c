@@ -210,11 +210,64 @@ START_TEST(with_lseek_hi_le)
 }
 END_TEST
 
+START_TEST(with_open_and)
+{
+	char pathname[] = "test-abcdef";
+	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->check_fd = false;
+	at->nr = __NR_open;
+	set_args_no_check(at);
+	at->args[1].value.v32 = O_CLOEXEC;
+	at->args[1].op2.v32 = O_CLOEXEC;
+	at->args[1].type = U32;
+	at->args[1].cmp = AND_EQ;
+	at->targs[0] = (void *)(long)&pathname;
+	at->targs[1] =
+		(void *)(long)(O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_DIRECTORY);
+	at->install_filter = generate_install_filter;
+	setup();
+	mock_syscall_target();
+}
+END_TEST
+
+static void test_prctl_and(uint64_t v, uint64_t mask, uint64_t res,
+			   enum arg_cmp cmp)
+{
+	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->check_fd = false;
+	at->nr = __NR_prctl;
+	set_args_no_check(at);
+	at->args[1].value.v64 = res;
+	at->args[1].op2.v64 = mask;
+	at->args[1].type = U64;
+	at->args[1].cmp = cmp;
+	at->targs[0] = (void *)(long)1;
+	at->targs[1] = (void *)(long)v;
+	at->install_filter = generate_install_filter;
+	setup();
+	mock_syscall_target();
+}
+
+START_TEST(with_prctl_and_lo)
+{
+	test_prctl_and(0x11111111, 0x1, 0x1, AND_EQ);
+}
+END_TEST
+
+START_TEST(with_prctl_and_hi)
+{
+	test_prctl_and(0x1111111100000000, 0x100000000, 0x100000000, AND_EQ);
+}
+END_TEST
+
 Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
 	TCase *simple, *args32, *args64, *cmp32, *cmp64;
+	TCase *andop32, *andop64;
 
 	s = suite_create("Test filter with target");
 
@@ -259,6 +312,19 @@ Suite *op_call_suite(void)
 	tcase_add_test(cmp64, with_lseek_lo_le);
 	tcase_add_test(cmp64, with_lseek_hi_le);
 	suite_add_tcase(s, cmp64);
+
+	andop32 = tcase_create("with and operation and 32 bits");
+	tcase_add_checked_fixture(andop32, NULL, teardown);
+	tcase_set_timeout(andop32, timeout);
+	tcase_add_test(andop32, with_open_and);
+	suite_add_tcase(s, andop32);
+
+	andop64 = tcase_create("with and operation and 64 bits");
+	tcase_add_checked_fixture(andop64, NULL, teardown);
+	tcase_set_timeout(andop64, timeout);
+	tcase_add_test(andop64, with_prctl_and_lo);
+	tcase_add_test(andop64, with_prctl_and_hi);
+	suite_add_tcase(s, andop64);
 
 	return s;
 }
