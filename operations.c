@@ -252,6 +252,19 @@ static void set_inject_fields(uint64_t id, void *data, const struct op *a,
 	resp->newfd_flags = 0;
 }
 
+static int op_cmp(void *data, const struct op_cmp *c)
+{
+	enum op_cmp_type cmp = c->cmp;
+	int res = memcmp((uint16_t *)data + c->s1_off,
+			 (uint16_t *)data + c->s2_off, c->size);
+	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
+	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
+	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)))
+		return c->jmp;
+	else
+		return -1;
+}
+
 int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 		  unsigned int n_operations, int notifyfd)
 {
@@ -342,11 +355,8 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 		case OP_END:
 			return 0;
 		case OP_CMP:
-			if (memcmp((uint16_t *)data + operations[i].cmp.s1_off,
-				   (uint16_t *)data + operations[i].cmp.s2_off,
-				   operations[i].cmp.size) != 0) {
-				i = operations[i].cmp.jmp;
-			}
+			if ((ret = op_cmp(data, &operations[i].cmp)) != -1)
+				i = ret;
 			break;
 		case OP_RESOLVEDFD:
 			ret = resolve_fd(data, &operations[i].resfd, req->pid);

@@ -108,10 +108,20 @@ struct op_copy_args {
 	struct copy_arg args[6];
 };
 
+enum op_cmp_type {
+	CMP_EQ,
+	CMP_NE,
+	CMP_GT,
+	CMP_GE,
+	CMP_LT,
+	CMP_LE,
+};
+
 struct op_cmp {
 	uint16_t s1_off;
 	uint16_t s2_off;
 	size_t size;
+	enum op_cmp_type cmp;
 	unsigned int jmp;
 };
 
