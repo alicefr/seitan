@@ -291,7 +291,68 @@ START_TEST(test_op_copy)
 }
 END_TEST
 
-START_TEST(test_op_cmp_eq)
+static void test_op_cmp_int(int a, int b, enum op_cmp_type cmp)
+{
+	struct op operations[] = {
+		{ .type = OP_CMP,
+		  .cmp = { .s1_off = 0,
+			   .s2_off = sizeof(a) / sizeof(uint16_t),
+			   .size = sizeof(a),
+			   .cmp = cmp,
+			   .jmp = 2 } },
+		{ .type = OP_CONT },
+		{ .type = OP_END },
+		{ .type = OP_BLOCK, .block = { .error = -1 } },
+	};
+	int ret;
+
+	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s1_off, &a, sizeof(a));
+	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s2_off, &b, sizeof(b));
+
+	ret = do_operations(&tmp_data, operations, &req,
+			    sizeof(operations) / sizeof(operations[0]),
+			    notifyfd);
+	ck_assert_msg(ret == 0, strerror(errno));
+	ck_assert_int_eq(at->err, 0);
+}
+
+START_TEST(test_op_cmp_int_eq)
+{
+	test_op_cmp_int(1, 1, CMP_EQ);
+}
+END_TEST
+
+START_TEST(test_op_cmp_int_ne)
+{
+	test_op_cmp_int(1, 2, CMP_NE);
+}
+END_TEST
+
+START_TEST(test_op_cmp_int_gt)
+{
+	test_op_cmp_int(1, 2, CMP_GT);
+}
+END_TEST
+
+START_TEST(test_op_cmp_int_ge)
+{
+	test_op_cmp_int(1, 1, CMP_GE);
+}
+END_TEST
+
+START_TEST(test_op_cmp_int_lt)
+{
+	test_op_cmp_int(2, 1, CMP_LT);
+}
+END_TEST
+
+START_TEST(test_op_cmp_int_le)
+{
+	test_op_cmp_int(1, 1, CMP_LE);
+}
+END_TEST
+
+START_TEST(test_op_cmp_string_eq)
 {
 	char s[30] = "Hello Test!!";
 	struct op operations[] = {
@@ -299,6 +360,7 @@ START_TEST(test_op_cmp_eq)
 		  .cmp = { .s1_off = 0,
 			   .s2_off = sizeof(s) / sizeof(uint16_t),
 			   .size = sizeof(s),
+			   .cmp = CMP_EQ,
 			   .jmp = 2 } },
 		{ .type = OP_CONT },
 		{ .type = OP_END },
@@ -317,7 +379,7 @@ START_TEST(test_op_cmp_eq)
 }
 END_TEST
 
-START_TEST(test_op_cmp_neq)
+START_TEST(test_op_cmp_string_false)
 {
 	char s1[30] = "Hello Test!!";
 	char s2[30] = "Hello World!!";
@@ -326,10 +388,11 @@ START_TEST(test_op_cmp_neq)
 		  .cmp = { .s1_off = 0,
 			   .s2_off = sizeof(s1) / sizeof(uint16_t),
 			   .size = sizeof(s1),
+			   .cmp = CMP_EQ,
 			   .jmp = 2 } },
-		{ .type = OP_CONT },
-		{ .type = OP_END },
 		{ .type = OP_BLOCK, .block = { .error = -1 } },
+		{ .type = OP_END },
+		{ .type = OP_CONT },
 	};
 	int ret;
 
@@ -342,7 +405,7 @@ START_TEST(test_op_cmp_neq)
 			    sizeof(operations) / sizeof(operations[0]),
 			    notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
-	check_target_result(-1, 1, false);
+	ck_assert_int_eq(at->err, 0);
 }
 END_TEST
 
@@ -400,7 +463,8 @@ Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
-	TCase *cont, *block, *ret, *call, *cmp, *resolvedfd;
+	TCase *cont, *block, *ret, *call, *resolvedfd;
+	TCase *cmp, *cmpint;
 	TCase *inject, *inject_a;
 	TCase *copy;
 
@@ -455,9 +519,20 @@ Suite *op_call_suite(void)
 	cmp = tcase_create("op_cmp");
 	tcase_add_checked_fixture(cmp, setup_without_fd, teardown);
 	tcase_set_timeout(cmp, timeout);
-	tcase_add_test(cmp, test_op_cmp_eq);
-	tcase_add_test(cmp, test_op_cmp_neq);
+	tcase_add_test(cmp, test_op_cmp_string_eq);
+	tcase_add_test(cmp, test_op_cmp_string_false);
 	suite_add_tcase(s, cmp);
+
+	cmpint = tcase_create("op_cmp_int");
+	tcase_add_checked_fixture(cmpint, setup_without_fd, teardown);
+	tcase_set_timeout(cmpint, timeout);
+	tcase_add_test(cmpint, test_op_cmp_int_eq);
+	tcase_add_test(cmpint, test_op_cmp_int_ne);
+	tcase_add_test(cmpint, test_op_cmp_int_le);
+	tcase_add_test(cmpint, test_op_cmp_int_lt);
+	tcase_add_test(cmpint, test_op_cmp_int_ge);
+	tcase_add_test(cmpint, test_op_cmp_int_gt);
+	suite_add_tcase(s, cmpint);
 
 	resolvedfd = tcase_create("op_resolvedfd");
 	tcase_add_checked_fixture(resolvedfd, setup_path, teardown);
