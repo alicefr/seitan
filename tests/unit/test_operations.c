@@ -88,8 +88,8 @@ START_TEST(test_act_continue)
 		{ .type = OP_CONT },
 	};
 	int ret = do_operations(NULL, operations, &req,
-			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
-			     req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	ck_assert_int_eq(at->err, 0);
 }
@@ -104,8 +104,8 @@ START_TEST(test_act_block)
 		},
 	};
 	int ret = do_operations(NULL, operations, &req,
-			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
-			     req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	/*
 	 * The tests use getpid that returns the error with ret and it is always
@@ -124,8 +124,8 @@ START_TEST(test_act_return)
 		},
 	};
 	int ret = do_operations(NULL, operations, &req,
-			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
-			     req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, false);
 }
@@ -144,8 +144,8 @@ START_TEST(test_act_return_ref)
 	memcpy((uint16_t *)&tmp_data + offset, &v, sizeof(v));
 
 	int ret = do_operations(&tmp_data, operations, &req,
-			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
-			     req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(v, 0, false);
 }
@@ -161,8 +161,8 @@ START_TEST(test_act_call)
 		{ .type = OP_CONT },
 	};
 	int ret = do_operations(NULL, operations, &req,
-			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
-			     req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, true);
 }
@@ -180,8 +180,8 @@ START_TEST(test_act_call_ret)
 		{ .type = OP_CONT },
 	};
 	int ret = do_operations(&tmp_data, operations, &req,
-			     sizeof(operations) / sizeof(operations[0]), -1, notifyfd,
-			     req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	long r;
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(1, 0, true);
@@ -216,7 +216,7 @@ static void test_inject(struct op operations[], int n, bool reference)
 		operations[0].inj.oldfd.type = IMMEDIATE;
 	}
 
-	ret = do_operations(&tmp_data, operations, &req,n, -1, notifyfd, req.id);
+	ret = do_operations(&tmp_data, operations, &req, n, notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_fd(pid, test_fd);
 }
@@ -276,8 +276,8 @@ START_TEST(test_op_copy)
 					.type = IMMEDIATE,
 					.size = sizeof(socklen_t) };
 	ret = do_operations(&tmp_data, operations, &req,
-			    sizeof(operations) / sizeof(operations[0]), -1,
-			    notifyfd, req.id);
+			    sizeof(operations) / sizeof(operations[0]),
+			    notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(0, 0, false);
 	addr = (struct sockaddr_un *)(tmp_data + o->args[1].args_off);
@@ -309,8 +309,8 @@ START_TEST(test_op_cmp_eq)
 	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s2_off, &s, sizeof(s));
 
 	ret = do_operations(&tmp_data, operations, &req,
-			    sizeof(operations) / sizeof(operations[0]), -1,
-			    notifyfd, req.id);
+			    sizeof(operations) / sizeof(operations[0]),
+			    notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	ck_assert_int_eq(at->err, 0);
 }
@@ -338,8 +338,8 @@ START_TEST(test_op_cmp_neq)
 	       sizeof(s2));
 
 	ret = do_operations(&tmp_data, operations, &req,
-			    sizeof(operations) / sizeof(operations[0]), -1,
-			    notifyfd, req.id);
+			    sizeof(operations) / sizeof(operations[0]),
+			    notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(-1, 1, false);
 }
@@ -363,8 +363,8 @@ START_TEST(test_op_resolvedfd_eq)
 	memcpy((uint16_t *)&tmp_data + operations[0].resfd.path_off, &path,
 	       sizeof(path));
 	int ret = do_operations(&tmp_data, operations, &req,
-				sizeof(operations) / sizeof(operations[0]), pid,
-				notifyfd, req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 	check_target_result(-1, 1, false);
 }
@@ -388,8 +388,8 @@ START_TEST(test_op_resolvedfd_neq)
 	memcpy((uint16_t *)&tmp_data + operations[0].resfd.path_off, &path2,
 	       sizeof(path2));
 	int ret = do_operations(&tmp_data, operations, &req,
-				sizeof(operations) / sizeof(operations[0]), pid,
-				notifyfd, req.id);
+				sizeof(operations) / sizeof(operations[0]),
+				notifyfd);
 	ck_assert_msg(ret == 0, strerror(errno));
 }
 END_TEST

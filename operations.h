@@ -21,6 +21,5 @@ struct arg_clone {
 
 int do_call(struct arg_clone *c);
 int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
-		  unsigned int n_operations, int tpid, int notifyfd,
-		  uint64_t id);
+		  unsigned int n_operations, int notifyfd);
 #endif /* ACTIONS_H */

@@ -243,6 +243,7 @@ static void set_inject_fields(uint64_t id, void *data, const struct op *a,
 	else
 		memcpy(&resp->srcfd, (uint16_t *)data + old->fd_off,
 		       sizeof(resp->srcfd));
+
 	if (old->type == IMMEDIATE)
 		resp->srcfd = old->fd;
 	else
@@ -252,7 +253,7 @@ static void set_inject_fields(uint64_t id, void *data, const struct op *a,
 }
 
 int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
-		  unsigned int n_operations, int pid, int notifyfd, uint64_t id)
+		  unsigned int n_operations, int notifyfd)
 {
 	struct seccomp_notif_addfd resp_fd;
 	struct seccomp_notif_resp resp;
@@ -263,11 +264,11 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 	for (i = 0; i < n_operations; i++) {
 		switch (operations[i].type) {
 		case OP_CALL:
-			resp.id = id;
+			resp.id = req->id;
 			resp.val = 0;
 			resp.flags = 0;
 			c.args = &operations[i].call;
-			c.pid = pid;
+			c.pid = req->pid;
 			if (do_call(&c) == -1) {
 				resp.error = -1;
 				if (send_target(&resp, notifyfd) == -1)
@@ -289,7 +290,7 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 			}
 			break;
 		case OP_BLOCK:
-			resp.id = id;
+			resp.id = req->id;
 			resp.val = 0;
 			resp.flags = 0;
 			resp.error = operations[i].block.error;
@@ -297,7 +298,7 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 				return -1;
 			break;
 		case OP_RETURN:
-			resp.id = id;
+			resp.id = req->id;
 			resp.flags = 0;
 			resp.error = 0;
 			if (operations[i].ret.type == IMMEDIATE)
@@ -313,7 +314,7 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 			break;
 
 		case OP_CONT:
-			resp.id = id;
+			resp.id = req->id;
 			resp.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
 			resp.error = 0;
 			resp.val = 0;
@@ -321,13 +322,15 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 				return -1;
 			break;
 		case OP_INJECT_A:
-			set_inject_fields(id, data, &operations[i], &resp_fd);
+			set_inject_fields(req->id, data, &operations[i],
+					  &resp_fd);
 			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SEND;
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
 		case OP_INJECT:
-			set_inject_fields(id, data, &operations[i], &resp_fd);
+			set_inject_fields(req->id, data, &operations[i],
+					  &resp_fd);
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
@@ -346,7 +349,7 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 			}
 			break;
 		case OP_RESOLVEDFD:
-			ret = resolve_fd(data, &operations[i].resfd, pid);
+			ret = resolve_fd(data, &operations[i].resfd, req->pid);
 			if (ret == -1)
 				return -1;
 			else if (ret == 1)
