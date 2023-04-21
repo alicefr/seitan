@@ -538,7 +538,7 @@ Suite *op_call_suite(void)
 	tcase_add_checked_fixture(resolvedfd, setup_path, teardown);
 	tcase_set_timeout(resolvedfd, timeout);
 	tcase_add_test(resolvedfd, test_op_resolvedfd_eq);
-	//tcase_add_test(resolvedfd, test_op_resolvedfd_neq);
+	tcase_add_test(resolvedfd, test_op_resolvedfd_neq);
 	suite_add_tcase(s, resolvedfd);
 
 	return s;
