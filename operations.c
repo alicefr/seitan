@@ -241,8 +241,8 @@ static void set_inject_fields(uint64_t id, void *data, const struct op *a,
 	if (new->type == IMMEDIATE)
 		resp->newfd = new->fd;
 	else
-		memcpy(&resp->srcfd, (uint16_t *)data + old->fd_off,
-		       sizeof(resp->srcfd));
+		memcpy(&resp->newfd, (uint16_t *)data + new->fd_off,
+		       sizeof(resp->newfd));
 
 	if (old->type == IMMEDIATE)
 		resp->srcfd = old->fd;
