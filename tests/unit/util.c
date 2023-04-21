@@ -219,4 +219,5 @@ void teardown()
 {
 	if (at != NULL)
 		munmap(at, sizeof(struct args_target));
+	unlink(path);
 }
