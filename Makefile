@@ -11,7 +11,7 @@ export OUTDIR
 
 COMMON_DIR := $(DIR)/common
 BIN := $(OUTDIR)seitan
-SRCS := seitan.c $(COMMON_DIR)/common.c operations.c
+SRCS := seitan.c $(COMMON_DIR)/common.c $(COMMON_DIR)/util.c  operations.c
 HEADERS := $(COMMON_DIR)/common.h $(COMMON_DIR)/gluten.h \
 	   $(COMMON_DIR)/numbers.h $(COMMON_DIR)/util.h operations.h
 

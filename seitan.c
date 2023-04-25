@@ -71,7 +71,7 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 	int option_index = 0;
 	int oc;
 	if (arguments == NULL)
-		fprintf(stderr, "Empty args\n");
+		usage();
 	while ((oc = getopt_long(argc, argv, ":i:o:p:s:", options,
 				 &option_index)) != -1) {
 		switch (oc) {
@@ -89,12 +89,15 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 		}
 	}
 	if (arguments->input_file == NULL) {
-		fprintf(stderr, "missing input file\n");
+		err("missing input file");
 		usage();
 	}
 	if (arguments->socket != NULL && arguments->pid > 0) {
-		fprintf(stderr,
-			"the socket and pid options cannot be used together\n");
+		err("the socket and pid options cannot be used together");
+		usage();
+	}
+	if (arguments->socket == NULL && arguments->pid < 0) {
+		err("select one of the options between socket and pid");
 		usage();
 	}
 }
@@ -211,8 +214,6 @@ int main(int argc, char **argv)
 			die("  creating the socket");
 		if ((notifier = recvfd(fd)) < 0)
 			die("  failed recieving the notifier fd");
-	} else {
-		die("  select between pid and socket option");
 	}
 	sleep(1);
 
