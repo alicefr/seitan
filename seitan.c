@@ -45,14 +45,12 @@
 /* Seitan options */
 static struct option options[] = {
 	{ "input", required_argument, NULL, 'i' },
-	{ "output", optional_argument, NULL, 'o' },
 	{ "pid", optional_argument, NULL, 'p' },
 	{ "socket", optional_argument, NULL, 's' },
 };
 
 struct arguments {
 	char *input_file;
-	char *output_file;
 	char *socket;
 	int pid;
 };
@@ -63,7 +61,6 @@ static void usage()
 	       "Example:  setain -pid <pid> -i <input file>\n"
 	       "Usage:\n"
 	       "\t-i, --input:\tAction input file\n"
-	       "\t-o, --output:\tLog filtered syscall in the file\n"
 	       "\t-p, --pid:\tPid of process to monitor (cannot be used together with socket)\n"
 	       "\t-s, --socket:\tSocket to pass the seccomp notifier fd (cannot be used together with pid)\n");
 	exit(EXIT_FAILURE);
@@ -84,9 +81,6 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 		case 'i':
 			arguments->input_file = optarg;
 			break;
-		case 'o':
-			arguments->output_file = optarg;
-			break;
 		case 's':
 			arguments->socket = optarg;
 			break;
@@ -103,79 +97,6 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 			"the socket and pid options cannot be used together\n");
 		usage();
 	}
-}
-
-static int nl_init(void)
-{
-	int s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_CONNECTOR);
-	struct sockaddr_nl sa = {
-		.nl_family = AF_NETLINK,
-		.nl_groups = CN_IDX_PROC,
-		.nl_pid = getpid(),
-	};
-	struct req_t {
-		struct nlmsghdr nlh;
-		struct cn_msg cnm;
-		enum proc_cn_mcast_op mop;
-	} __attribute__((packed, aligned(NLMSG_ALIGNTO))) req = {
-		.nlh.nlmsg_type = NLMSG_DONE,
-		.nlh.nlmsg_pid = getpid(),
-
-		.cnm.id.idx = CN_IDX_PROC,
-		.cnm.id.val = CN_VAL_PROC,
-		.cnm.len = sizeof(enum proc_cn_mcast_op),
-
-		.mop = PROC_CN_MCAST_LISTEN,
-	};
-
-	bind(s, (struct sockaddr *)&sa, sizeof(sa));
-
-	req.nlh.nlmsg_len = sizeof(req);
-	send(s, &req, sizeof(req), 0);
-
-	return s;
-}
-
-static int event(int s)
-{
-	char path[PATH_MAX + 1], exe[PATH_MAX + 1];
-	struct proc_event *ev;
-	struct nlmsghdr *nlh;
-	struct cn_msg *cnh;
-	char buf[BUFSIZ];
-	ssize_t n;
-
-	if ((n = recv(s, &buf, sizeof(buf), 0)) <= 0)
-		return -EIO;
-
-	nlh = (struct nlmsghdr *)buf;
-	for (; NLMSG_OK(nlh, n); nlh = NLMSG_NEXT(nlh, n)) {
-		if (nlh->nlmsg_type == NLMSG_NOOP)
-			continue;
-
-		if ((nlh->nlmsg_type == NLMSG_ERROR) ||
-		    (nlh->nlmsg_type == NLMSG_OVERRUN))
-			break;
-
-		cnh = NLMSG_DATA(nlh);
-		ev = (struct proc_event *)cnh->data;
-
-		if (ev->what != PROC_EVENT_EXEC)
-			continue;
-
-		snprintf(path, PATH_MAX, "/proc/%i/exe",
-			 ev->event_data.exec.process_pid);
-
-		readlink(path, exe, PATH_MAX);
-		if (!strcmp(exe, "/usr/local/bin/seitan-eater") ||
-		    !strcmp(exe, "/usr/bin/seitan-eater"))
-			return ev->event_data.exec.process_pid;
-
-		if (nlh->nlmsg_type == NLMSG_DONE)
-			break;
-	}
-
-	return -EAGAIN;
 }
 
 static int pidfd_send_signal(int pidfd, int sig, siginfo_t *info,
@@ -254,44 +175,24 @@ static int recvfd(int sockfd)
 	return fd;
 }
 
-static int write_syscall(int fd, struct seccomp_notif *req)
-{
-	char buf[1000];
-
-	/* TODO: Define format and print syscall with the right arguments */
-	snprintf(buf, sizeof(buf), "nr_syscall=%d\n", req->data.nr);
-	write(fd, buf, strlen(buf));
-	return 0;
-}
-
 int main(int argc, char **argv)
 {
-	int s = nl_init(), ret, pidfd, notifier;
 	char req_b[BUFSIZ];
 	struct epoll_event ev, events[EPOLL_EVENTS];
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
 	struct arguments arguments;
 	char path[PATH_MAX + 1];
 	bool running = true;
-	bool output = false;
+	int pidfd, notifier;
 	int fd, epollfd;
 	int notifierfd;
 	int nevents, i;
-	int fdout;
 
 	arguments.pid = -1;
 	parse(argc, argv, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
 	/* TODO: Load bytecode */
 	close(fd);
-
-	if (arguments.output_file != NULL) {
-		output = true;
-		unlink(arguments.output_file);
-		if ((fdout = open(arguments.output_file,
-				  O_CREAT | O_RDWR | O_TRUNC)) < 0)
-			die("  open");
-	}
 
 	if (arguments.pid > 0) {
 		if ((pidfd = syscall(SYS_pidfd_open, arguments.pid, 0)) < 0)
@@ -311,10 +212,7 @@ int main(int argc, char **argv)
 		if ((notifier = recvfd(fd)) < 0)
 			die("  failed recieving the notifier fd");
 	} else {
-		while ((ret = event(s)) == -EAGAIN)
-			;
-		if (ret < 0)
-			exit(EXIT_FAILURE);
+		die("  select between pid and socket option");
 	}
 	sleep(1);
 
@@ -347,12 +245,9 @@ int main(int argc, char **argv)
 				if (do_operations(NULL, operations, req,
 						  sizeof(operations) /
 							  sizeof(operations[0]),
-						  req->pid, notifier,
-						  req->id) == -1)
+						  notifier) == -1)
 					die("  failed executing operation");
 
-				if (output)
-					write_syscall(fdout, req);
 			}
 		}
 	}
