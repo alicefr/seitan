@@ -234,20 +234,6 @@ static bool check_args_syscall(const struct syscall_entry *table)
 	return false;
 }
 
-unsigned int create_bpf_program_log(struct sock_filter filter[])
-{
-	filter[0] = (struct sock_filter)BPF_STMT(
-		BPF_LD | BPF_W | BPF_ABS,
-		(offsetof(struct seccomp_data, arch)));
-	filter[1] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
-						 SEITAN_AUDIT_ARCH, 0, 1);
-	filter[2] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						 SECCOMP_RET_USER_NOTIF);
-	filter[3] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						 SECCOMP_RET_ALLOW);
-	return 4;
-}
-
 static unsigned int eq(struct sock_filter filter[], int idx,
 		       const struct bpf_call *entry, unsigned int jtrue,
 		       unsigned int jfalse)
@@ -556,7 +542,7 @@ static int compare_names(const void *a, const void *b)
 		      ((struct syscall_numbers *)b)->name);
 }
 
-int convert_bpf(char *file, struct bpf_call *entries, int n, bool log)
+int convert_bpf(char *file, struct bpf_call *entries, int n)
 {
 	int nt, fd, fsize;
 	struct syscall_entry table[N_SYSCALL];
@@ -568,10 +554,7 @@ int convert_bpf(char *file, struct bpf_call *entries, int n, bool log)
 	qsort(entries, n, sizeof(struct bpf_call), compare_bpf_call_names);
 	nt = construct_table(entries, n, table);
 
-	if (log)
-		fsize = create_bpf_program_log(filter);
-	else
-		fsize = create_bfp_program(table, filter, nt);
+	fsize = create_bfp_program(table, filter, nt);
 
 	fd = open(file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
 		  S_IRUSR | S_IWUSR);
