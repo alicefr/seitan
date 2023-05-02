@@ -3,14 +3,15 @@
 # seitan - Syscall Expressive Interpreter, Transformer and Notifier
 #
 # Copyright 2023 Red Hat GmbH
-# Authors: Alice Frosi <afrosi@redhat.com>, Stefano Brivio <sbrivio@redhat.com>
+# Authors: Alice Frosi <afrosi@redhat.com>
+#	   Stefano Brivio <sbrivio@redhat.com>
 
 DIR := $(shell pwd)
-OUTDIR ?= $(DIR)/
+OUTDIR ?= $(DIR)
 export OUTDIR
 
 COMMON_DIR := $(DIR)/common
-BIN := $(OUTDIR)seitan
+BIN := $(OUTDIR)/seitan
 SRCS := seitan.c $(COMMON_DIR)/common.c $(COMMON_DIR)/util.c  operations.c
 HEADERS := $(COMMON_DIR)/common.h $(COMMON_DIR)/gluten.h \
 	   $(COMMON_DIR)/numbers.h $(COMMON_DIR)/util.h operations.h
@@ -21,7 +22,7 @@ CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
 all: cooker eater seitan
 
 .PHONY: cooker
-cooker: numbers.h
+cooker:
 	$(MAKE) -C cooker
 
 .PHONY: eater

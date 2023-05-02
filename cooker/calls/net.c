@@ -39,7 +39,7 @@ n  = sendmmsg(fd, *msgvec, vlen, flags)
 #include "../cooker.h"
 #include "../calls.h"
 
-static struct arg_num af[] = {
+static struct num af[] = {
 	{ "unix",	AF_UNIX },
 	{ "ipv4",	AF_INET },
 	{ "ipv6",	AF_INET6 },
@@ -49,7 +49,7 @@ static struct arg_num af[] = {
 	{ 0 },
 };
 
-static struct arg_num socket_types[] = {
+static struct num socket_types[] = {
 	{ "stream",	SOCK_STREAM },
 	{ "dgram",	SOCK_DGRAM },
 	{ "seq",	SOCK_SEQPACKET },
@@ -58,13 +58,13 @@ static struct arg_num socket_types[] = {
 	{ 0 },
 };
 
-static struct arg_num socket_flags[] = {
+static struct num socket_flags[] = {
 	{ "nonblock",	SOCK_NONBLOCK },
 	{ "cloexec",	SOCK_CLOEXEC },
 	{ 0 },
 };
 
-static struct arg_num protocols[] = {
+static struct num protocols[] = {
 	{ "ip",		IPPROTO_IP },
 	{ "icmp",	IPPROTO_ICMP },
 	{ "igmp",	IPPROTO_IGMP },
@@ -83,86 +83,97 @@ static struct arg_num protocols[] = {
 };
 
 static struct arg socket_args[] = {
-	{ 0, "family",		ARG_INT,	0, { .d_num = af } },
-	{ 1, "type",		ARG_INTMASK,	0, { .d_num = socket_types } },
-	{ 1, "flags",		ARG_INTFLAGS,	0, { .d_num = socket_flags } },
-	{ 2, "protocol",	ARG_INT,	0, { .d_num = protocols } },
+	{ 0, "family",		INT,		0, { .d_num = af } },
+	{ 1, "type",		INTMASK,	0, { .d_num = socket_types } },
+	{ 1, "flags",		INTFLAGS,	0, { .d_num = socket_flags } },
+	{ 2, "protocol",	INT,		0, { .d_num = protocols } },
 	{ 0 },
 };
 
-static struct arg_struct connect_addr_unix[] = {
-	{ "path",	ARG_STRING,
+static struct field connect_addr_unix[] = {
+	{
+		"path",		STRING,
 		offsetof(struct sockaddr_un, sun_path),
-		UNIX_PATH_MAX,		{ 0 }
+		UNIX_PATH_MAX,	{ 0 }
 	},
 	{ 0 },
 };
 
-static struct arg_struct connect_addr_ipv4[] = {
-	{ "port",	ARG_PORT,
+static struct field connect_addr_ipv4[] = {
+	{
+		"port",		PORT,
 		offsetof(struct sockaddr_in, sin_port),
-		0,			{ 0 }
+		0,		{ 0 }
 	},
-	{ "addr",	ARG_IPV4,
+	{
+		"addr",		IPV4,
 		offsetof(struct sockaddr_in, sin_addr),
-		0,			{ 0 }
+		0,		{ 0 }
 	},
 	{ 0 },
 };
 
-static struct arg_struct connect_addr_ipv6[] = {
-	{ "port",	ARG_PORT,
+static struct field connect_addr_ipv6[] = {
+	{
+		"port",		PORT,
 		offsetof(struct sockaddr_in6, sin6_port),
-		0,			{ 0 }
+		0,		{ 0 }
 	},
-	{ "addr",	ARG_IPV6,
+	{
+		"addr",		IPV6,
 		offsetof(struct sockaddr_in6, sin6_addr),
-		0,			{ 0 }
+		0,		{ 0 }
 	},
 	{ 0 },
 };
 
-static struct arg_struct connect_addr_nl[] = {
-	{ "pid",	ARG_PID,
+static struct field connect_addr_nl[] = {
+	{
+		"pid",		PID,
 		offsetof(struct sockaddr_nl, nl_pid),
-		0,			{ 0 }
+		0,		{ 0 }
 	},
-	{ "groups",	ARG_U32,
+	{
+		"groups",	U32,
 		offsetof(struct sockaddr_in6, sin6_addr),
-		0,			{ 0 }
+		0,		{ 0 }
 	},
 	{ 0 },
 };
 
-static struct arg_struct connect_family = {
-	"family",	ARG_INT,
-		offsetof(struct sockaddr, sa_family),
-		0,			{ .d_num = af }
+static struct field connect_family = {
+	"family",	INT,
+	offsetof(struct sockaddr, sa_family),
+	0,		{ .d_num = af }
 };
 
-static struct arg_select_num connect_addr_select_family[] = {
-	{ AF_UNIX,	ARG_STRUCT,	{ .d_struct = connect_addr_unix } },
-	{ AF_INET,	ARG_STRUCT,	{ .d_struct = connect_addr_ipv4 } },
-	{ AF_INET6,	ARG_STRUCT,	{ .d_struct = connect_addr_ipv6 } },
-	{ AF_NETLINK,	ARG_STRUCT,	{ .d_struct = connect_addr_nl } },
+static struct select_num connect_addr_select_family[] = {
+	{ AF_UNIX,	STRUCT,	{ .d_struct = connect_addr_unix } },
+	{ AF_INET,	STRUCT,	{ .d_struct = connect_addr_ipv4 } },
+	{ AF_INET6,	STRUCT,	{ .d_struct = connect_addr_ipv6 } },
+	{ AF_NETLINK,	STRUCT,	{ .d_struct = connect_addr_nl } },
 	{ 0 },
 };
 
-static struct arg_select connect_addr_select = {
+static struct select connect_addr_select = {
 	&connect_family, { .d_num = connect_addr_select_family }
 };
 
 static struct arg connect_args[] = {
-	{ 0, "fd",	ARG_INT,	0,
+	{
+		0, "fd",	INT,	0,
 		{ 0 },
 	},
-	{ 0, "path",	ARG_FDPATH,	0,
+	{
+		0, "path",	FDPATH,	0,
 		{ 0 },
 	},
-	{ 1, "addr",	ARG_SELECT,	sizeof(struct sockaddr_storage),
+	{
+		1, "addr",	SELECT,	sizeof(struct sockaddr_storage),
 		{ .d_select = &connect_addr_select },
 	},
-	{ 2, "addrlen",	ARG_LONG,	0,
+	{
+		2, "addrlen",	LONG,	0,
 		{ 0 },
 	},
 };

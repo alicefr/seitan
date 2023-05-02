@@ -1,6 +1,10 @@
-/* SPDX-License-Identifier: GPL-3.0-or-later
+/* seitan - Syscall Expressive Interpreter, Transformer and Notifier
+ *
+ * operations.c - Execution of bytecode operations
+ *
  * Copyright 2023 Red Hat GmbH
- * Author: Alice Frosi <afrosi@redhat.com>
+ * Authors: Alice Frosi <afrosi@redhat.com>
+ *	    Stefano Brivio <sbrivio@redhat.com>
  */
 
 #define _GNU_SOURCE
@@ -111,11 +115,11 @@ static int set_namespaces(const struct op_call *a, int tpid)
 				 ns_name);
 			break;
 		case NS_SPEC_PID:
-			snprintf(path, sizeof(path), "/proc/%d/ns/%s", ns.pid,
-				 ns_name);
+			snprintf(path, sizeof(path), "/proc/%d/ns/%s",
+				 ns.id.pid, ns_name);
 			break;
 		case NS_SPEC_PATH:
-			snprintf(path, sizeof(path), "%s", ns.path);
+			snprintf(path, sizeof(path), "%s", ns.id.path);
 			break;
 		}
 
@@ -152,14 +156,11 @@ static int execute_syscall(void *args)
 	exit(0);
 }
 
-int copy_args(struct seccomp_notif *req, struct op_copy_args *copy, void *data,
-	      int notifier)
+static int op_load(struct seccomp_notif *req, int notifier, struct gluten *g,
+		   struct op_load *load)
 {
 	char path[PATH_MAX];
-	unsigned int i;
-	ssize_t nread;
-	void *dest;
-	int fd;
+	int fd, ret = 0;
 
 	snprintf(path, sizeof(path), "/proc/%d/mem", req->pid);
 	if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
@@ -172,24 +173,17 @@ int copy_args(struct seccomp_notif *req, struct op_copy_args *copy, void *data,
          */
 	if (!is_cookie_valid(notifier, req->id)) {
 		fprintf(stderr, "the seccomp request isn't valid anymore\n");
-		return -1;
+		ret = -1;
+		goto out;
 	}
-	for (i = 0; i < 6; i++) {
-		if (copy->args[i].type == REFERENCE) {
-			dest = (uint16_t *)data + copy->args[i].args_off;
-			nread = pread(fd, dest, copy->args[i].size,
-				      req->data.args[i]);
-			if (nread < 0) {
-				perror("pread");
-				return -1;
-			}
-		} else {
-			memcpy((uint16_t *)data + copy->args[i].args_off,
-			       &req->data.args[i], copy->args[i].size);
-		}
-	}
+
+	memcpy(gluten_write_ptr(g, load->dst),
+	       gluten_ptr(&req->data, g, load->src),
+	       load->size);
+
+out:
 	close(fd);
-	return 0;
+	return ret;
 }
 
 static int resolve_fd(void *data, struct op_resolvedfd *resfd, pid_t pid)
@@ -230,57 +224,55 @@ int do_call(struct arg_clone *c)
 	return 0;
 }
 
-static void set_inject_fields(uint64_t id, void *data, const struct op *a,
+static void set_inject_fields(uint64_t id, struct gluten *g,
+			      const struct op_inject *a,
 			      struct seccomp_notif_addfd *resp)
 {
-	const struct fd_type *new = &(a->inj).newfd;
-	const struct fd_type *old = &(a->inj).oldfd;
-
 	resp->flags = SECCOMP_ADDFD_FLAG_SETFD;
 	resp->id = id;
-	if (new->type == IMMEDIATE)
-		resp->newfd = new->fd;
-	else
-		memcpy(&resp->newfd, (uint16_t *)data + new->fd_off,
-		       sizeof(resp->newfd));
 
-	if (old->type == IMMEDIATE)
-		resp->srcfd = old->fd;
-	else
-		memcpy(&resp->srcfd, (uint16_t *)data + old->fd_off,
-		       sizeof(resp->srcfd));
+	memcpy(&resp->newfd, gluten_ptr(NULL, g, a->new_fd),
+	       sizeof(resp->newfd));
+	memcpy(&resp->srcfd, gluten_ptr(NULL, g, a->new_fd),
+	       sizeof(resp->srcfd));
+
 	resp->newfd_flags = 0;
 }
 
-static int op_cmp(void *data, const struct op_cmp *c)
+static int op_cmp(struct seccomp_notif *req, int notifier, struct gluten *g,
+		  struct op_cmp *op)
 {
-	enum op_cmp_type cmp = c->cmp;
-	int res = memcmp((uint16_t *)data + c->s1_off,
-			 (uint16_t *)data + c->s2_off, c->size);
+	int res = memcmp(gluten_ptr(&req->data, g, op->x),
+			 gluten_ptr(&req->data, g, op->y), op->size);
+	enum op_cmp_type cmp = op->cmp;
+
+	(void)notifier;
+
 	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
-	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
-	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)))
-		return c->jmp;
-	else
-		return -1;
+	    (res < 0  && (cmp == CMP_LT || cmp == CMP_LE)) ||
+	    (res > 0  && (cmp == CMP_GT || cmp == CMP_GE)))
+		return op->jmp;
+
+	return -1;
 }
 
-int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
-		  unsigned int n_operations, int notifyfd)
+int do_operations(struct gluten *g, struct op *ops, struct seccomp_notif *req,
+		  unsigned int n_ops, int notifyfd)
 {
 	struct seccomp_notif_addfd resp_fd;
 	struct seccomp_notif_resp resp;
 	struct arg_clone c;
 	unsigned int i;
+	struct op *op;
 	int ret;
 
-	for (i = 0; i < n_operations; i++) {
-		switch (operations[i].type) {
+	for (i = 0, op = ops; i < n_ops; i++, op++) {
+		switch (op->type) {
 		case OP_CALL:
 			resp.id = req->id;
 			resp.val = 0;
 			resp.flags = 0;
-			c.args = &operations[i].call;
+			c.args = &ops[i].op.call;
 			c.pid = req->pid;
 			if (do_call(&c) == -1) {
 				resp.error = -1;
@@ -296,9 +288,8 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 			 * The result of the call needs to be save as
 			 * reference
 			 */
-			if (operations[i].call.has_ret) {
-				memcpy((uint16_t *)data +
-					       operations[i].call.ret_off,
+			if (ops[i].op.call.has_ret) {
+				memcpy(gluten_write_ptr(g, op->op.call.ret),
 				       &c.ret, sizeof(c.ret));
 			}
 			break;
@@ -306,7 +297,7 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 			resp.id = req->id;
 			resp.val = 0;
 			resp.flags = 0;
-			resp.error = operations[i].block.error;
+			resp.error = ops[i].op.block.error;
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
 			break;
@@ -314,13 +305,10 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 			resp.id = req->id;
 			resp.flags = 0;
 			resp.error = 0;
-			if (operations[i].ret.type == IMMEDIATE)
-				resp.val = operations[i].ret.value;
-			else
-				memcpy(&resp.val,
-				       (uint16_t *)data +
-					       operations[i].ret.value_off,
-				       sizeof(resp.val));
+
+			memcpy(&resp.val,
+			       gluten_ptr(&req->data, g, op->op.ret.val),
+			       sizeof(resp.val));
 
 			if (send_target(&resp, notifyfd) == -1)
 				return -1;
@@ -335,39 +323,41 @@ int do_operations(void *data, struct op operations[], struct seccomp_notif *req,
 				return -1;
 			break;
 		case OP_INJECT_A:
-			set_inject_fields(req->id, data, &operations[i],
+			set_inject_fields(req->id, g, &ops[i].op.inject,
 					  &resp_fd);
 			resp_fd.flags |= SECCOMP_ADDFD_FLAG_SEND;
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
 		case OP_INJECT:
-			set_inject_fields(req->id, data, &operations[i],
+			set_inject_fields(req->id, g, &ops[i].op.inject,
 					  &resp_fd);
 			if (send_inject_target(&resp_fd, notifyfd) == -1)
 				return -1;
 			break;
-		case OP_COPY_ARGS:
-			if (copy_args(req, &operations[i].copy, data,
-				      notifyfd) < 0)
+		case OP_LOAD:
+			if (op_load(req, notifyfd, g, &op->op.load))
 				return -1;
+
 			break;
 		case OP_END:
 			return 0;
 		case OP_CMP:
-			if ((ret = op_cmp(data, &operations[i].cmp)) != -1)
-				i = ret;
+			ret = op_cmp(req, notifyfd, g, (struct op_cmp *)op);
+			if (ret == -1)
+				return -1;
+
+			i = ret;
 			break;
 		case OP_RESOLVEDFD:
-			ret = resolve_fd(data, &operations[i].resfd, req->pid);
+			ret = resolve_fd(g->data, &ops[i].op.resfd, req->pid);
 			if (ret == -1)
 				return -1;
 			else if (ret == 1)
-				i = operations[i].resfd.jmp;
+				i = ops[i].op.resfd.jmp;
 			break;
 		default:
-			fprintf(stderr, "unknow operation %d \n",
-				operations[i].type);
+			fprintf(stderr, "unknown operation %d \n", ops[i].type);
 		}
 	}
 	return 0;

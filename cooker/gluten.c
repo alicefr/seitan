@@ -12,33 +12,47 @@
 #include "gluten.h"
 #include "util.h"
 
-#define GLUTEN_INST_SIZE		BUFSIZ
-#define GLUTEN_DATA_SIZE		BUFSIZ
+size_t gluten_size[TYPE_COUNT] = {
+	[INT]		= sizeof(int),
+	[INTMASK]	= sizeof(int),
+	[INTFLAGS]	= sizeof(int),
 
-static char gluten[GLUTEN_INST_SIZE + GLUTEN_DATA_SIZE];
+	[U32]		= sizeof(uint32_t),
+	[U32MASK]	= sizeof(uint32_t),
+	[U32FLAGS]	= sizeof(uint32_t),
 
-static size_t gluten_arg_storage[ARG_TYPE_COUNT] = {
-	[ARG_INT]	= sizeof(int),
-	[ARG_INTMASK]	= sizeof(int),
+	[LONG]		= sizeof(long),
+	[LONGMASK]	= sizeof(long),
+	[LONGFLAGS]	= sizeof(long),
+
+	[PID]		= sizeof(pid_t),
+	[PORT]		= sizeof(in_port_t),
+	[IPV4]		= sizeof(struct in_addr),
+	[IPV6]		= sizeof(struct in6_addr),
+
 };
 
-int gluten_alloc(struct gluten_ctx *g, size_t size)
+struct gluten_offset gluten_alloc(struct gluten_ctx *g, size_t size)
 {
-	debug("   allocating %lu at offset %i", size, g->sp);
-	if ((g->sp += size) >= GLUTEN_DATA_SIZE)
+	struct gluten_offset ret = g->dp;
+
+	debug("   allocating %lu at offset %i", size, g->dp.offset);
+	if ((g->dp.offset += size) >= DATA_SIZE)
 		die("Temporary data size exceeded");
 
-	return g->sp - size;
+	return ret;
 }
 
-int gluten_alloc_type(struct gluten_ctx *g, enum arg_type type)
+struct gluten_offset gluten_alloc_type(struct gluten_ctx *g, enum type type)
 {
-	return gluten_alloc(g, gluten_arg_storage[type]);
+	return gluten_alloc(g, gluten_size[type]);
 }
 
-int gluten_init(struct gluten_ctx *g)
+void gluten_init(struct gluten_ctx *g)
 {
-	g->gluten = gluten;
+	(void)g;
 
-	return 0;
+	g->ip.type = g->lr.type = OFFSET_INSTRUCTION;
+	g->dp.type = OFFSET_DATA;
+	g->cp.type = OFFSET_RO_DATA;
 }

@@ -35,7 +35,7 @@ static int parse_match_load(struct gluten_ctx *g, struct arg *a)
 	return 0;
 }
 
-static long long parse_match_expr_num(struct arg_num *desc, JSON_Value *value)
+static long long parse_match_expr_num(struct num *desc, JSON_Value *value)
 {
 	const char *s = NULL;
 	long long n;
@@ -59,35 +59,109 @@ static long long parse_match_expr_num(struct arg_num *desc, JSON_Value *value)
 	return n;
 }
 
-static int parse_match_key(struct gluten_ctx *g, int index, enum arg_type type,
-			   union arg_value desc, JSON_Value *value)
+static void parse_match_expr_value(union desc desc, enum type type,
+				   JSON_Value *value, union value *out)
+{
+	if (TYPE_IS_NUM(type))
+		out->v_num = parse_match_expr_num(desc.d_num, value);
+}
+
+/**
+ * parse_match_select() - Get description and type for selected value
+ * @s:		Possible selection choices
+ * @v:		Selector value
+ * @type:	Type of selected value, set on return
+ * @desc:	Description of selected value, set on return
+ */
+static void parse_match_select(struct select *s, union value v,
+			       enum type *type, union desc *desc)
+{
+	if (TYPE_IS_NUM(s->field->type)) {
+		struct select_num *d_num;
+
+		for (d_num = s->desc.d_num; d_num->type; d_num++) {
+			if (d_num->value == v.v_num) {
+				*type = d_num->type;
+				*desc = d_num->desc;
+				return;
+			}
+		}
+
+		if (!d_num->type)
+			die("   No match for numeric selector %i", v.v_num);
+	}
+
+	die("   not supported yet");
+}
+
+/*
+ * parse_match_arg()
+ *   load argument
+ *   parse_match_key()
+ *     compound types? demux, parse_match_expr
+ *     parse_match_expr
+ *       in/all/not/false-true array: demux, parse_match_expr_{num,string}
+ *       parse_match_expr_{num,string}
+ *
+ * at terminal values
+ *   store ref *pointers*! no copies
+ *   emit additional bpf statement if syscall arg is also terminal
+*/
+static int parse_match_key(struct gluten_ctx *g, int index, enum type type,
+			   union desc desc, JSON_Value *value)
 {
 	JSON_Object *tmp;
 	const char *ref;
 
-	(void)index;
+	if (type == SELECT) {
+		struct gluten_offset base_offset, const_offset;
+		struct select *select = desc.d_select;
+		struct field *field = select->field;
+		JSON_Value *selector;
+		union value v;
+
+		if (!(tmp = json_value_get_object(value)))
+			die("   no object for compound value");
+
+		if (!(selector = json_object_get_value(tmp, field->name)))
+			die("   missing selector for '%s'", field->name);
+
+		parse_match_expr_value(field->desc, field->type, selector, &v);
+
+		base_offset = g->match_dst[index].offset;
+		const_offset = emit_data(g, field->type, &v);
+		emit_cmp_field(g, CMP_NE, field, base_offset, const_offset,
+			       NEXT_BLOCK);
+
+		parse_match_select(select, v, &type, &desc);
+	}
 
 	if (json_value_get_type(value) == JSONObject &&
 	    (tmp = json_value_get_object(value)) &&
 	    (ref = json_object_get_string(tmp, "ref"))) {
+		if (TYPE_IS_COMPOUND(type))
+			die("Reference '%s' to compound value");
+
 		debug("   setting reference '%s'", ref);
-		gluten_alloc_type(g, type);
 		value = json_object_get_value(tmp, "value");
+
+		emit_load(g, gluten_alloc_type(g, type), index, type);
 	}
 
+	/* Nothing to match on: just store as reference */
 	if (!value)
 		return 0;
 
 	switch (type) {
-	case ARG_INTFLAGS:
-	case ARG_LONGFLAGS:
-	case ARG_U32FLAGS:
+	case INTFLAGS:
+	case LONGFLAGS:
+	case U32FLAGS:
 		/* fetch/combine expr algebra loop */
-	case ARG_INTMASK:
+	case INTMASK:
 		/* calculate mask first */
-	case ARG_INT:
-	case ARG_LONG:
-	case ARG_U32:
+	case INT:
+	case LONG:
+	case U32:
 		parse_match_expr_num(desc.d_num, value);
 		//emit_cmp(...);
 	default:
@@ -139,7 +213,6 @@ static int parse_matches(struct gluten_ctx *g, JSON_Value *value)
 		const char *name;
 
 		g->lr = g->ip;
-		g->sp = 0;
 
 		match = json_array_get_object(matches, i);
 		name = json_object_get_name(match, 0);
@@ -229,6 +302,7 @@ int parse_file(struct gluten_ctx *g, const char *path)
 	blocks = json_value_get_array(root);
 	for (i = 0; i < json_array_get_count(blocks); i++) {
 		obj = json_array_get_object(blocks, i);
+
 		debug("Parsing block %i", i);
 		parse_block(g, obj);
 	}

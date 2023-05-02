@@ -11,78 +11,95 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
 
 #define REFS_MAX			256
+#define REF_NAMEMAX			256
 #define CALL_ARGS			6
 
-struct arg_num;
-struct arg_struct;
-struct arg_select;
+struct num;
+struct field;
+struct select;
 
-union arg_value {
-	struct arg_num		*d_num;
-	struct arg_struct	*d_struct;
-	struct arg_select	*d_select;
+union desc {
+	struct num		*d_num;
+	struct field		*d_struct;
+	struct select		*d_select;
 };
 
-enum arg_type {
-	ARG_INT,
-	ARG_INTMASK,
-	ARG_INTFLAGS,
-
-	ARG_U32,
-	ARG_U32MASK,
-	ARG_U32FLAGS,
-
-	ARG_LONG,
-	ARG_LONGMASK,
-	ARG_LONGFLAGS,
-
-	ARG_STRING,
-
-	ARG_STRUCT,
-	ARG_SELECT,
-
-	ARG_PID,
-
-	ARG_PORT,
-	ARG_IPV4,
-	ARG_IPV6,
-
-	ARG_FDPATH,
-
-	ARG_TYPE_END,
+union value {
+	int			v_int;
+	uint32_t		v_u32;
+	long long		v_num;
 };
 
-#define ARG_TYPE_COUNT		(ARG_TYPE_END - 1)
+enum type {
+	INT,
+	INTMASK,
+	INTFLAGS,
 
-struct arg_num {
+	U32,
+	U32MASK,
+	U32FLAGS,
+
+	LONG,
+	LONGMASK,
+	LONGFLAGS,
+
+	STRING,
+
+	STRUCT,
+	SELECT,
+
+	PID,
+
+	PORT,
+	IPV4,
+	IPV6,
+
+	FDPATH,
+
+	TYPE_END,
+};
+
+#define TYPE_COUNT		(TYPE_END - 1)
+
+#define TYPE_IS_COMPOUND(t)	((t) == STRUCT || (t) == SELECT)
+#define TYPE_IS_NUM(t)		((t) == INT || (t) == U32 || (t) == LONG)
+
+enum jump_type {
+	NEXT_BLOCK,
+	END,
+};
+
+struct num {
 	char *name;
 	long long value;
 };
 
-struct arg_struct {
+struct field {
 	char *name;
-	enum arg_type type;
-	size_t offset;
+	enum type type;
+	off_t offset;
 
 	size_t strlen;
 
-	union arg_value desc;
+	union desc desc;
 };
 
-struct arg_select_num {
+struct select_num {
 	long long value;
 
-	enum arg_type type;
-	union arg_value desc;
+	enum type type;
+	union desc desc;
 };
 
-struct arg_select {
-	struct arg_struct *field;
+struct select {
+	struct field *field;
 
 	union {
-		struct arg_select_num *d_num;
+		struct select_num *d_num;
 	} desc;
 };
 
@@ -90,10 +107,10 @@ struct arg {
 	int pos;
 	char *name;
 
-	enum arg_type type;
+	enum type type;
 	size_t size;
 
-	union arg_value desc;
+	union desc desc;
 };
 
 #endif /* COOKER_H */

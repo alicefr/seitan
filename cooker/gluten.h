@@ -6,22 +6,27 @@
 #ifndef GLUTEN_H
 #define GLUTEN_H
 
+#define COOKER
+#include <gluten.h>
+
 struct gluten_arg_data {
-	int offset;
+	struct gluten_offset offset;
 	size_t len;
 };
 
 struct gluten_ref_data {
-	int name;
-	int offset;
+	char name[REF_NAMEMAX];
+	struct gluten_offset offset;
 	size_t len;
 };
 
 struct gluten_ctx {
-	int ip;
-	int lr;
-	int sp;
-	char *gluten;
+	struct gluten_offset ip;
+	struct gluten_offset lr;
+	struct gluten_offset cp;
+	struct gluten_offset dp;
+
+	struct gluten g;
 
 	struct gluten_arg_data match_dst[CALL_ARGS];
 	struct gluten_arg_data call_src[CALL_ARGS];
@@ -29,8 +34,11 @@ struct gluten_ctx {
 	struct gluten_ref_data refs[REFS_MAX];
 };
 
-int gluten_alloc(struct gluten_ctx *g, size_t size);
-int gluten_alloc_type(struct gluten_ctx *g, enum arg_type type);
-int gluten_init(struct gluten_ctx *g);
+struct gluten_offset gluten_alloc(struct gluten_ctx *g, size_t size);
+struct gluten_offset gluten_alloc_type(struct gluten_ctx *g, enum type type);
+void gluten_init(struct gluten_ctx *g);
+void gluten_block_init(struct gluten_ctx *g);
+
+extern size_t gluten_size[TYPE_COUNT];
 
 #endif /* GLUTEN_H */

@@ -27,31 +27,31 @@ FOOTER_NUMBERS="};
 
 #endif"
 
-syscalls=(
-	"accept"
-	"bind"
-	"connect"
-	"getpeername"
-	"getsockname"
-	"getsockopt"
-	"listen"
-	"mount"
-	"openat"
-	"recvfrom"
-	"recvmmsg"
-	"recvmsg"
-	"sendmmsg"
-	"sendmsg"
-	"sendto"
-	"setsockopt"
-	"shutdown"
-	"socket"
-	"socketpair"
-)
+syscalls="
+	accept
+	bind
+	connect
+	getpeername
+	getsockname
+	getsockopt
+	listen
+	mount
+	openat
+	recvfrom
+	recvmmsg
+	recvmsg
+	sendmmsg
+	sendmsg
+	sendto
+	setsockopt
+	shutdown
+	socket
+	socketpair
+"
 
 printf '%s\n' "${HEADER_NUMBERS}" > "${OUT_NUMBERS}"
 # syscall_nr - Get syscall number from compiler, also note in numbers.h
-__in="$(printf "#include <asm-generic/unistd.h>\n#include <sys/syscall.h>\n__NR_%s" ${syscalls[@]})"
+__in="$(for c in ${syscalls}; do printf "#include <asm-generic/unistd.h>\n#include <sys/syscall.h>\n__NR_%s" $c; done)"
 __out="$(echo "${__in}" |cc -E -xc - -o - |sed -n '/\#.*$/!p'| sed '/^$/d')"
 
 awk  -v AS="${syscalls[*]}" -v BS="${__out[*]}" \
