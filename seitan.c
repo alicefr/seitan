@@ -184,6 +184,7 @@ int main(int argc, char **argv)
 	struct epoll_event ev, events[EPOLL_EVENTS];
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
 	struct arguments arguments;
+	struct op operations[INST_MAX];
 	char path[PATH_MAX + 1];
 	bool running = true;
 	int pidfd, notifier;
@@ -236,19 +237,7 @@ int main(int argc, char **argv)
 				/* The notifier fd was closed by the target */
 				running = false;
 			} else if (notifier == events[i].data.fd) {
-				/*
-				 * TODO: remove until we parse correctly the
-				 * operations from the bytecode
-				 */
-				struct op operations[] = {
-					{ .type = OP_CONT },
-				};
-				if (do_operations(NULL, operations, req,
-						  sizeof(operations) /
-							  sizeof(operations[0]),
-						  notifier) == -1)
-					die("  failed executing operation");
-
+				eval(NULL, &operations[0], req, notifier);
 			}
 		}
 	}

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright 2023 Red Hat GmbH
- * Authors: Alice Frosi <afrosi@redhat.com>
- *	    Stefano Brivio <sbrivio@redhat.com>
- */
+* Copyright 2023 Red Hat GmbH
+* Authors: Alice Frosi <afrosi@redhat.com>
+*          Stefano Brivio <sbrivio@redhat.com>
+*/
 
 #ifndef COMMON_GLUTEN_H
 #define COMMON_GLUTEN_H
@@ -22,25 +22,27 @@ extern struct seccomp_data anonymous_seccomp_data;
 #define DATA_SIZE		4096
 
 #define INST_MAX		16
-#define OFFSET_MAX		MAX(MAX(MAX(DATA_SIZE, RO_DATA_SIZE),	\
-					INST_MAX),			\
-				    ARRAY_SIZE(anonymous_seccomp_data.args))
+#define OFFSET_MAX                                       \
+	MAX(MAX(MAX(DATA_SIZE, RO_DATA_SIZE), INST_MAX), \
+	    ARRAY_SIZE(anonymous_seccomp_data.args))
+
+#define seccomp_offset_args(x) (sizeof(uint64_t) / sizeof(uint16_t)) * (x)
 
 enum gluten_offset_type {
-	OFFSET_RO_DATA		= 0,
-	OFFSET_DATA		= 1,
-	OFFSET_SECCOMP_DATA	= 2,
-	OFFSET_INSTRUCTION	= 3,
-	OFFSET_TYPE_MAX		= OFFSET_INSTRUCTION,
+	OFFSET_RO_DATA = 0,
+	OFFSET_DATA = 1,
+	OFFSET_SECCOMP_DATA = 2,
+	OFFSET_INSTRUCTION = 3,
+	OFFSET_TYPE_MAX = OFFSET_INSTRUCTION,
 };
 
 struct gluten_offset {
 #ifdef __GNUC__
-	enum gluten_offset_type type:BITS_PER_NUM(OFFSET_TYPE_MAX);
+	enum gluten_offset_type type : BITS_PER_NUM(OFFSET_TYPE_MAX);
 #else
-	uint16_t		type:BITS_PER_NUM(OFFSET_TYPE_MAX);
+	uint16_t type : BITS_PER_NUM(OFFSET_TYPE_MAX);
 #endif
-	uint16_t		offset:BITS_PER_NUM(OFFSET_MAX);
+	uint16_t offset : BITS_PER_NUM(OFFSET_MAX);
 };
 
 BUILD_BUG_ON(BITS_PER_NUM(OFFSET_TYPE_MAX) + BITS_PER_NUM(OFFSET_MAX) > 16)
@@ -90,9 +92,9 @@ enum op_type {
 	OP_INJECT_A,
 	OP_RETURN,
 	OP_LOAD,
-	OP_END,
 	OP_CMP,
 	OP_RESOLVEDFD,
+	OP_END,
 };
 
 enum value_type {
@@ -130,12 +132,6 @@ struct op_inject {
 	struct gluten_offset old_fd;
 };
 
-struct copy_arg {
-	uint16_t args_off;
-	enum value_type type;
-	size_t size;
-};
-
 struct op_load {
 	struct gluten_offset src;
 	struct gluten_offset dst;
@@ -160,8 +156,8 @@ struct op_cmp {
 };
 
 struct op_resolvedfd {
-	uint16_t fd_off;
-	uint16_t path_off;
+	struct gluten_offset fd;
+	struct gluten_offset path;
 	size_t path_size;
 	unsigned int jmp;
 };
@@ -171,8 +167,8 @@ struct op {
 	union {
 		struct op_nr nr;
 		struct op_call call;
-		struct op_block block;
 		struct op_continue cont;
+		struct op_block block;
 		struct op_return ret;
 		struct op_inject inject;
 		struct op_load load;
