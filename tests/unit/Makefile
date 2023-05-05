@@ -2,6 +2,7 @@
 # Copyright 2023 Red Hat GmbH
 # Author: Alice Frosi <afrosi@redhat.com>
 
+MAIN_DIR := ../../
 COMMON_DIR := ../../common
 OP_DIR := ../../
 COOKER_DIR := ../../cooker
@@ -19,8 +20,8 @@ HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h
 SRCS_OP_CALL := $(OP_DIR)/operations.c
 
 HEADERS_OP := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
-		   $(COMMON_DIR)/common.h testutil.h
-SRCS_OP := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c
+		   $(COMMON_DIR)/common.h testutil.h $(COMMON_DIR)/util.h
+SRCS_OP := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c $(COMMON_DIR)/util.c
 
 TARGET := $(shell $(CC) -dumpmachine)
 TARGET_ARCH := $(shell echo $(TARGET) | cut -f1 -d- | tr [A-Z] [a-z])
@@ -32,9 +33,9 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
 CFLAGS += -Wall -Wextra -pedantic
-CFLAGS += -I$(COMMON_DIR) -I$(OP_DIR) -I$(COOKER_DIR) -I$(DBG_DIR)
+CFLAGS += -I$(MAIN_DIR) -I$(OP_DIR)  -I$(DBG_DIR)
 CFLAGS += -lcheck
-CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH) -DTMP_DATA_SIZE=1000000
+CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 
 test: test-filter test-operations test-op-call
 

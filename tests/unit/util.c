@@ -21,8 +21,7 @@
 #include <sys/socket.h>
 
 #include "testutil.h"
-#include "common.h"
-#include "filter.h"
+#include "common/common.h"
 
 struct seccomp_notif req;
 int notifyfd;
@@ -30,7 +29,7 @@ struct args_target *at;
 int pipefd[2];
 pid_t pid;
 char path[PATH_MAX] = "/tmp/test-seitan";
-uint16_t tmp_data[TMP_DATA_SIZE];
+struct gluten gluten;
 
 int install_notification_filter(struct args_target *at)
 {
@@ -152,6 +151,17 @@ void check_target_result(long ret, int err, bool ignore_ret)
 			      "expect return value %ld to be equal to %ld",
 			      at->ret, ret);
 	ck_assert_int_eq(at->err, err);
+	ck_assert_int_eq(close(pipefd[0]), 0);
+}
+
+void check_target_result_nonegative()
+{
+	int buf;
+
+	read(pipefd[0], &buf, 1);
+	ck_assert_msg(at->ret > -1,
+		      "expect return value %ld to be greater then -1", at->ret);
+	ck_assert_int_eq(at->err, 0);
 	ck_assert_int_eq(close(pipefd[0]), 0);
 }
 

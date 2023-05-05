@@ -25,9 +25,8 @@
 
 #include <check.h>
 
-#include "gluten.h"
 #include "operations.h"
-#include "common.h"
+#include "common/common.h"
 #include "testutil.h"
 
 #define MAX_TEST_PATH 250
@@ -83,237 +82,172 @@ void setup_target_connect()
 	setup();
 }
 
-START_TEST(test_act_continue)
+START_TEST(test_op_continue)
 {
-	struct op operations[] = {
-		{ .type = OP_CONT },
-	};
-	int ret = do_operations(NULL, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
+	ck_assert_msg(op_continue(&req, notifyfd, NULL, NULL) == 0,
+		      strerror(errno));
 	ck_assert_int_eq(at->err, 0);
 }
 END_TEST
 
-START_TEST(test_act_block)
+START_TEST(test_op_block)
 {
-	struct op operations[] = {
-		{
-			.type = OP_BLOCK,
-			.block = { .error = -1 },
-		},
-	};
-	int ret = do_operations(NULL, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
+	struct op_block op = { -1 };
+
+	ck_assert_msg(op_block(&req, notifyfd, NULL, &op) == 0,
+		      strerror(errno));
 	/*
 	 * The tests use getpid that returns the error with ret and it is always
 	 * successful
 	 */
-	check_target_result(operations[0].block.error, 1, false);
+	check_target_result(op.error, 1, false);
 }
 END_TEST
 
-START_TEST(test_act_return)
+static void test_op_return(enum gluten_offset_type type, uint16_t offset)
 {
-	struct op operations[] = {
-		{
-			.type = OP_RETURN,
-			.ret = { .type = IMMEDIATE, .value = 1 },
-		},
-	};
-	int ret = do_operations(NULL, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
-	check_target_result(1, 0, false);
-}
-END_TEST
-
-START_TEST(test_act_return_ref)
-{
+	struct op_return op = { { type, offset } };
 	int64_t v = 2;
-	uint16_t offset = 4;
-	struct op operations[] = {
-		{
-			.type = OP_RETURN,
-			.ret = { .type = REFERENCE, .value_off = offset },
-		},
-	};
-	memcpy((uint16_t *)&tmp_data + offset, &v, sizeof(v));
 
-	int ret = do_operations(&tmp_data, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
+	ck_write_gluten(gluten, op.val, v);
+	ck_assert_msg(op_return(&req, notifyfd, &gluten, &op) == 0,
+		      strerror(errno));
 	check_target_result(v, 0, false);
 }
+
+START_TEST(test_op_return_ro_data)
+{
+	test_op_return(OFFSET_RO_DATA, 4);
+}
 END_TEST
 
-START_TEST(test_act_call)
+START_TEST(test_op_return_data)
+{
+	test_op_return(OFFSET_DATA, 4);
+}
+END_TEST
+
+START_TEST(test_op_call)
 {
 	struct op operations[] = {
-		{
-			.type = OP_CALL,
-			.call = { .nr = __NR_getppid, .has_ret = false },
-		},
-		{ .type = OP_CONT },
+		{ OP_CALL, { .call = { __NR_getppid, false } } },
+		{ OP_CONT, { { 0 } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
 	};
-	int ret = do_operations(NULL, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
+
+	eval(&gluten, operations, &req, notifyfd);
 	check_target_result(1, 0, true);
 }
 END_TEST
 
-START_TEST(test_act_call_ret)
+START_TEST(test_op_call_ret)
 {
-	struct op operations[] = {
-		{
-			.type = OP_CALL,
-			.call = { .nr = __NR_getppid,
-				  .has_ret = true,
-				  .ret_off = 2 },
-		},
-		{ .type = OP_CONT },
-	};
-	int ret = do_operations(&tmp_data, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
 	long r;
-	ck_assert_msg(ret == 0, strerror(errno));
+	struct op operations[] = {
+		{ OP_CALL,
+		  { .call = { __NR_getppid, true,
+			      .ret = { .type = OFFSET_DATA, .offset = 0 } } } },
+		{ OP_CONT, { { 0 } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
+	};
+
+	eval(&gluten, operations, &req, notifyfd);
 	check_target_result(1, 0, true);
-	memcpy(&r, &tmp_data[2], sizeof(r));
-	ck_assert_int_eq(r, getpid());
+	ck_read_gluten(gluten, operations[0].op.call.ret, r);
+	ck_assert(r == getpid());
 }
 END_TEST
 
-static void test_inject(struct op operations[], int n, bool reference)
+static void test_inject(enum gluten_offset_type type, bool atomic)
 {
-	uint16_t new_off = 2, old_off = 4;
-	int fd_inj;
+	struct op_inject op = { { type, 0 }, { type, 4 } };
 	int test_fd = 3;
-	int ret;
+	int fd_inj;
 
 	fd_inj = create_test_fd();
 	ck_assert_int_ge(fd_inj, 0);
-	if (reference) {
-		memcpy((uint16_t *)&tmp_data + new_off, &fd_inj,
-		       sizeof(fd_inj));
-		memcpy((uint16_t *)&tmp_data + old_off, &test_fd,
-		       sizeof(test_fd));
+	ck_write_gluten(gluten, op.old_fd, test_fd);
+	ck_write_gluten(gluten, op.new_fd, fd_inj);
 
-		operations[0].inj.newfd.fd_off = new_off;
-		operations[0].inj.newfd.type = REFERENCE;
-		operations[0].inj.oldfd.fd_off = old_off;
-		operations[0].inj.oldfd.type = REFERENCE;
-	} else {
-		operations[0].inj.newfd.fd = fd_inj;
-		operations[0].inj.newfd.type = IMMEDIATE;
-		operations[0].inj.oldfd.fd = test_fd;
-		operations[0].inj.oldfd.type = IMMEDIATE;
-	}
-
-	ret = do_operations(&tmp_data, operations, &req, n, notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
+	if (atomic)
+		op_inject(&req, notifyfd, &gluten, &op);
+	else
+		op_inject_a(&req, notifyfd, &gluten, &op);
 	check_target_fd(pid, test_fd);
 }
 
-START_TEST(test_act_inject_a)
+START_TEST(test_op_inject_a)
 {
-	struct op operations[] = { { .type = OP_INJECT_A } };
-	test_inject(operations, sizeof(operations) / sizeof(operations[0]), false);
+	test_inject(OFFSET_RO_DATA, true);
 }
 END_TEST
 
-START_TEST(test_act_inject_a_ref)
+START_TEST(test_op_inject_a_ref)
 {
-	struct op operations[] = { { .type = OP_INJECT_A } };
-	test_inject(operations, sizeof(operations) / sizeof(operations[0]), true);
+	test_inject(OFFSET_DATA, true);
 }
 END_TEST
 
-START_TEST(test_act_inject)
+START_TEST(test_op_inject)
 {
-	struct op operations[] = { { .type = OP_INJECT } };
-	test_inject(operations, sizeof(operations) / sizeof(operations[0]), false);
+	test_inject(OFFSET_RO_DATA, false);
 }
 END_TEST
 
-START_TEST(test_act_inject_ref)
+START_TEST(test_op_inject_ref)
 {
-	struct op operations[] = { { .type = OP_INJECT } };
-	test_inject(operations, sizeof(operations) / sizeof(operations[0]), true);
+	test_inject(OFFSET_DATA, false);
 }
 END_TEST
 
-START_TEST(test_op_copy)
+START_TEST(test_op_load)
 {
 	struct op operations[] = {
-		{ .type = OP_COPY_ARGS },
-		{
-			.type = OP_RETURN,
-			.ret = { .type = IMMEDIATE, .value = 0 },
-		},
+		{ OP_LOAD,
+		  { .load = { { OFFSET_SECCOMP_DATA, 1 },
+			      { OFFSET_DATA, 0 },
+			      sizeof(struct sockaddr_un) } } },
+		{ OP_RETURN,
+		  { .ret = { { OFFSET_DATA, sizeof(struct sockaddr_un) } } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
 	};
-	struct op_copy_args *o = &operations[0].copy;
-	struct sockaddr_un *addr;
-	socklen_t *len, expect;
-	int ret;
+	struct sockaddr_un addr;
+	int v = 2;
 
-	o->args[0] = (struct copy_arg){ .args_off = 0,
-					.type = IMMEDIATE,
-					.size = sizeof(int) };
-	o->args[1] =
-		(struct copy_arg){ .args_off = sizeof(int) / sizeof(uint16_t),
-				   .type = REFERENCE,
-				   .size = sizeof(struct sockaddr_un) };
-	o->args[2] = (struct copy_arg){ .args_off = o->args[1].args_off +
-						    sizeof(struct sockaddr_un) /
-							    sizeof(uint16_t),
-					.type = IMMEDIATE,
-					.size = sizeof(socklen_t) };
-	ret = do_operations(&tmp_data, operations, &req,
-			    sizeof(operations) / sizeof(operations[0]),
-			    notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
-	check_target_result(0, 0, false);
-	addr = (struct sockaddr_un *)(tmp_data + o->args[1].args_off);
-	ck_assert_str_eq(addr->sun_path, "/tmp/test.sock");
-	ck_assert(addr->sun_family == AF_UNIX);
-	expect = sizeof(addr->sun_path);
-	len = (socklen_t *)(tmp_data + o->args[2].args_off);
-	ck_assert_msg(*len == expect, "expect len %x to be equal to %x", *len,
-		      expect);
+	ck_write_gluten(gluten, operations[1].op.ret.val, v);
+	eval(&gluten, operations, &req, notifyfd);
+	check_target_result(v, 0, false);
+
+	ck_read_gluten(gluten, operations[0].op.load.dst, addr);
+	ck_assert_str_eq(addr.sun_path, "/tmp/test.sock");
+	ck_assert(addr.sun_family == AF_UNIX);
 }
 END_TEST
 
 static void test_op_cmp_int(int a, int b, enum op_cmp_type cmp)
 {
 	struct op operations[] = {
-		{ .type = OP_CMP,
-		  .cmp = { .s1_off = 0,
-			   .s2_off = sizeof(a) / sizeof(uint16_t),
-			   .size = sizeof(a),
-			   .cmp = cmp,
-			   .jmp = 2 } },
-		{ .type = OP_CONT },
-		{ .type = OP_END },
-		{ .type = OP_BLOCK, .block = { .error = -1 } },
+		{ OP_CMP,
+		  { .cmp = { { OFFSET_DATA, 0 },
+			     { OFFSET_DATA, 10 },
+			     sizeof(int),
+			     cmp,
+			     3 } } },
+		{ OP_BLOCK, { .block = { -1 } } },
+		{ OP_END, { { 0 } } },
+		{ OP_CONT, { { 0 } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
 	};
-	int ret;
 
-	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s1_off, &a, sizeof(a));
-	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s2_off, &b, sizeof(b));
+	ck_write_gluten(gluten, operations[0].op.cmp.x, a);
+	ck_write_gluten(gluten, operations[0].op.cmp.y, b);
 
-	ret = do_operations(&tmp_data, operations, &req,
-			    sizeof(operations) / sizeof(operations[0]),
-			    notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
-	ck_assert_int_eq(at->err, 0);
+	eval(&gluten, operations, &req, notifyfd);
+	check_target_result_nonegative();
 }
 
 START_TEST(test_op_cmp_int_eq)
@@ -330,7 +264,7 @@ END_TEST
 
 START_TEST(test_op_cmp_int_gt)
 {
-	test_op_cmp_int(1, 2, CMP_GT);
+	test_op_cmp_int(2, 1, CMP_GT);
 }
 END_TEST
 
@@ -342,7 +276,7 @@ END_TEST
 
 START_TEST(test_op_cmp_int_lt)
 {
-	test_op_cmp_int(2, 1, CMP_LT);
+	test_op_cmp_int(1, 2, CMP_LT);
 }
 END_TEST
 
@@ -354,82 +288,74 @@ END_TEST
 
 START_TEST(test_op_cmp_string_eq)
 {
-	char s[30] = "Hello Test!!";
+	char s1[30] = "Hello Test!!";
+	char s2[30] = "Hello Test!!";
 	struct op operations[] = {
-		{ .type = OP_CMP,
-		  .cmp = { .s1_off = 0,
-			   .s2_off = sizeof(s) / sizeof(uint16_t),
-			   .size = sizeof(s),
-			   .cmp = CMP_EQ,
-			   .jmp = 2 } },
-		{ .type = OP_CONT },
-		{ .type = OP_END },
-		{ .type = OP_BLOCK, .block = { .error = -1 } },
+		{ OP_CMP,
+		  { .cmp = { { OFFSET_DATA, 0 },
+			     { OFFSET_DATA, 30 },
+			     sizeof(s1),
+			     CMP_EQ,
+			     3 } } },
+		{ OP_BLOCK, { .block = { -1 } } },
+		{ OP_END, { { 0 } } },
+		{ OP_CONT, { { 0 } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
 	};
-	int ret;
+	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
+	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
 
-	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s1_off, &s, sizeof(s));
-	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s2_off, &s, sizeof(s));
-
-	ret = do_operations(&tmp_data, operations, &req,
-			    sizeof(operations) / sizeof(operations[0]),
-			    notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
-	ck_assert_int_eq(at->err, 0);
+	eval(&gluten, operations, &req, notifyfd);
+	check_target_result_nonegative();
 }
 END_TEST
 
 START_TEST(test_op_cmp_string_false)
 {
 	char s1[30] = "Hello Test!!";
-	char s2[30] = "Hello World!!";
+	char s2[30] = "Hello Tost!!";
 	struct op operations[] = {
-		{ .type = OP_CMP,
-		  .cmp = { .s1_off = 0,
-			   .s2_off = sizeof(s1) / sizeof(uint16_t),
-			   .size = sizeof(s1),
-			   .cmp = CMP_EQ,
-			   .jmp = 2 } },
-		{ .type = OP_BLOCK, .block = { .error = -1 } },
-		{ .type = OP_END },
-		{ .type = OP_CONT },
+		{ OP_CMP,
+		  { .cmp = { { OFFSET_DATA, 0 },
+			     { OFFSET_DATA, 30 },
+			     sizeof(s1),
+			     CMP_EQ,
+			     2 } } },
+		{ OP_CONT, { { 0 } } },
+		{ OP_END, { { 0 } } },
+		{ OP_BLOCK, { .block = { -1 } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
 	};
-	int ret;
 
-	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s1_off, &s1,
-	       sizeof(s1));
-	memcpy((uint16_t *)&tmp_data + operations[0].cmp.s2_off, &s2,
-	       sizeof(s2));
+	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
+	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
 
-	ret = do_operations(&tmp_data, operations, &req,
-			    sizeof(operations) / sizeof(operations[0]),
-			    notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
-	ck_assert_int_eq(at->err, 0);
+	eval(&gluten, operations, &req, notifyfd);
+	check_target_result_nonegative();
 }
 END_TEST
 
 START_TEST(test_op_resolvedfd_eq)
 {
 	struct op operations[] = {
-		{ .type = OP_RESOLVEDFD,
-		  .resfd = { .fd_off = 0,
-			     .path_off = sizeof(int) / sizeof(uint16_t),
-			     .path_size = sizeof(path),
-			     .jmp = 2 } },
-		{ .type = OP_CONT },
-		{ .type = OP_END },
-		{ .type = OP_BLOCK, .block = { .error = -1 } },
+		{ OP_RESOLVEDFD,
+		  { .resfd = { { OFFSET_DATA, 0 },
+			       { OFFSET_DATA, 4 },
+			       sizeof(path),
+			       3 } } },
+		{ OP_BLOCK, { .block = { -1 } } },
+		{ OP_END, { { 0 } } },
+		{ OP_CONT, { { 0 } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
 	};
 
-	memcpy((uint16_t *)&tmp_data + operations[0].resfd.fd_off, &at->fd,
-	       sizeof(at->fd));
-	memcpy((uint16_t *)&tmp_data + operations[0].resfd.path_off, &path,
-	       sizeof(path));
-	int ret = do_operations(&tmp_data, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
+	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
+	ck_write_gluten(gluten, operations[0].op.resfd.path, path);
+
+	eval(&gluten, operations, &req, notifyfd);
 	check_target_result(-1, 1, false);
 }
 END_TEST
@@ -438,26 +364,25 @@ START_TEST(test_op_resolvedfd_neq)
 {
 	char path2[] = "/tmp/seitan-test-wrong";
 	struct op operations[] = {
-		{ .type = OP_RESOLVEDFD,
-		  .resfd = { .fd_off = 0,
-			     .path_off = sizeof(int) / sizeof(uint16_t),
-			     .path_size = sizeof(path2),
-			     .jmp = 2 } },
-		{ .type = OP_CONT },
-		{ .type = OP_END },
-		{ .type = OP_BLOCK, .block = { .error = -1 } },
+		{ OP_RESOLVEDFD,
+		  { .resfd = { { OFFSET_DATA, 0 },
+			       { OFFSET_DATA, 4 },
+			       sizeof(path),
+			       3 } } },
+		{ OP_BLOCK, { .block = { -1 } } },
+		{ OP_END, { { 0 } } },
+		{ OP_CONT, { { 0 } } },
+		{ OP_END, { { 0 } } },
+		{ 0 },
 	};
-	memcpy((uint16_t *)&tmp_data + operations[0].resfd.fd_off, &at->fd,
-	       sizeof(at->fd));
-	memcpy((uint16_t *)&tmp_data + operations[0].resfd.path_off, &path2,
-	       sizeof(path2));
-	int ret = do_operations(&tmp_data, operations, &req,
-				sizeof(operations) / sizeof(operations[0]),
-				notifyfd);
-	ck_assert_msg(ret == 0, strerror(errno));
+
+	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
+	ck_write_gluten(gluten, operations[0].op.resfd.path, path2);
+
+	eval(&gluten, operations, &req, notifyfd);
+	check_target_result(-1, 1, false);
 }
 END_TEST
-
 
 Suite *op_call_suite(void)
 {
@@ -466,55 +391,55 @@ Suite *op_call_suite(void)
 	TCase *cont, *block, *ret, *call, *resolvedfd;
 	TCase *cmp, *cmpint;
 	TCase *inject, *inject_a;
-	TCase *copy;
+	TCase *load;
 
 	s = suite_create("Perform operations");
 
-	cont = tcase_create("a_continue");
+	cont = tcase_create("op_continue");
 	tcase_add_checked_fixture(cont, setup_without_fd, teardown);
 	tcase_set_timeout(cont, timeout);
-	tcase_add_test(cont, test_act_continue);
+	tcase_add_test(cont, test_op_continue);
 	suite_add_tcase(s, cont);
 
-	ret = tcase_create("a_return");
-	tcase_add_checked_fixture(ret, setup_without_fd, teardown);
-	tcase_set_timeout(ret, timeout);
-	tcase_add_test(ret, test_act_return);
-	tcase_add_test(ret, test_act_return_ref);
-	suite_add_tcase(s, ret);
-
-	block = tcase_create("a_block");
+	block = tcase_create("op_block");
 	tcase_add_checked_fixture(block, setup_without_fd, teardown);
 	tcase_set_timeout(block, timeout);
-	tcase_add_test(block, test_act_block);
+	tcase_add_test(block, test_op_block);
 	suite_add_tcase(s, block);
 
-	call = tcase_create("a_call");
+	ret = tcase_create("op_return");
+	tcase_add_checked_fixture(ret, setup_without_fd, teardown);
+	tcase_set_timeout(ret, timeout);
+	tcase_add_test(ret, test_op_return_ro_data);
+	tcase_add_test(ret, test_op_return_data);
+	suite_add_tcase(s, ret);
+
+	call = tcase_create("op_call");
 	tcase_add_checked_fixture(call, setup_without_fd, teardown);
 	tcase_set_timeout(call, timeout);
-	tcase_add_test(call, test_act_call);
-	tcase_add_test(call, test_act_call_ret);
+	tcase_add_test(call, test_op_call);
+	tcase_add_test(call, test_op_call_ret);
 	suite_add_tcase(s, call);
 
-	inject = tcase_create("a_inject");
+	inject = tcase_create("op_inject");
 	tcase_add_checked_fixture(inject, setup_fd, teardown);
 	tcase_set_timeout(inject, timeout);
-	tcase_add_test(inject, test_act_inject);
-	tcase_add_test(inject, test_act_inject_ref);
+	tcase_add_test(inject, test_op_inject);
+	tcase_add_test(inject, test_op_inject_ref);
 	suite_add_tcase(s, inject);
 
-	inject_a = tcase_create("a_inject_a");
+	inject_a = tcase_create("op_inject_a");
 	tcase_add_checked_fixture(inject_a, setup_fd, teardown);
 	tcase_set_timeout(inject_a, timeout);
-	tcase_add_test(inject_a, test_act_inject_a);
-	tcase_add_test(inject_a, test_act_inject_a_ref);
+	tcase_add_test(inject_a, test_op_inject_a);
+	tcase_add_test(inject_a, test_op_inject_a_ref);
 	suite_add_tcase(s, inject_a);
 
-	copy = tcase_create("op_copy");
-	tcase_add_checked_fixture(copy, setup_target_connect, teardown);
-	tcase_set_timeout(copy, 120);
-	tcase_add_test(copy, test_op_copy);
-	suite_add_tcase(s, copy);
+	load = tcase_create("op_load");
+	tcase_add_checked_fixture(load, setup_target_connect, teardown);
+	tcase_set_timeout(load, 120);
+	tcase_add_test(load, test_op_load);
+	suite_add_tcase(s, load);
 
 	cmp = tcase_create("op_cmp");
 	tcase_add_checked_fixture(cmp, setup_without_fd, teardown);

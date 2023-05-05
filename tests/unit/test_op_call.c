@@ -17,7 +17,7 @@
 
 #include <check.h>
 
-#include "gluten.h"
+#include "common/gluten.h"
 #include "operations.h"
 
 struct args_write_file {
@@ -122,7 +122,7 @@ START_TEST(test_with_open_read_ns)
 		call.context.ns[i].type = NS_NONE;
 	call.context.ns[NS_MOUNT].type = NS_SPEC_PID;
 	pid = create_func_ns(write_file_clone, (void *)&args, call.context.ns);
-	call.context.ns[NS_MOUNT].pid = pid;
+	call.context.ns[NS_MOUNT].id.pid = pid;
 	call.nr = SYS_open;
 	call.args[0] = (void *)&test_file;
 	call.args[1] = (void *)(long)flags;
