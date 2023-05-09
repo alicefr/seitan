@@ -20,6 +20,8 @@
 static inline void *test_gluten_write_ptr(struct gluten *g,
 					  const struct gluten_offset x)
 {
+	ck_assert_msg(is_offset_valid(x), "offset out of bounds");
+
 	switch (x.type) {
 	case OFFSET_DATA:
 		return (char *)g->data + x.offset;

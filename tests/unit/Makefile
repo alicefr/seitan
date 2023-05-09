@@ -23,6 +23,10 @@ HEADERS_OP := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
 		   $(COMMON_DIR)/common.h testutil.h $(COMMON_DIR)/util.h
 SRCS_OP := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c $(COMMON_DIR)/util.c
 
+HEADERS_ERROR := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
+		   $(COMMON_DIR)/common.h testutil.h $(COMMON_DIR)/util.h
+SRCS_ERROR := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c $(COMMON_DIR)/util.c
+
 TARGET := $(shell $(CC) -dumpmachine)
 TARGET_ARCH := $(shell echo $(TARGET) | cut -f1 -d- | tr [A-Z] [a-z])
 TARGET_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/powerpc/ppc/')
@@ -67,5 +71,11 @@ build-operations: test_operations.c $(SRCS_OP) $(HEADERS_OP)
 test-operations: build-operations
 	./operations
 
+build-error-checks: test_errors.c $(SRCS_ERROR) $(HEADERS_ERROR)
+	$(CC) $(CFLAGS) -o error_checks $(SRCS_ERROR) \
+		test_errors.c
+
+test-error-checks: build-error-checks
+	./error_checks
 clean:
 	rm -f operations  op-call filter filter-build

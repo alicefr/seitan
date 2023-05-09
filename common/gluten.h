@@ -26,7 +26,30 @@ extern struct seccomp_data anonymous_seccomp_data;
 	MAX(MAX(MAX(DATA_SIZE, RO_DATA_SIZE), INST_MAX), \
 	    ARRAY_SIZE(anonymous_seccomp_data.args))
 
-#define seccomp_offset_args(x) (sizeof(uint64_t) / sizeof(uint16_t)) * (x)
+#define check_gluten_limits(g, v, size)                                   \
+	do {                                                              \
+		struct gluten_offset off = { v.type, v.offset + (size) }; \
+		if (!is_offset_valid(off))                                \
+			die(" invalid offset: %d", off.offset);           \
+	} while (0)
+
+#define gluten_write(g, dst, src)                               \
+	do {                                                    \
+		void *p = gluten_write_ptr((g), (dst));         \
+		check_gluten_limits((g), (dst), sizeof((src))); \
+		if (p == NULL)                                  \
+			die(" invalid type of offset");         \
+		memcpy(p, &(src), sizeof(src));                 \
+	} while (0)
+
+#define gluten_read(s, g, dst, src, size)                    \
+	do {                                                 \
+		const void *p = gluten_ptr((s), (g), (src)); \
+		check_gluten_limits((g), (src), (size));     \
+		if (p == NULL)                               \
+			die(" invalid type of offset");      \
+		memcpy(&(dst), p, (size));      \
+	} while (0)
 
 enum gluten_offset_type {
 	OFFSET_RO_DATA = 0,
@@ -195,6 +218,22 @@ struct gluten {
 
 BUILD_BUG_ON(INST_SIZE < INST_MAX * sizeof(struct op))
 
+static inline bool is_offset_valid(const struct gluten_offset x)
+{
+	switch (x.type) {
+	case OFFSET_DATA:
+		return x.offset < DATA_SIZE;
+	case OFFSET_RO_DATA:
+		return x.offset < RO_DATA_SIZE;
+	case OFFSET_INSTRUCTION:
+		return x.offset < INST_SIZE;
+	case OFFSET_SECCOMP_DATA:
+		return x.offset < 6;
+	default:
+		return false;
+	}
+}
+
 #ifdef COOKER
 static inline void *gluten_ptr(struct gluten *g, const struct gluten_offset x)
 #else
@@ -202,7 +241,8 @@ static inline void *gluten_write_ptr(struct gluten *g,
 				     const struct gluten_offset x)
 #endif
 {
-	/* TODO: Boundary checks */
+	if (!is_offset_valid(x))
+		die(" invalid offset: %d", x.offset);
 
 	switch (x.type) {
 	case OFFSET_DATA:
@@ -223,6 +263,9 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 				     struct gluten *g,
 				     const struct gluten_offset x)
 {
+	if (!is_offset_valid(x))
+		die(" invalid offset: %d", x.offset);
+
 	switch (x.type) {
 	case OFFSET_DATA:
 		return g->data + x.offset;
@@ -237,5 +280,4 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 	}
 }
 #endif
-
 #endif /* COMMON_GLUTEN_H */

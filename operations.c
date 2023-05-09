@@ -177,6 +177,7 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 		ret = -1;
 		goto out;
 	}
+	check_gluten_limits(&g, load->dst, load->size);
 	if (pread(fd, gluten_write_ptr(g, load->dst), load->size, *src) < 0) {
 		perror("pread");
 		return -1;
@@ -232,7 +233,7 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	 * reference
 	 */
 	if (op->has_ret)
-		memcpy(gluten_write_ptr(g, op->ret), &c.ret, sizeof(c.ret));
+		gluten_write(g, op->ret, c.ret);
 
 	return 0;
 }
@@ -263,7 +264,7 @@ int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	resp.flags = 0;
 	resp.error = 0;
 
-	memcpy(&resp.val, gluten_ptr(NULL, g, op->val), sizeof(resp.val));
+	gluten_read(NULL, g, resp.val, op->val, sizeof(resp.val));
 
 	if (send_target(&resp, notifier) == -1)
 		return -1;
@@ -299,10 +300,8 @@ static int do_inject(const struct seccomp_notif *req, int notifier,
 	resp.newfd_flags = 0;
 	resp.id = req->id;
 
-	memcpy(&resp.newfd, gluten_ptr(NULL, g, op->new_fd),
-	       sizeof(resp.newfd));
-	memcpy(&resp.srcfd, gluten_ptr(NULL, g, op->new_fd),
-	       sizeof(resp.srcfd));
+	gluten_read(NULL, g, resp.newfd, op->new_fd, sizeof(resp.newfd));
+	gluten_read(NULL, g, resp.srcfd, op->old_fd, sizeof(resp.srcfd));
 
 	if (atomic)
 		resp.flags |= SECCOMP_ADDFD_FLAG_SEND;
@@ -351,8 +350,9 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 
 	(void)notifier;
 
-	memcpy(&path, gluten_ptr(NULL, g, op->path), op->path_size);
-	memcpy(&fd, gluten_ptr(NULL, g, op->fd), sizeof(fd));
+
+	gluten_read(NULL, g, path, op->path, sizeof(op->path_size));
+	gluten_read(NULL, g, fd, op->fd, sizeof(fd));
 
 	snprintf(fdpath, PATH_MAX, "/proc/%d/fd/%d", req->pid, fd);
 	if ((nbytes = readlink(fdpath, buf, op->path_size)) < 0) {
