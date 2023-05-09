@@ -83,10 +83,33 @@ START_TEST(test_read_op_return)
 	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
 }
 
+static struct op_cmp test_cmp_data[] = {
+	{ { OFFSET_DATA, DATA_SIZE }, { OFFSET_DATA, 0 }, 1, CMP_EQ, 1 },
+	{ { OFFSET_DATA, 0 }, { OFFSET_DATA, DATA_SIZE }, 1, CMP_EQ, 1 },
+	{ { OFFSET_DATA, DATA_SIZE - 1 }, { OFFSET_DATA, 0 }, 10, CMP_EQ, 1 },
+	{ { OFFSET_DATA, 0 }, { OFFSET_DATA, DATA_SIZE - 1 }, 10, CMP_EQ, 1 },
+};
+
+START_TEST(test_op_cmp)
+{
+	struct op ops[2];
+
+	ops[0].type = OP_CMP;
+	ops[0].op.cmp.x.offset = test_cmp_data[_i].x.offset;
+	ops[0].op.cmp.x.type = test_cmp_data[_i].x.type;
+	ops[0].op.cmp.y.offset = test_cmp_data[_i].y.offset;
+	ops[0].op.cmp.y.type = test_cmp_data[_i].y.type;
+	ops[0].op.cmp.size = test_cmp_data[_i].size;
+	ops[0].op.cmp.jmp = test_cmp_data[_i].jmp;
+	ops[1].type = OP_END;
+
+	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
+}
+
 Suite *error_suite(void)
 {
 	Suite *s;
-	TCase *bounds, *gwrite, *gread;
+	TCase *bounds, *gwrite, *gread, *gcmp;
 
 	s = suite_create("Error handling");
 
@@ -108,6 +131,12 @@ Suite *error_suite(void)
 			    sizeof(test_max_size_read_data) /
 				    sizeof(test_max_size_read_data[0]));
 	suite_add_tcase(s, gread);
+
+	gcmp = tcase_create("compare gluten");
+	tcase_add_checked_fixture(gcmp, setup_error_check, teardown);
+	tcase_add_loop_test(gcmp, test_op_cmp, 0,
+			    sizeof(test_cmp_data) / sizeof(test_cmp_data[0]));
+	suite_add_tcase(s, gcmp);
 
 	return s;
 }

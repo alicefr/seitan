@@ -332,11 +332,18 @@ int op_inject_a(const struct seccomp_notif *req, int notifier, struct gluten *g,
 int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	   struct op_cmp *op)
 {
-	int res = memcmp(gluten_ptr(&req->data, g, op->x),
-			 gluten_ptr(&req->data, g, op->y), op->size);
+	const void *px = gluten_ptr(&req->data, g, op->x);
+	const void *py = gluten_ptr(&req->data, g, op->y);
 	enum op_cmp_type cmp = op->cmp;
+	int res;
 
 	(void)notifier;
+
+	if (px == NULL || py == NULL || !check_gluten_limits(op->x, op->size) ||
+	    !check_gluten_limits(op->y, op->size))
+		return -1;
+
+	res = memcmp(px, py, op->size);
 
 	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
