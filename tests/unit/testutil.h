@@ -1,6 +1,6 @@
 #ifndef TESTUTIL_H
 #define TESTUTIL_H
-
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -67,6 +67,8 @@ extern struct args_target *at;
 extern int pipefd[2];
 extern pid_t pid;
 extern char path[PATH_MAX];
+extern char stderr_buff[BUFSIZ];
+extern char stdout_buff[BUFSIZ];
 
 extern struct gluten gluten;
 
@@ -85,4 +87,7 @@ void continue_target();
 void mock_syscall_target();
 void set_args_no_check(struct args_target *at);
 void check_target_result_nonegative();
+void ck_error_msg(char *s);
+void ck_stderr();
+void ck_stdout();
 #endif /* TESTUTIL_H */

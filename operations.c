@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <sched.h>
@@ -24,6 +23,7 @@
 #include <errno.h>
 
 #include "common/gluten.h"
+#include "common/util.h"
 #include "operations.h"
 
 static bool is_cookie_valid(int notifyFd, uint64_t id)
@@ -33,34 +33,22 @@ static bool is_cookie_valid(int notifyFd, uint64_t id)
 
 static int send_target(const struct seccomp_notif_resp *resp, int notifier)
 {
-	if (!is_cookie_valid(notifier, resp->id)) {
-		fprintf(stderr,
-			"the response id isn't valid\ncheck if the targets has already terminated\n");
-		exit(0);
-	}
-	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_SEND, resp) < 0) {
-		if (errno != EINPROGRESS) {
-			perror("sending the response");
-			return -1;
-		}
-	}
+	if (!is_cookie_valid(notifier, resp->id))
+		ret_err(-1, "the response id isn't valid");
+	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_SEND, resp) < 0)
+		if (errno != EINPROGRESS)
+			ret_err(-1, "sending the response");
 	return 0;
 }
 
 static int send_inject_target(const struct seccomp_notif_addfd *resp,
 			      int notifier)
 {
-	if (!is_cookie_valid(notifier, resp->id)) {
-		fprintf(stderr,
-			"the response id isn't valid\ncheck if the targets has already terminated\n");
-		return -1;
-	}
-	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_ADDFD, resp) < 0) {
-		if (errno != EINPROGRESS) {
-			perror("sending the response");
-			return -1;
-		}
-	}
+	if (!is_cookie_valid(notifier, resp->id))
+		ret_err(-1, "the response id isn't valid");
+	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_ADDFD, resp) < 0)
+		if (errno != EINPROGRESS)
+			ret_err(-1, "sending the response");
 	return 0;
 }
 
@@ -92,7 +80,7 @@ static void proc_ns_name(unsigned i, char *ns)
 		snprintf(ns, PATH_MAX + 1, "time");
 		break;
 	default:
-		fprintf(stderr, "unrecognized namespace index %d\n", i);
+		err("unrecognized namespace index %d\n", i);
 	}
 }
 
@@ -123,16 +111,11 @@ static int set_namespaces(const struct op_call *a, int tpid)
 			break;
 		}
 
-		if ((fd = open(path, O_CLOEXEC)) < 0) {
-			fprintf(stderr, "open for file %s: %s", path,
-				strerror(errno));
-			return -1;
-		}
+		if ((fd = open(path, O_CLOEXEC)) < 0)
+			ret_err(-1, "open for file %s", path);
 
-		if (setns(fd, 0) != 0) {
-			perror("setns");
-			return -1;
-		}
+		if (setns(fd, 0) != 0)
+			ret_err(-1, "setns");
 	}
 	return 0;
 }
@@ -164,16 +147,14 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	int fd, ret = 0;
 
 	snprintf(path, sizeof(path), "/proc/%d/mem", req->pid);
-	if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
-		perror("open mem");
-		return -1;
-	}
+	if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0)
+		ret_err(-1, "error opening mem for %d", req->pid);
 
 	/*
          * Avoid the TOCTOU and check if the read mappings are still valid
          */
 	if (!is_cookie_valid(notifier, req->id)) {
-		fprintf(stderr, "the seccomp request isn't valid anymore\n");
+		err("the seccomp request isn't valid anymore");
 		ret = -1;
 		goto out;
 	}
@@ -182,8 +163,9 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 		goto out;
 	}
 	if (pread(fd, gluten_write_ptr(g, load->dst), load->size, *src) < 0) {
-		perror("pread");
-		return -1;
+		err("pread");
+		ret = -1;
+		goto out;
 	}
 
 out:
@@ -199,10 +181,8 @@ int do_call(struct arg_clone *c)
 	/* Create a process that will be moved to the namespace */
 	child = clone(execute_syscall, stack + sizeof(stack),
 		      CLONE_FILES | CLONE_VM | SIGCHLD, (void *)c);
-	if (child == -1) {
-		perror("clone");
-		return -1;
-	}
+	if (child == -1)
+		ret_err(-1, "clone");
 	wait(NULL);
 	return 0;
 }
@@ -267,7 +247,8 @@ int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	resp.flags = 0;
 	resp.error = 0;
 
-	if (gluten_read(&req->data, g, &resp.val, op->val, sizeof(resp.val)) == -1)
+	if (gluten_read(&req->data, g, &resp.val, op->val, sizeof(resp.val)) ==
+	    -1)
 		return -1;
 
 	if (send_target(&resp, notifier) == -1)
@@ -304,9 +285,11 @@ static int do_inject(const struct seccomp_notif *req, int notifier,
 	resp.newfd_flags = 0;
 	resp.id = req->id;
 
-	if(gluten_read(&req->data, g, &resp.newfd, op->new_fd, sizeof(resp.newfd)) == -1)
+	if (gluten_read(&req->data, g, &resp.newfd, op->new_fd,
+			sizeof(resp.newfd)) == -1)
 		return -1;
-	if(gluten_read(&req->data, g, &resp.srcfd, op->old_fd, sizeof(resp.srcfd)) == -1)
+	if (gluten_read(&req->data, g, &resp.srcfd, op->old_fd,
+			sizeof(resp.srcfd)) == -1)
 		return -1;
 
 	if (atomic)
@@ -363,18 +346,14 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 
 	(void)notifier;
 
-
-	if(gluten_read(NULL, g, &path, op->path, sizeof(op->path_size)) == -1)
+	if (gluten_read(NULL, g, &path, op->path, sizeof(op->path_size)) == -1)
 		return -1;
-	if(gluten_read(&req->data, g, &fd, op->fd, sizeof(fd)) == -1)
+	if (gluten_read(&req->data, g, &fd, op->fd, sizeof(fd)) == -1)
 		return -1;
 
 	snprintf(fdpath, PATH_MAX, "/proc/%d/fd/%d", req->pid, fd);
-	if ((nbytes = readlink(fdpath, buf, op->path_size)) < 0) {
-		fprintf(stderr, "error reading %s\n", fdpath);
-		perror("readlink");
-		return -1;
-	}
+	if ((nbytes = readlink(fdpath, buf, op->path_size)) < 0)
+		ret_err(-1, "error reading %s", fdpath);
 	if (strcmp(path, buf) == 0)
 		return op->jmp;
 
@@ -382,7 +361,7 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 }
 
 int eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
-	  int notifier)
+	 int notifier)
 {
 	struct op *op = ops;
 
@@ -398,7 +377,7 @@ int eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
 			HANDLE_OP(OP_CMP, op_cmp, cmp);
 			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd);
 		default:
-			fprintf(stderr, "unknown operation %d \n", op->type);
+			ret_err(-1, "unknown operation %d", op->type);
 		}
 	}
 	return 0;

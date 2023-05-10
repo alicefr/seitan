@@ -19,6 +19,11 @@ static void setup_error_check()
 	setup();
 }
 
+static void setup_stderr()
+{
+	ck_stderr();
+}
+
 struct gluten_offset test_max_size_data[] = {
 	{ OFFSET_DATA, DATA_SIZE },
 	{ OFFSET_RO_DATA, RO_DATA_SIZE },
@@ -105,11 +110,50 @@ START_TEST(test_op_cmp)
 
 	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
 }
+static struct ttargetnoexisting_data {
+	struct op op;
+	char err_msg[BUFSIZ];
+};
+
+struct ttargetnoexisting_data test_target_noexisting_data[] = {
+	{ { OP_CONT, { { 0 } } }, "the response id isn't valid" },
+	{ { OP_BLOCK, { { 0 } } }, "the response id isn't valid" },
+	{ { OP_RETURN, { { 0 } } }, "the response id isn't valid" },
+	{ { OP_INJECT,
+	    { .inject = { { OFFSET_DATA, 0 }, { OFFSET_DATA, 0 } } } },
+	  "the response id isn't valid" },
+	{ { OP_INJECT_A,
+	    { .inject = { { OFFSET_DATA, 0 }, { OFFSET_DATA, 0 } } } },
+	  "the response id isn't valid" },
+	{ { OP_CALL, { .call = { __NR_getpid, false } } },
+	  "the response id isn't valid" },
+	{ { OP_LOAD,
+	    { .load = { { OFFSET_SECCOMP_DATA, 1 }, { OFFSET_DATA, 0 }, 0 } } },
+	  "error opening mem for" },
+	{ { OP_RESOLVEDFD,
+	    { .resfd = { { OFFSET_SECCOMP_DATA, 1 },
+			 { OFFSET_DATA, 0 },
+			 0,
+			 0 } } },
+	  "error reading /proc" },
+};
+
+START_TEST(test_target_noexisting)
+{
+	struct op ops[2];
+
+	ops[0] = test_target_noexisting_data[_i].op;
+	ops[1].type = OP_END;
+
+	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
+	ck_error_msg(test_target_noexisting_data[_i].err_msg);
+}
 
 Suite *error_suite(void)
 {
 	Suite *s;
 	TCase *bounds, *gwrite, *gread, *gcmp;
+	TCase *tnotexist;
 
 	s = suite_create("Error handling");
 
@@ -137,6 +181,12 @@ Suite *error_suite(void)
 	tcase_add_loop_test(gcmp, test_op_cmp, 0,
 			    sizeof(test_cmp_data) / sizeof(test_cmp_data[0]));
 	suite_add_tcase(s, gcmp);
+
+	tnotexist = tcase_create("target not existing");
+	tcase_add_checked_fixture(tnotexist, setup_stderr, NULL);
+	tcase_add_loop_test(tnotexist, test_target_noexisting, 0,
+			    ARRAY_SIZE(test_target_noexisting_data));
+	suite_add_tcase(s, tnotexist);
 
 	return s;
 }

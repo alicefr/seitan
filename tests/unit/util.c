@@ -30,6 +30,8 @@ int pipefd[2];
 pid_t pid;
 char path[PATH_MAX] = "/tmp/test-seitan";
 struct gluten gluten;
+char stderr_buff[BUFSIZ];
+char stdout_buff[BUFSIZ];
 
 int install_notification_filter(struct args_target *at)
 {
@@ -230,4 +232,20 @@ void teardown()
 	if (at != NULL)
 		munmap(at, sizeof(struct args_target));
 	unlink(path);
+}
+
+void ck_stderr()
+{
+	setbuf(stderr, stderr_buff);
+}
+
+void ck_stdout()
+{
+	setbuf(stdout, stdout_buff);
+}
+
+void ck_error_msg(char *s)
+{
+	ck_assert_msg(strstr(stderr_buff, s) != NULL, "err=\"%s\" doesn't contain \"%s\" ",
+		      stderr_buff, s);
 }

@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <errno.h>
 
 #define BIT(n)			(1UL << (n))
 
@@ -31,6 +32,17 @@ void debug(const char *format, ...);
 		fprintf(stderr, "%s:%i: ", __FILE__, __LINE__);		\
 		err(__VA_ARGS__);					\
 		exit(EXIT_FAILURE);					\
+	} while (0)
+
+#define ret_err(e, ...)                                             \
+	do {                                                        \
+		if (errno == 0) {                                   \
+			err(__VA_ARGS__);                           \
+		} else {                                            \
+			fprintf(stderr, __VA_ARGS__);               \
+			fprintf(stderr, ": %s\n", strerror(errno)); \
+		}                                                   \
+		return (e);                                         \
 	} while (0)
 
 /**
