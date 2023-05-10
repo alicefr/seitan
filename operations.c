@@ -177,7 +177,10 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 		ret = -1;
 		goto out;
 	}
-	check_gluten_limits(&g, load->dst, load->size);
+	if (!check_gluten_limits(load->dst, load->size)) {
+		ret = -1;
+		goto out;
+	}
 	if (pread(fd, gluten_write_ptr(g, load->dst), load->size, *src) < 0) {
 		perror("pread");
 		return -1;
@@ -233,7 +236,7 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	 * reference
 	 */
 	if (op->has_ret)
-		gluten_write(g, op->ret, c.ret);
+		return gluten_write(g, op->ret, &c.ret, sizeof(c.ret));
 
 	return 0;
 }
@@ -264,7 +267,8 @@ int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	resp.flags = 0;
 	resp.error = 0;
 
-	gluten_read(NULL, g, resp.val, op->val, sizeof(resp.val));
+	if (gluten_read(&req->data, g, &resp.val, op->val, sizeof(resp.val)) == -1)
+		return -1;
 
 	if (send_target(&resp, notifier) == -1)
 		return -1;
@@ -300,8 +304,10 @@ static int do_inject(const struct seccomp_notif *req, int notifier,
 	resp.newfd_flags = 0;
 	resp.id = req->id;
 
-	gluten_read(NULL, g, resp.newfd, op->new_fd, sizeof(resp.newfd));
-	gluten_read(NULL, g, resp.srcfd, op->old_fd, sizeof(resp.srcfd));
+	if(gluten_read(NULL, g, &resp.newfd, op->new_fd, sizeof(resp.newfd)) == -1)
+		return -1;
+	if(gluten_read(NULL, g, &resp.srcfd, op->old_fd, sizeof(resp.srcfd)) == -1)
+		return -1;
 
 	if (atomic)
 		resp.flags |= SECCOMP_ADDFD_FLAG_SEND;
@@ -351,8 +357,10 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 	(void)notifier;
 
 
-	gluten_read(NULL, g, path, op->path, sizeof(op->path_size));
-	gluten_read(NULL, g, fd, op->fd, sizeof(fd));
+	if(gluten_read(NULL, g, &path, op->path, sizeof(op->path_size)) == -1)
+		return -1;
+	if(gluten_read(NULL, g, &fd, op->fd, sizeof(fd)) == -1)
+		return -1;
 
 	snprintf(fdpath, PATH_MAX, "/proc/%d/fd/%d", req->pid, fd);
 	if ((nbytes = readlink(fdpath, buf, op->path_size)) < 0) {
@@ -366,12 +374,12 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 	return 0;
 }
 
-void eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
+int eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
 	  int notifier)
 {
 	struct op *op = ops;
 
-	while (op->type != OP_END && op != NULL) {
+	while (op->type != OP_END) {
 		switch (op->type) {
 			HANDLE_OP(OP_CALL, op_call, call);
 			HANDLE_OP(OP_BLOCK, op_block, block);
@@ -384,7 +392,7 @@ void eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
 			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd);
 		default:
 			fprintf(stderr, "unknown operation %d \n", op->type);
-			return;
 		}
 	}
+	return 0;
 }

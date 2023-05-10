@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -31,6 +30,7 @@ START_TEST(test_bound_check)
 {
 	struct op ops[] = {
 		{ OP_RETURN, { { 0 } } },
+		{ OP_END, { { 0 } } },
 	};
 	ops[0].op.ret.val.offset = test_max_size_data[_i].offset;
 	ops[0].op.ret.val.type = test_max_size_data[_i].type;
@@ -45,9 +45,10 @@ START_TEST(test_write_op_return)
 		  { .call = { .nr = __NR_getpid,
 			      .has_ret = true,
 			      .ret = { OFFSET_DATA, DATA_SIZE - 1 } } } },
+		{ OP_END, { { 0 } } },
 	};
 
-	eval(&gluten, ops, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
 }
 
 START_TEST(test_write_op_load)
@@ -58,20 +59,28 @@ START_TEST(test_write_op_load)
 		  { .load = { { OFFSET_SECCOMP_DATA, 1 },
 			      { OFFSET_DATA, DATA_SIZE - 1 },
 			      sizeof(a) } } },
+		{ OP_END, { { 0 } } },
 	};
 
-	eval(&gluten, ops, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
 }
+
+struct gluten_offset test_max_size_read_data[] = {
+	{ OFFSET_DATA, DATA_SIZE },
+	{ OFFSET_RO_DATA, RO_DATA_SIZE },
+	{ OFFSET_SECCOMP_DATA, 6 },
+};
 
 START_TEST(test_read_op_return)
 {
 	struct op ops[] = {
 		{ OP_RETURN, { { 0 } } },
+		{ OP_END, { { 0 } } },
 	};
-	ops[0].op.ret.val.offset = test_max_size_data[_i].offset - 1;
-	ops[0].op.ret.val.type = test_max_size_data[_i].type;
+	ops[0].op.ret.val.offset = test_max_size_read_data[_i].offset - 1;
+	ops[0].op.ret.val.type = test_max_size_read_data[_i].type;
 
-	eval(&gluten, ops, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
 }
 
 Suite *error_suite(void)
@@ -82,21 +91,22 @@ Suite *error_suite(void)
 	s = suite_create("Error handling");
 
 	bounds = tcase_create("bound checks");
-	tcase_add_loop_exit_test(bounds, test_bound_check, EXIT_FAILURE, 0,
-				 sizeof(test_max_size_data) /
-					 sizeof(test_max_size_data[0]));
+	tcase_add_loop_test(bounds, test_bound_check, 0,
+			    sizeof(test_max_size_data) /
+				    sizeof(test_max_size_data[0]));
 	suite_add_tcase(s, bounds);
 
 	gwrite = tcase_create("write gluten");
 	tcase_add_checked_fixture(gwrite, setup_error_check, teardown);
-	tcase_add_exit_test(gwrite, test_write_op_return, EXIT_FAILURE);
-	tcase_add_exit_test(gwrite, test_write_op_load, EXIT_FAILURE);
+	tcase_add_test(gwrite, test_write_op_return);
+	tcase_add_test(gwrite, test_write_op_load);
 	suite_add_tcase(s, gwrite);
 
 	gread = tcase_create("read gluten");
-	tcase_add_loop_exit_test(gread, test_read_op_return, EXIT_FAILURE, 0,
-				 sizeof(test_max_size_data) /
-					 sizeof(test_max_size_data[0]));
+	tcase_add_checked_fixture(gread, setup_error_check, teardown);
+	tcase_add_loop_test(gread, test_read_op_return, 0,
+			    sizeof(test_max_size_read_data) /
+				    sizeof(test_max_size_read_data[0]));
 	suite_add_tcase(s, gread);
 
 	return s;

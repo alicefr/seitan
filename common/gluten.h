@@ -12,6 +12,8 @@
 #include <stdbool.h>
 #include <linux/seccomp.h>
 
+#include <stdio.h>
+
 #include "util.h"
 
 extern struct seccomp_data anonymous_seccomp_data;
@@ -26,30 +28,6 @@ extern struct seccomp_data anonymous_seccomp_data;
 	MAX(MAX(MAX(DATA_SIZE, RO_DATA_SIZE), INST_MAX), \
 	    ARRAY_SIZE(anonymous_seccomp_data.args))
 
-#define check_gluten_limits(g, v, size)                                   \
-	do {                                                              \
-		struct gluten_offset off = { v.type, v.offset + (size) }; \
-		if (!is_offset_valid(off))                                \
-			die(" invalid offset: %d", off.offset);           \
-	} while (0)
-
-#define gluten_write(g, dst, src)                               \
-	do {                                                    \
-		void *p = gluten_write_ptr((g), (dst));         \
-		check_gluten_limits((g), (dst), sizeof((src))); \
-		if (p == NULL)                                  \
-			die(" invalid type of offset");         \
-		memcpy(p, &(src), sizeof(src));                 \
-	} while (0)
-
-#define gluten_read(s, g, dst, src, size)                    \
-	do {                                                 \
-		const void *p = gluten_ptr((s), (g), (src)); \
-		check_gluten_limits((g), (src), (size));     \
-		if (p == NULL)                               \
-			die(" invalid type of offset");      \
-		memcpy(&(dst), p, (size));      \
-	} while (0)
 
 enum gluten_offset_type {
 	OFFSET_RO_DATA = 0,
@@ -242,7 +220,7 @@ static inline void *gluten_write_ptr(struct gluten *g,
 #endif
 {
 	if (!is_offset_valid(x))
-		die(" invalid offset: %d", x.offset);
+		return NULL;
 
 	switch (x.type) {
 	case OFFSET_DATA:
@@ -264,7 +242,7 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 				     const struct gluten_offset x)
 {
 	if (!is_offset_valid(x))
-		die(" invalid offset: %d", x.offset);
+		return NULL;
 
 	switch (x.type) {
 	case OFFSET_DATA:
@@ -279,5 +257,35 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 		return NULL;
 	}
 }
+
+static inline bool check_gluten_limits(struct gluten_offset v, size_t size)
+{
+	struct gluten_offset off = { v.type, v.offset + size };
+	return is_offset_valid(off);
+}
+
+static inline int gluten_write(struct gluten *g, struct gluten_offset dst,
+			       const void *src, size_t size)
+{
+	void *p = gluten_write_ptr(g, dst);
+	if (p == NULL || !check_gluten_limits(dst, size))
+		return -1;
+	memcpy(p, src, size);
+
+	return 0;
+}
+
+static inline int gluten_read(const struct seccomp_data *s, struct gluten *g,
+			      void *dst, const struct gluten_offset src,
+			      size_t size)
+{
+	const void *p = gluten_ptr(s, g, src);
+	if (p == NULL || !check_gluten_limits(src, size))
+		return -1;
+	memcpy(dst, p, size);
+
+	return 0;
+}
+
 #endif
 #endif /* COMMON_GLUTEN_H */

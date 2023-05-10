@@ -21,7 +21,7 @@
 			if (res == 0)                                   \
 				(op)++;                                 \
 			else if (res == -1)                             \
-				(op) = NULL;                            \
+				return -1;                            \
 			else                                            \
 				(op) += res;                            \
 		} while (0);                                            \
@@ -35,7 +35,7 @@ struct arg_clone {
 };
 
 int do_call(struct arg_clone *c);
-void eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
+int eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
 	  int notifier);
 int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_call *op);

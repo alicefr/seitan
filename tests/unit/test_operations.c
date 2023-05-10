@@ -136,7 +136,7 @@ START_TEST(test_op_call)
 		{ 0 },
 	};
 
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
 }
 END_TEST
@@ -153,7 +153,7 @@ START_TEST(test_op_call_ret)
 		{ 0 },
 	};
 
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
 	ck_read_gluten(gluten, operations[0].op.call.ret, r);
 	ck_assert(r == getpid());
@@ -218,7 +218,7 @@ START_TEST(test_op_load)
 	int v = 2;
 
 	ck_write_gluten(gluten, operations[1].op.ret.val, v);
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result(v, 0, false);
 
 	ck_read_gluten(gluten, operations[0].op.load.dst, addr);
@@ -246,7 +246,7 @@ static void test_op_cmp_int(int a, int b, enum op_cmp_type cmp)
 	ck_write_gluten(gluten, operations[0].op.cmp.x, a);
 	ck_write_gluten(gluten, operations[0].op.cmp.y, b);
 
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
 
@@ -306,7 +306,7 @@ START_TEST(test_op_cmp_string_eq)
 	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
 	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
 
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
 END_TEST
@@ -332,7 +332,7 @@ START_TEST(test_op_cmp_string_false)
 	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
 	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
 
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
 END_TEST
@@ -355,7 +355,7 @@ START_TEST(test_op_resolvedfd_eq)
 	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
 	ck_write_gluten(gluten, operations[0].op.resfd.path, path);
 
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result(-1, 1, false);
 }
 END_TEST
@@ -379,7 +379,7 @@ START_TEST(test_op_resolvedfd_neq)
 	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
 	ck_write_gluten(gluten, operations[0].op.resfd.path, path2);
 
-	eval(&gluten, operations, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result(-1, 1, false);
 }
 END_TEST
