@@ -244,6 +244,9 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 	if (!is_offset_valid(x))
 		return NULL;
 
+	if(x.type == OFFSET_SECCOMP_DATA && s == NULL)
+		return NULL;
+
 	switch (x.type) {
 	case OFFSET_DATA:
 		return g->data + x.offset;

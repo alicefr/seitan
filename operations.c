@@ -304,9 +304,9 @@ static int do_inject(const struct seccomp_notif *req, int notifier,
 	resp.newfd_flags = 0;
 	resp.id = req->id;
 
-	if(gluten_read(NULL, g, &resp.newfd, op->new_fd, sizeof(resp.newfd)) == -1)
+	if(gluten_read(&req->data, g, &resp.newfd, op->new_fd, sizeof(resp.newfd)) == -1)
 		return -1;
-	if(gluten_read(NULL, g, &resp.srcfd, op->old_fd, sizeof(resp.srcfd)) == -1)
+	if(gluten_read(&req->data, g, &resp.srcfd, op->old_fd, sizeof(resp.srcfd)) == -1)
 		return -1;
 
 	if (atomic)
@@ -366,7 +366,7 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 
 	if(gluten_read(NULL, g, &path, op->path, sizeof(op->path_size)) == -1)
 		return -1;
-	if(gluten_read(NULL, g, &fd, op->fd, sizeof(fd)) == -1)
+	if(gluten_read(&req->data, g, &fd, op->fd, sizeof(fd)) == -1)
 		return -1;
 
 	snprintf(fdpath, PATH_MAX, "/proc/%d/fd/%d", req->pid, fd);
