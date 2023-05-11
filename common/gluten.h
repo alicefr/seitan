@@ -28,6 +28,8 @@ extern struct seccomp_data anonymous_seccomp_data;
 	MAX(MAX(MAX(DATA_SIZE, RO_DATA_SIZE), INST_MAX), \
 	    ARRAY_SIZE(anonymous_seccomp_data.args))
 
+#define OP_EMPTY { .block = { -1 } }
+#define NO_FIELD block
 
 enum gluten_offset_type {
 	OFFSET_RO_DATA = 0,
@@ -50,17 +52,18 @@ BUILD_BUG_ON(BITS_PER_NUM(OFFSET_TYPE_MAX) + BITS_PER_NUM(OFFSET_MAX) > 16)
 
 enum ns_spec_type {
 	NS_NONE,
+	/* Read the pid from seccomp_data */
 	NS_SPEC_TARGET,
+	/* Read the pid from gluten */
 	NS_SPEC_PID,
 	NS_SPEC_PATH,
 };
 
 struct ns_spec {
 	enum ns_spec_type type;
-	union {
-		pid_t pid;
-		char *path;
-	} id;
+	/* Pid or path based on the type */
+	struct gluten_offset id;
+	size_t size;
 };
 
 /*
@@ -99,24 +102,20 @@ enum op_type {
 };
 
 struct op_nr {
-	long nr;
+	struct gluten_offset nr;
 	struct gluten_offset no_match;
 };
 
 struct op_call {
-	long nr;
-	bool has_ret;
-	void *args[6];
+	struct gluten_offset nr;
+	struct gluten_offset args[6];
 	struct op_context context;
 	struct gluten_offset ret;
+	bool has_ret;
 };
 
 struct op_block {
 	int32_t error;
-};
-
-struct op_continue {
-	bool cont;
 };
 
 struct op_return {
@@ -163,7 +162,6 @@ struct op {
 	union {
 		struct op_nr nr;
 		struct op_call call;
-		struct op_continue cont;
 		struct op_block block;
 		struct op_return ret;
 		struct op_inject inject;

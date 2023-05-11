@@ -27,9 +27,14 @@
 		} while (0);                                            \
 		break
 
+struct ns_path {
+	char path[PATH_MAX];
+};
+
 struct arg_clone {
-	const struct op_call *args;
-	pid_t pid;
+	long nr;
+	void *args[6];
+	struct ns_path ns[sizeof(enum ns_type)];
 	long ret;
 	int err;
 };

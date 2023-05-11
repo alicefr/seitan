@@ -129,13 +129,12 @@ END_TEST
 
 START_TEST(test_op_call)
 {
-	struct op operations[] = {
-		{ OP_CALL, { .call = { __NR_getppid, false } } },
-		{ OP_CONT, { { 0 } } },
-		{ OP_END, { { 0 } } },
-		{ 0 },
-	};
-
+	long nr = __NR_getppid;
+	struct op operations[] = { { OP_CALL,
+				     { .call = { .nr = { OFFSET_DATA, 0 } } } },
+				   { OP_CONT, OP_EMPTY },
+				   { OP_END, OP_EMPTY } };
+	ck_write_gluten(gluten, operations[0].op.call.nr, nr);
 	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
 }
@@ -143,16 +142,18 @@ END_TEST
 
 START_TEST(test_op_call_ret)
 {
+	long nr = __NR_getppid;
 	long r;
 	struct op operations[] = {
 		{ OP_CALL,
-		  { .call = { __NR_getppid, true,
-			      .ret = { .type = OFFSET_DATA, .offset = 0 } } } },
-		{ OP_CONT, { { 0 } } },
-		{ OP_END, { { 0 } } },
-		{ 0 },
+		  { .call = { .nr = { OFFSET_DATA, 0 },
+			      .ret = { OFFSET_DATA, sizeof(nr) },
+			      .has_ret = true } } },
+		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 	};
 
+	ck_write_gluten(gluten, operations[0].op.call.nr, nr);
 	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
 	ck_read_gluten(gluten, operations[0].op.call.ret, r);
@@ -211,8 +212,7 @@ START_TEST(test_op_load)
 			      sizeof(struct sockaddr_un) } } },
 		{ OP_RETURN,
 		  { .ret = { { OFFSET_DATA, sizeof(struct sockaddr_un) } } } },
-		{ OP_END, { { 0 } } },
-		{ 0 },
+		{ OP_END, OP_EMPTY },
 	};
 	struct sockaddr_un addr;
 	int v = 2;
@@ -237,9 +237,9 @@ static void test_op_cmp_int(int a, int b, enum op_cmp_type cmp)
 			     cmp,
 			     3 } } },
 		{ OP_BLOCK, { .block = { -1 } } },
-		{ OP_END, { { 0 } } },
-		{ OP_CONT, { { 0 } } },
-		{ OP_END, { { 0 } } },
+		{ OP_END, OP_EMPTY },
+		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 		{ 0 },
 	};
 
@@ -298,9 +298,9 @@ START_TEST(test_op_cmp_string_eq)
 			     CMP_EQ,
 			     3 } } },
 		{ OP_BLOCK, { .block = { -1 } } },
-		{ OP_END, { { 0 } } },
-		{ OP_CONT, { { 0 } } },
-		{ OP_END, { { 0 } } },
+		{ OP_END, OP_EMPTY },
+		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 		{ 0 },
 	};
 	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
@@ -322,10 +322,10 @@ START_TEST(test_op_cmp_string_false)
 			     sizeof(s1),
 			     CMP_EQ,
 			     2 } } },
-		{ OP_CONT, { { 0 } } },
-		{ OP_END, { { 0 } } },
+		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 		{ OP_BLOCK, { .block = { -1 } } },
-		{ OP_END, { { 0 } } },
+		{ OP_END, OP_EMPTY },
 		{ 0 },
 	};
 
@@ -346,9 +346,9 @@ START_TEST(test_op_resolvedfd_eq)
 			       sizeof(path),
 			       3 } } },
 		{ OP_BLOCK, { .block = { -1 } } },
-		{ OP_END, { { 0 } } },
-		{ OP_CONT, { { 0 } } },
-		{ OP_END, { { 0 } } },
+		{ OP_END, OP_EMPTY },
+		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 		{ 0 },
 	};
 
@@ -370,10 +370,9 @@ START_TEST(test_op_resolvedfd_neq)
 			       sizeof(path),
 			       3 } } },
 		{ OP_BLOCK, { .block = { -1 } } },
-		{ OP_END, { { 0 } } },
-		{ OP_CONT, { { 0 } } },
-		{ OP_END, { { 0 } } },
-		{ 0 },
+		{ OP_END, OP_EMPTY },
+		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 	};
 
 	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);

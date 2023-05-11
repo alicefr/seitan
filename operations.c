@@ -84,35 +84,58 @@ static void proc_ns_name(unsigned i, char *ns)
 	}
 }
 
-static int set_namespaces(const struct op_call *a, int tpid)
+static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
+			     const struct op_call *op, struct arg_clone *c)
 {
-	char path[PATH_MAX + 1];
 	char ns_name[PATH_MAX / 2];
-	struct ns_spec ns;
-	int fd;
+	const struct ns_spec *ns;
+	char p[PATH_MAX];
 	unsigned int i;
+	pid_t pid;
 
-	for (i = 0, ns = (a->context).ns[i]; i < sizeof(enum ns_type);
-	     i++, ns = (a->context).ns[i]) {
+	c->err = 0;
+	c->ret = -1;
+
+	if (gluten_read(NULL, g, &c->nr, op->nr, sizeof(c->nr)) == -1)
+		return -1;
+
+	for (i = 0; i < sizeof(enum ns_type); i++) {
+		ns = &op->context.ns[i];
 		proc_ns_name(i, ns_name);
-		switch (ns.type) {
+		switch (ns->type) {
 		case NS_NONE:
-			continue;
+			strncpy(c->ns[i].path, "", PATH_MAX);
+			break;
 		case NS_SPEC_TARGET:
-			snprintf(path, sizeof(path), "/proc/%d/ns/%s", tpid,
+			snprintf(c->ns[i].path, PATH_MAX, "/proc/%d/ns/%s", req->pid,
 				 ns_name);
 			break;
 		case NS_SPEC_PID:
-			snprintf(path, sizeof(path), "/proc/%d/ns/%s",
-				 ns.id.pid, ns_name);
+			if (gluten_read(NULL, g, &pid, ns->id, ns->size) == -1)
+				return -1;
+			snprintf(c->ns[i].path, PATH_MAX , "/proc/%d/ns/%s", pid,
+				 ns_name);
 			break;
 		case NS_SPEC_PATH:
-			snprintf(path, sizeof(path), "%s", ns.id.path);
+			if (gluten_read(NULL, g, &p, ns->id, ns->size) == -1)
+				return -1;
+			snprintf(c->ns[i].path, PATH_MAX , "%s", p);
 			break;
 		}
+	}
+	return 0;
+}
 
-		if ((fd = open(path, O_CLOEXEC)) < 0)
-			ret_err(-1, "open for file %s", path);
+static int set_namespaces(struct arg_clone *c)
+{
+	unsigned int i;
+	int fd;
+
+	for (i = 0; i < sizeof(enum ns_type); i++) {
+		if(strcmp(c->ns[i].path, "") == 0)
+			continue;
+		if ((fd = open(c->ns[i].path, O_CLOEXEC)) < 0)
+			ret_err(-1, "open for file %s", c->ns[i].path);
 
 		if (setns(fd, 0) != 0)
 			ret_err(-1, "setns");
@@ -122,17 +145,16 @@ static int set_namespaces(const struct op_call *a, int tpid)
 
 static int execute_syscall(void *args)
 {
-	struct arg_clone *a = (struct arg_clone *)args;
-	const struct op_call *c = a->args;
+	struct arg_clone *c = (struct arg_clone *)args;
 
-	if (set_namespaces(a->args, a->pid) < 0) {
+	if (set_namespaces(c) < 0) {
 		exit(EXIT_FAILURE);
 	}
 	/* execute syscall */
-	a->ret = syscall(c->nr, c->args[0], c->args[1], c->args[2], c->args[3],
+	c->ret = syscall(c->nr, c->args[0], c->args[1], c->args[2], c->args[3],
 			 c->args[4], c->args[5]);
-	a->err = errno;
-	if (a->ret < 0) {
+	c->err = errno;
+	if (c->ret < 0) {
 		perror("syscall");
 		exit(EXIT_FAILURE);
 	}
@@ -197,10 +219,8 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	resp.val = 0;
 	resp.flags = 0;
 	resp.error = 0;
-	c.args = op;
-	c.pid = req->pid;
-	c.err = 0;
 
+	prepare_arg_clone(req, g, op, &c);
 	if (do_call(&c) == -1) {
 		resp.error = -1;
 		if (send_target(&resp, notifier) == -1)
@@ -370,7 +390,7 @@ int eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
 			HANDLE_OP(OP_CALL, op_call, call);
 			HANDLE_OP(OP_BLOCK, op_block, block);
 			HANDLE_OP(OP_RETURN, op_return, ret);
-			HANDLE_OP(OP_CONT, op_continue, cont);
+			HANDLE_OP(OP_CONT, op_continue, NO_FIELD);
 			HANDLE_OP(OP_INJECT_A, op_inject_a, inject);
 			HANDLE_OP(OP_INJECT, op_inject, inject);
 			HANDLE_OP(OP_LOAD, op_load, load);

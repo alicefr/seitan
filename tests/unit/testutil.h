@@ -16,7 +16,7 @@
 #include "common/gluten.h"
 
 #define STACK_SIZE (1024 * 1024 / 8)
-
+#define _EMPTY_ { .cont = { false } }
 static inline void *test_gluten_write_ptr(struct gluten *g,
 					  const struct gluten_offset x)
 {
