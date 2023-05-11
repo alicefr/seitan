@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright 2023 Red Hat GmbH
+ * Author: Alice Frosi <afrosi@redhat.com>
+ */
+
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
