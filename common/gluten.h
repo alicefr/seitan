@@ -98,11 +98,6 @@ enum op_type {
 	OP_END,
 };
 
-enum value_type {
-	IMMEDIATE,
-	REFERENCE,
-};
-
 struct op_nr {
 	long nr;
 	struct gluten_offset no_match;
