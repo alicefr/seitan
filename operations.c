@@ -99,6 +99,11 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 	if (gluten_read(NULL, g, &c->nr, op->nr, sizeof(c->nr)) == -1)
 		return -1;
 
+	for (i = 0; i < 6; i++)
+		if (gluten_read(NULL, g, &c->args[i], op->nr,
+				sizeof(c->args[i])) == -1)
+			return -1;
+
 	for (i = 0; i < sizeof(enum ns_type); i++) {
 		ns = &op->context.ns[i];
 		proc_ns_name(i, ns_name);
