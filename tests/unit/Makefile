@@ -16,8 +16,9 @@ SRCS_FILTER := $(COOKER_DIR)/filter.c $(COMMON_DIR)/common.c util.c \
 HEADERS_FILTER := $(COOKER_DIR)/filter.h $(COMMON_DIR)/common.h \
 		  $(DBG_DIR)/disasm.h testutil.h
 
-HEADERS_OP_CALL := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h
-SRCS_OP_CALL := $(OP_DIR)/operations.c
+HEADERS_OP_CALL := testutil.h $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
+                   $(COMMON_DIR)/common.h $(COMMON_DIR)/util.h
+SRCS_OP_CALL := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c $(COMMON_DIR)/util.c
 
 HEADERS_OP := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
 		   $(COMMON_DIR)/common.h testutil.h $(COMMON_DIR)/util.h

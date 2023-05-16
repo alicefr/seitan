@@ -14,17 +14,26 @@
 #include <sched.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
+#include <sys/mman.h>
 
 #include <check.h>
 
 #include "common/gluten.h"
 #include "operations.h"
+#include "testutil.h"
 
 struct args_write_file {
 	char *file;
 	char *t;
 	ssize_t size;
 };
+
+static long nr;
+
+static void write_arg(struct op_call *call, int i, long v)
+{
+	ck_write_gluten(gluten, call->args[i], v);
+}
 
 static void write_file(char *file, char *t, ssize_t size)
 {
@@ -50,159 +59,174 @@ static int write_file_clone(void *a)
 {
 	struct args_write_file *args = (struct args_write_file *)a;
 	write_file(args->file, args->t, args->size);
-	pause();
+	install_single_syscall(SYS_getpid);
+	getpid();
 	return 0;
 }
 
-static pid_t create_func_ns(int (*fn)(void *), void *arg, struct ns_spec ns[])
+static void set_ns_to_none(struct op_call *call)
 {
-	char stack[STACK_SIZE];
-	pid_t child;
-	int flags = SIGCHLD;
-	unsigned int i;
-
-	for (i = 0; i < sizeof(sizeof(enum ns_type)); i++) {
-		if (ns[i].type == NS_NONE)
-			continue;
-		switch (i) {
-		case NS_CGROUP:
-			flags |= CLONE_NEWCGROUP;
-			break;
-		case NS_IPC:
-			flags |= CLONE_NEWIPC;
-			break;
-		case NS_NET:
-			flags |= CLONE_NEWNET;
-			break;
-		case NS_MOUNT:
-			flags |= CLONE_NEWNS;
-			break;
-		case NS_PID:
-			flags |= CLONE_NEWPID;
-			break;
-		case NS_USER:
-			flags |= CLONE_NEWUSER;
-			break;
-		case NS_UTS:
-			flags |= CLONE_NEWUTS;
-			break;
-		case NS_TIME:
-			fprintf(stderr,
-				"option NS_TIME not suppoted by clone\n");
-			break;
-		default:
-			fprintf(stderr, "unrecognized option %d\n", i);
-		}
-	}
-	child = clone(fn, stack + sizeof(stack), flags, arg);
-	if (child == -1) {
-		perror("clone");
-		exit(EXIT_FAILURE);
-	}
-	return child;
+	for (unsigned int i = 0; i < NS_NUM; i++)
+		call->context.ns[i].type = NS_NONE;
 }
 
-START_TEST(test_with_open_read_ns)
+static void setup_ns(struct args_write_file *args)
 {
-	char test_file[] = "/tmp/test.txt";
-	char t[PATH_MAX] = "Hello Test";
-	struct args_write_file args = { test_file, t, sizeof(t) };
-	struct op_call call;
-	int flags = O_RDWR;
-	struct arg_clone c;
-	char buf[PATH_MAX];
-	unsigned i;
-	long count;
-	pid_t pid;
-	int ret;
-
-	c.args = &call;
-	count = sizeof(buf);
-	for (i = 0; i < sizeof(enum ns_type); i++)
-		call.context.ns[i].type = NS_NONE;
-	call.context.ns[NS_MOUNT].type = NS_SPEC_PID;
-	pid = create_func_ns(write_file_clone, (void *)&args, call.context.ns);
-	call.context.ns[NS_MOUNT].id.pid = pid;
-	call.nr = SYS_open;
-	call.args[0] = (void *)&test_file;
-	call.args[1] = (void *)(long)flags;
-	ret = do_call(&c);
-	ck_assert_int_eq(ret, 0);
-	ck_assert_msg(c.ret >= 0, "expect ret %ld should be nonegative", c.ret);
-
-	call.nr = SYS_read;
-	call.args[0] = (void *)(long)c.ret;
-	call.args[1] = (void *)&buf;
-	call.args[2] = (void *)count;
-	ret = do_call(&c);
-	kill(pid, SIGCONT);
-
-	ck_assert_int_eq(ret, 0);
-	ck_assert_msg(c.ret == count, "expect ret %ld to be %ld", c.ret, count);
-	ck_assert_str_eq(t, buf);
+        at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
+                  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	at->nr = __NR_getpid;
+	at->target = write_file_clone;
+	at->tclone = (void *)args;
+	at->ns[NS_MOUNT] = true;
+	setup();
 }
-END_TEST
 
 START_TEST(test_with_read)
 {
 	char test_file[] = "/tmp/test.txt";
 	char t[PATH_MAX] = "Hello Test";
-	struct op_call call;
-	struct arg_clone c;
+	struct op_call call = {
+		{ OFFSET_RO_DATA, 0 },
+		{
+			{ OFFSET_DATA, 0 },
+			{ OFFSET_DATA, sizeof(long) },
+			{ OFFSET_DATA, sizeof(long) * 2 },
+		},
+		.has_ret = true,
+		.ret = { OFFSET_DATA, sizeof(long) * 3 },
+	};
 	char buf[PATH_MAX];
-	unsigned i;
-	long count;
-	int fd, ret;
+	long count, ret;
+	int fd;
 
-	c.args = &call;
 	fd = write_file_get_fd(test_file, t, sizeof(t));
 	count = sizeof(buf);
-	for (i = 0; i < sizeof(enum ns_type); i++)
+	for (unsigned int i = 0; i < NS_NUM; i++)
 		call.context.ns[i].type = NS_NONE;
-	call.nr = SYS_read;
-	call.args[0] = (void *)(long)fd;
-	call.args[1] = (void *)&buf;
-	call.args[2] = (void *)count;
-	ret = do_call(&c);
 
-	ck_assert_int_eq(ret, 0);
-	ck_assert_msg(c.ret == count, "expect ret %ld to be %ld", c.ret, count);
+	nr = SYS_read;
+	ck_write_gluten(gluten, call.nr, nr);
+	write_arg(&call, 0, (long)fd);
+	write_arg(&call, 1, (long)&buf);
+	write_arg(&call, 2, (long)count);
+	nr = SYS_read;
+
+	ck_assert_int_eq(op_call(&req, notifyfd, &gluten, &call), 0);
+
+	ck_read_gluten(gluten, call.ret, ret);
+	ck_assert_msg(ret == count, "expect ret %ld to be %ld", ret, count);
 	ck_assert_str_eq(t, buf);
 }
 END_TEST
 
 START_TEST(test_with_getppid)
 {
-	struct op_call call;
-	struct arg_clone c;
-	unsigned i;
+	struct op_call call = {
+		.nr = { OFFSET_RO_DATA, 0 },
+		.has_ret = true,
+		.ret = { OFFSET_DATA, 0 },
+	};
 	long pid = (long)getpid();
-	int ret;
+	int ret = -1;
 
-	for (i = 0; i < sizeof(enum ns_type); i++)
+	for (unsigned int i = 0; i < NS_NUM; i++)
 		call.context.ns[i].type = NS_NONE;
-	call.nr = SYS_getppid;
-	c.args = &call;
-	ret = do_call(&c);
-	ck_assert_int_eq(ret, 0);
-	ck_assert_msg(c.ret == pid, "expect ret %ld to be equal to %ld", c.ret,
-		      pid);
+
+	nr = SYS_getppid;
+	ck_write_gluten(gluten, call.nr, nr);
+
+	ck_assert_int_eq(op_call(&req, notifyfd, &gluten, &call), 0);
+
+	ck_read_gluten(gluten, call.ret, ret);
+	ck_assert_msg(ret == pid, "expect ret %d to be equal to %ld", ret, pid);
 }
 END_TEST
+
+START_TEST(test_with_open_read_ns)
+{
+	char test_file[] = "/tmp/test.txt";
+	char t[PATH_MAX] = "Hello Test";
+	struct args_write_file args = { test_file, t, sizeof(t) };
+	struct op_call *call;
+	struct op ops[] = {
+		{ OP_CALL,
+		  { .call = { { OFFSET_RO_DATA, 0 }, /* open */
+			      {
+				      { OFFSET_DATA, 0 },
+				      { OFFSET_DATA, sizeof(long) },
+				      { OFFSET_DATA, sizeof(long) * 2 },
+			      },
+			      .has_ret = true,
+			      .ret = { OFFSET_DATA, sizeof(long) * 3 } } } },
+		{ OP_CALL,
+		  { .call = { { OFFSET_RO_DATA, sizeof(long) }, /* read */
+			      {
+				      { OFFSET_DATA, sizeof(long) * 3 }, /* ret of the previous call*/
+				      { OFFSET_DATA, sizeof(long) * 5 },
+				      { OFFSET_DATA, sizeof(long) * 6 },
+			      },
+			      .has_ret = true,
+			      .ret = { OFFSET_DATA, sizeof(long) * 7 } } } },
+		{ OP_END, OP_EMPTY },
+
+	};
+	int flags = O_RDWR;
+	char buf[PATH_MAX];
+	long count, rcount;
+
+	setup_ns(&args);
+
+	/* Copy and configure op_calls */
+	set_ns_to_none(&ops[0].op.call);
+	set_ns_to_none(&ops[1].op.call);
+
+	nr = SYS_open;
+	call = &ops[0].op.call;
+	ck_write_gluten(gluten, call->nr, nr);
+	write_arg(call, 0, (long)&test_file);
+	write_arg(call, 1, (long)flags);
+	call->context.ns[NS_MOUNT].type = NS_SPEC_TARGET;
+
+	nr = SYS_read;
+	call = &ops[1].op.call;
+	count = sizeof(buf);
+	ck_write_gluten(gluten, call->nr, nr);
+	write_arg(call, 1, (long)&buf);
+	write_arg(call, 2, (long)count);
+	call->context.ns[NS_MOUNT].type = NS_SPEC_TARGET;
+
+	write_instr(gluten, ops);
+
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
+	ck_read_gluten(gluten, ops[1].op.call.ret, rcount);
+	ck_assert_msg(rcount == count, "expect ret %ld to be %ld", rcount, count);
+	ck_assert_str_eq(t, buf);
+}
+END_TEST
+
 
 Suite *op_call_suite(void)
 {
 	Suite *s;
-	TCase *tops;
+	TCase *tsimple, *tread, *treadns;
+	int timeout = 30;
 
 	s = suite_create("Perform ops call");
-	tops = tcase_create("op calls");
 
-	tcase_add_test(tops, test_with_getppid);
-	tcase_add_test(tops, test_with_read);
-	tcase_add_test(tops, test_with_open_read_ns);
+	tsimple = tcase_create("getppid");
+	tcase_add_test(tsimple, test_with_getppid);
+	suite_add_tcase(s, tsimple);
 
-	suite_add_tcase(s, tops);
+	tread = tcase_create("read");
+	tcase_add_test(tread, test_with_read);
+	suite_add_tcase(s, tread);
+
+	treadns = tcase_create("read ns");
+
+	tcase_add_checked_fixture(treadns, NULL, teardown);
+	tcase_set_timeout(treadns, timeout);
+	tcase_add_test(treadns, test_with_open_read_ns);
+	suite_add_tcase(s, treadns);
 
 	return s;
 }

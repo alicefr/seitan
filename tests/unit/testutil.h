@@ -34,6 +34,12 @@ static inline void *test_gluten_write_ptr(struct gluten *g,
 	}
 }
 
+#define write_instr(gluten, ops)                                              \
+	do {                                                                  \
+		struct gluten_offset x = { OFFSET_INSTRUCTION, 0 };           \
+		memcpy(test_gluten_write_ptr(&gluten, x), &ops, sizeof(ops)); \
+	} while (0)
+
 #define ck_write_gluten(gluten, value, ref)                            \
 	do {                                                           \
 		void *p = test_gluten_write_ptr(&gluten, value);       \
@@ -58,6 +64,8 @@ struct args_target {
 	bool filter_args[6];
 	struct bpf_arg args[6];
 	void *targs[6];
+	void *tclone;
+	bool ns[NS_NUM];
 	int (*install_filter)(struct args_target *at);
 	int (*target)(void *);
 };
@@ -74,7 +82,6 @@ extern char stdout_buff[BUFSIZ];
 extern struct gluten gluten;
 
 int target();
-pid_t do_clone(int (*fn)(void *), void *arg);
 int create_test_fd();
 int get_fd_notifier(pid_t pid);
 void target_exit();
@@ -91,4 +98,5 @@ void check_target_result_nonegative();
 void ck_error_msg(char *s);
 void ck_stderr();
 void ck_stdout();
+int install_single_syscall(long nr);
 #endif /* TESTUTIL_H */

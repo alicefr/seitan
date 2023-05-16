@@ -32,6 +32,8 @@ extern struct seccomp_data anonymous_seccomp_data;
 #define OP_EMPTY { .block = { -1 } }
 #define NO_FIELD block
 
+#define NS_NUM sizeof(enum ns_type)
+
 enum gluten_offset_type {
 	OFFSET_RO_DATA = 0,
 	OFFSET_DATA = 1,
@@ -183,7 +185,7 @@ struct op {
 	} op;
 };
 
-#ifdef COOKER
+#if defined(COOKER) || defined(SEITAN_TEST)
 # define GLUTEN_CONST
 #else
 # define GLUTEN_CONST const
@@ -269,7 +271,11 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 static inline bool check_gluten_limits(struct gluten_offset v, size_t size)
 {
 	struct gluten_offset off = { v.type, v.offset + size };
-	return is_offset_valid(off);
+	if (is_offset_valid(off))
+		return true;
+
+	err("  offset limits are invalid");
+	return false;
 }
 
 static inline int gluten_write(struct gluten *g, struct gluten_offset dst,

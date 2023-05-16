@@ -34,10 +34,10 @@ static bool is_cookie_valid(int notifyFd, uint64_t id)
 static int send_target(const struct seccomp_notif_resp *resp, int notifier)
 {
 	if (!is_cookie_valid(notifier, resp->id))
-		ret_err(-1, "the response id isn't valid");
+		ret_err(-1, "  the response id isn't valid");
 	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_SEND, resp) < 0)
 		if (errno != EINPROGRESS)
-			ret_err(-1, "sending the response");
+			ret_err(-1, "  sending the response");
 	return 0;
 }
 
@@ -45,10 +45,10 @@ static int send_inject_target(const struct seccomp_notif_addfd *resp,
 			      int notifier)
 {
 	if (!is_cookie_valid(notifier, resp->id))
-		ret_err(-1, "the response id isn't valid");
+		ret_err(-1, "  the response id isn't valid");
 	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_ADDFD, resp) < 0)
 		if (errno != EINPROGRESS)
-			ret_err(-1, "sending the response");
+			ret_err(-1, "  sending the response");
 	return 0;
 }
 
@@ -98,9 +98,8 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 
 	if (gluten_read(NULL, g, &c->nr, op->nr, sizeof(c->nr)) == -1)
 		return -1;
-
 	for (i = 0; i < 6; i++)
-		if (gluten_read(NULL, g, &c->args[i], op->nr,
+		if (gluten_read(NULL, g, &c->args[i], op->args[i],
 				sizeof(c->args[i])) == -1)
 			return -1;
 
@@ -112,19 +111,19 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 			strncpy(c->ns[i].path, "", PATH_MAX);
 			break;
 		case NS_SPEC_TARGET:
-			snprintf(c->ns[i].path, PATH_MAX, "/proc/%d/ns/%s", req->pid,
-				 ns_name);
+			snprintf(c->ns[i].path, PATH_MAX, "/proc/%d/ns/%s",
+				 req->pid, ns_name);
 			break;
 		case NS_SPEC_PID:
 			if (gluten_read(NULL, g, &pid, ns->id, ns->size) == -1)
 				return -1;
-			snprintf(c->ns[i].path, PATH_MAX , "/proc/%d/ns/%s", pid,
+			snprintf(c->ns[i].path, PATH_MAX, "/proc/%d/ns/%s", pid,
 				 ns_name);
 			break;
 		case NS_SPEC_PATH:
 			if (gluten_read(NULL, g, &p, ns->id, ns->size) == -1)
 				return -1;
-			snprintf(c->ns[i].path, PATH_MAX , "%s", p);
+			snprintf(c->ns[i].path, PATH_MAX, "%s", p);
 			break;
 		}
 	}
@@ -137,7 +136,7 @@ static int set_namespaces(struct arg_clone *c)
 	int fd;
 
 	for (i = 0; i < sizeof(enum ns_type); i++) {
-		if(strcmp(c->ns[i].path, "") == 0)
+		if (strcmp(c->ns[i].path, "") == 0)
 			continue;
 		if ((fd = open(c->ns[i].path, O_CLOEXEC)) < 0)
 			ret_err(-1, "open for file %s", c->ns[i].path);
@@ -160,7 +159,7 @@ static int execute_syscall(void *args)
 			 c->args[4], c->args[5]);
 	c->err = errno;
 	if (c->ret < 0) {
-		perror("syscall");
+		perror("  syscall");
 		exit(EXIT_FAILURE);
 	}
 	exit(0);
@@ -207,10 +206,9 @@ int do_call(struct arg_clone *c)
 
 	/* Create a process that will be moved to the namespace */
 	child = clone(execute_syscall, stack + sizeof(stack),
-		      CLONE_FILES | CLONE_VM | SIGCHLD, (void *)c);
+		      CLONE_FILES | CLONE_VM | CLONE_VFORK | SIGCHLD, (void *)c);
 	if (child == -1)
 		ret_err(-1, "clone");
-	wait(NULL);
 	return 0;
 }
 
@@ -225,13 +223,16 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	resp.flags = 0;
 	resp.error = 0;
 
-	prepare_arg_clone(req, g, op, &c);
+	if (prepare_arg_clone(req, g, op, &c) == -1)
+		return -1;
+	debug("  op_call: execute syscall nr=%ld", c.nr);
 	if (do_call(&c) == -1) {
 		resp.error = -1;
 		if (send_target(&resp, notifier) == -1)
 			return -1;
 	}
 	if (c.err != 0) {
+		err("  failed executing call: %s", strerror(c.err));
 		resp.error = -1;
 		if (send_target(&resp, notifier) == -1)
 			return -1;

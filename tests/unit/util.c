@@ -33,7 +33,7 @@ struct gluten gluten;
 char stderr_buff[BUFSIZ];
 char stdout_buff[BUFSIZ];
 
-int install_notification_filter(struct args_target *at)
+int install_single_syscall(long nr)
 {
 	/* filter a single syscall for the tests */
 	struct sock_filter filter[] = {
@@ -42,12 +42,17 @@ int install_notification_filter(struct args_target *at)
 		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SEITAN_AUDIT_ARCH, 0, 3),
 		BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 			 (offsetof(struct seccomp_data, nr))),
-		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, at->nr, 0, 1),
+		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, nr, 0, 1),
 		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 		BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
 	};
 	return install_filter(
 		filter, (unsigned short)(sizeof(filter) / sizeof(filter[0])));
+
+}
+int install_notification_filter(struct args_target *at)
+{
+	return install_single_syscall(at->nr);
 }
 
 int target()
@@ -76,18 +81,17 @@ int target()
         exit(0);
 }
 
-pid_t do_clone(int (*fn)(void *), void *arg)
+pid_t do_clone(int (*fn)(void *), void *arg, int flags)
 {
-        char stack[STACK_SIZE];
-        pid_t child;
-        int flags = SIGCHLD;
+	char stack[STACK_SIZE];
+	pid_t child;
 
-        child = clone(fn, stack + sizeof(stack), flags, arg);
-        if (child == -1) {
-                perror("clone");
-                return -1;
-        }
-        return child;
+	child = clone(fn, stack + sizeof(stack), flags, arg);
+	if (child == -1) {
+		perror("clone");
+		return -1;
+	}
+	return child;
 }
 
 int create_test_fd()
@@ -203,6 +207,46 @@ void set_args_no_check(struct args_target *at)
 		at->args[i].cmp = NO_CHECK;
 }
 
+static int set_ns_flags(bool ns[], int flags)
+{
+	unsigned int i;
+
+	for (i = 0; i < NS_NUM; i++) {
+		if (!ns[i] || i == NS_NONE)
+			continue;
+		switch (i) {
+		case NS_CGROUP:
+			flags |= CLONE_NEWCGROUP;
+			break;
+		case NS_IPC:
+			flags |= CLONE_NEWIPC;
+			break;
+		case NS_NET:
+			flags |= CLONE_NEWNET;
+			break;
+		case NS_MOUNT:
+			flags |= CLONE_NEWNS;
+			break;
+		case NS_PID:
+			flags |= CLONE_NEWPID;
+			break;
+		case NS_USER:
+			flags |= CLONE_NEWUSER;
+			break;
+		case NS_UTS:
+			flags |= CLONE_NEWUTS;
+			break;
+		case NS_TIME:
+			fprintf(stderr,
+				"option NS_TIME not suppoted by clone\n");
+			break;
+		default:
+			fprintf(stderr, "unrecognized option %d\n", i);
+		}
+	}
+	return flags;
+}
+
 void setup()
 {
 	int ret;
@@ -211,7 +255,7 @@ void setup()
 	ck_assert_int_ne(pipe(pipefd), -1);
 	if (at->target == NULL)
 		at->target = target;
-	pid = do_clone(at->target, NULL);
+	pid = do_clone(at->target, at->tclone, set_ns_flags(at->ns, SIGCHLD));
 	ck_assert_int_ge(pid, 0);
 
 	/* Use write pipe to sync the target for checking the existance of the fd */

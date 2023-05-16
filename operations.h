@@ -13,7 +13,6 @@
 #include "common/util.h"
 
 #define STACK_SIZE (1024 * 1024 / 8)
-#define NS_NUM (sizeof(enum ns_type))
 #define HANDLE_OP(code, call, type)                                     \
 	case code:                                                      \
 		do {                                                    \
@@ -34,7 +33,7 @@ struct ns_path {
 struct arg_clone {
 	long nr;
 	void *args[6];
-	struct ns_path ns[sizeof(enum ns_type)];
+	struct ns_path ns[NS_NUM];
 	long ret;
 	int err;
 };
