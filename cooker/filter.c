@@ -1,3 +1,4 @@
+
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright 2023 Red Hat GmbH
  * Author: Alice Frosi <afrosi@redhat.com>
@@ -13,12 +14,182 @@
 #include <unistd.h>
 
 #include "filter.h"
-#include "util.h"
 
-struct notify {
-	long nr;
-	struct bpf_arg arg[6];
-} notify_call[512];
+struct bpf_entry entries[MAX_ENTRIES];
+static unsigned int index_entries = 0;
+
+/**
+ * struct filter_call_input - First input stage for cooker notification requests
+ * @notify:	Notify on this system call
+ * @count:	How many entry for the same syscall
+ * @entries:	Index for the arguments for every entry
+ */
+struct filter_call_input {
+	bool notify;
+	unsigned int count;
+	int entries[MAX_ENTRIES_SYSCALL];
+} filter_input[N_SYSCALL] = { 0 };
+
+static long current_nr;
+
+static void set_no_args(struct bpf_entry *entry)
+{
+	for (int i = 0; i < 6; i++)
+		entry->args[i].cmp = NO_CHECK;
+}
+
+static unsigned int get_number_entries(long nr)
+{
+	struct filter_call_input *call = filter_input + nr;
+
+	return call->count;
+}
+
+static bool need_check_arg(const struct bpf_entry *entry)
+{
+	for (int i = 0; i < 6; i++)
+		if (entry->args[i].cmp != NO_CHECK)
+			return true;
+	return false;
+}
+
+static bool has_args(long nr)
+{
+	struct filter_call_input *call = filter_input + nr;
+
+	if (call-> count < 1)
+		return false;
+
+	/* Check if the first entry has some arguments */
+	return need_check_arg(&entries[call->entries[0]]);
+}
+
+static unsigned get_args_for_entry(const struct bpf_entry *entry)
+{
+	unsigned i, n = 0;
+
+	for (i = 0; i < 6; i++)
+		if (entry->args[i].cmp != NO_CHECK)
+			n++;
+	return n;
+}
+
+/* Calculate how many instruction for the syscall */
+static unsigned int get_n_args_syscall_instr(long nr)
+{
+	struct filter_call_input *call = filter_input + nr;
+	const struct bpf_entry *entry;
+	unsigned int n = 0, total_instr = 0;
+	unsigned int i, k;
+
+	for (i = 0; i < call->count; i++) {
+		entry = &entries[call->entries[i]];
+		n = 0;
+		for (k = 0; k < 6; k++) {
+			if (entry->args[k].cmp == NO_CHECK)
+				continue;
+			switch (entry->args[k].type) {
+			case BPF_U32:
+				/* For 32 bit arguments
+				 * comparison instructions (2):
+				 *   1 loading the value + 1 for evaluation
+				 * arithemtic instructions (3):
+				 *   1 loading the value + 1 for the operation + 1 for evaluation
+				 */
+				if (entry->args[k].cmp == AND_EQ ||
+				    entry->args[k].cmp == AND_NE)
+					n += 3;
+				else
+					n += 2;
+				break;
+			case BPF_U64:
+				/* For 64 bit arguments: 32 instructions * 2
+				 * for loading and evaluating the high and low 32 bits chuncks.
+				*/
+				if (entry->args[k].cmp == AND_EQ ||
+				    entry->args[k].cmp == AND_NE)
+					n += 6;
+				else
+					n += 4;
+				break;
+			}
+		}
+		total_instr += n;
+		/* If there at least an argument, then there is the jump to the
+		 * notification */
+		if (n > 0)
+			total_instr++;
+	}
+	/* If there at least an argument for that syscall, then there is the jump to the
+	* accept */
+	if (has_args(nr))
+		total_instr++;
+
+	return total_instr;
+}
+
+/**
+ * filter_notify() - Start of notification request, check/flush previous one
+ * @nr:		System call number, -1 to just flush previous request
+ */
+void filter_notify(long nr) {
+	struct filter_call_input *call = filter_input + nr;
+
+	if (nr >= 0) {
+		current_nr = nr;
+		call->notify = true;
+	}
+}
+
+/**
+ * filter_add_arg(): Add a new argument to the current syscall
+ * @index:	position of the argument
+ * @arg:	the argument to add
+ * @append:	if it is the first element add to the syscall entry
+ */
+void filter_add_arg(int index, struct bpf_arg arg, bool append)
+{
+	struct filter_call_input *call = filter_input + current_nr;
+
+	fprintf(stderr, "count=%d cmp=%d value=%X\n", call->count, arg.cmp,
+		arg.value.v32);
+	/* If it reaches the maximum number of entries per syscall, then we simply
+	 * notify for all the arguments and ignore the other arguments.
+	 */
+	if (call->count >= MAX_ENTRIES_SYSCALL) {
+		set_no_args(&entries[call->entries[0]]);
+		return;
+	}
+	if (!append)
+		call->entries[call->count++] = index_entries;
+	memcpy(&entries[index_entries++].args[index], &arg, sizeof(arg));
+}
+
+void filter_needs_deref(void)
+{
+	struct filter_call_input *call = filter_input + current_nr;
+
+	call->count = MAX_ENTRIES_SYSCALL;
+	set_no_args(&entries[call->entries[0]]);
+}
+
+static int table[N_SYSCALL];
+
+static unsigned int create_table_syscall()
+{
+	unsigned int i, count = 0;
+
+	for (i = 0; i < N_SYSCALL; i++)
+		if (filter_input[i].notify)
+			table[count++] = i;
+	return count;
+}
+
+static long get_syscall(unsigned int i)
+{
+	return (long)table[i];
+}
+
 
 static unsigned int count_shift_right(unsigned int n)
 {
@@ -42,7 +213,7 @@ static void insert_pair(int jumps[], int arr[], unsigned int level)
 	}
 }
 
-unsigned int left_child(unsigned int parent_index)
+static unsigned int left_child(unsigned int parent_index)
 {
 	unsigned int level = count_shift_right(parent_index + 1);
 	/* 2^(level) -1 gives the beginning of the next interval */
@@ -53,12 +224,12 @@ unsigned int left_child(unsigned int parent_index)
 	return next_interval + 2 * i;
 }
 
-unsigned int right_child(unsigned int parent_index)
+static unsigned int right_child(unsigned int parent_index)
 {
 	return left_child(parent_index) + 1;
 }
 
-void create_lookup_nodes(int jumps[], unsigned int n)
+static void create_lookup_nodes(int jumps[], unsigned int n)
 {
 	unsigned int i, index;
 	unsigned int old_interval, interval;
@@ -88,91 +259,17 @@ void create_lookup_nodes(int jumps[], unsigned int n)
 	}
 }
 
-static unsigned get_n_args_syscall_entry(const struct notify *entry)
-{
-	unsigned i, n = 0;
-
-	for (i = 0; i < 6; i++)
-		if (entry->arg[i].cmp != NO_CHECK)
-			n++;
-	return n;
-}
-
-static unsigned int get_n_args_syscall_instr(const struct notify *table,
-					     int len)
-{
-	const struct notify *entry;
-	bool has_arg = false;
-	unsigned n = 0, total_instr = 0;
-	int i;
-
-	for (i = 0; i < len; i++) {
-		entry = table + i;
-		n = 0;
-		for (unsigned int k = 0; k < 6; k++) {
-			if (entry->arg[k].cmp == NO_CHECK)
-				continue;
-			switch (entry->arg[k].type) {
-			case BPF_U32:
-				/* For 32 bit arguments
-				 * comparison instructions (2):
-				 *   1 loading the value + 1 for evaluation
-				 * arithemtic instructions (3):
-				 *   1 loading the value + 1 for the operation + 1 for evaluation
-				 */
-				if (entry->arg[k].cmp == AND_EQ ||
-				    entry->arg[k].cmp == AND_NE)
-					n += 3;
-				else
-					n += 2;
-				break;
-			case BPF_U64:
-				/* For 64 bit arguments: 32 instructions * 2
-				 * for loading and evaluating the high and low 32 bits chuncks.
-				*/
-				if (entry->arg[k].cmp == AND_EQ ||
-				    entry->arg[k].cmp == AND_NE)
-					n += 6;
-				else
-					n += 4;
-				break;
-			}
-		}
-		total_instr += n;
-		/* If there at least an argument, then there is the jump to the
-		 * notification */
-		if (n > 0) {
-			has_arg = true;
-			total_instr++;
-		}
-	}
-	/* If there at least an argument for that syscall, then there is the jump to the
-	* accept */
-	if (has_arg)
-		total_instr++;
-
-	return total_instr;
-}
-
-static bool check_args_syscall_entry(const struct notify *entry){
-	return entry->arg[0].cmp != NO_CHECK ||
-	       entry->arg[1].cmp != NO_CHECK ||
-	       entry->arg[2].cmp != NO_CHECK ||
-	       entry->arg[3].cmp != NO_CHECK ||
-	       entry->arg[4].cmp != NO_CHECK || entry->arg[5].cmp != NO_CHECK;
-}
-
 static unsigned int eq(struct sock_filter filter[], int idx,
-		       const struct notify *entry, unsigned int jtrue,
+		       const struct bpf_entry *entry, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	unsigned int size = 0;
 	uint32_t hi, lo;
 
-	switch (entry->arg[idx].type) {
+	switch (entry->args[idx].type) {
 	case BPF_U64:
-		hi = get_hi((entry->arg[idx]).value.v64);
-		lo = get_lo((entry->arg[idx]).value.v64);
+		hi = get_hi((entry->args[idx]).value.v64);
+		lo = get_lo((entry->args[idx]).value.v64);
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)EQ(lo, 0, jfalse);
 		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
@@ -181,7 +278,7 @@ static unsigned int eq(struct sock_filter filter[], int idx,
 	case BPF_U32:
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)EQ(
-			entry->arg[idx].value.v32, jtrue, jfalse);
+			entry->args[idx].value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -189,16 +286,16 @@ static unsigned int eq(struct sock_filter filter[], int idx,
 }
 
 static unsigned int gt(struct sock_filter filter[], int idx,
-		       const struct notify *entry, unsigned int jtrue,
+		       const struct bpf_entry *entry, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	unsigned int size = 0;
 	uint32_t hi, lo;
 
-	switch (entry->arg[idx].type) {
+	switch (entry->args[idx].type) {
 	case BPF_U64:
-		hi = get_hi((entry->arg[idx]).value.v64);
-		lo = get_lo((entry->arg[idx]).value.v64);
+		hi = get_hi((entry->args[idx]).value.v64);
+		lo = get_lo((entry->args[idx]).value.v64);
 		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
 		filter[size++] = (struct sock_filter)GT(hi, jtrue + 2, 0);
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
@@ -207,7 +304,7 @@ static unsigned int gt(struct sock_filter filter[], int idx,
 	case BPF_U32:
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)GT(
-			entry->arg[idx].value.v32, jtrue, jfalse);
+			entry->args[idx].value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -215,16 +312,16 @@ static unsigned int gt(struct sock_filter filter[], int idx,
 }
 
 static unsigned int lt(struct sock_filter filter[], int idx,
-		       const struct notify *entry, unsigned int jtrue,
+		       const struct bpf_entry *entry, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	unsigned int size = 0;
 	uint32_t hi, lo;
 
-	switch (entry->arg[idx].type) {
+	switch (entry->args[idx].type) {
 	case BPF_U64:
-		hi = get_hi((entry->arg[idx]).value.v64);
-		lo = get_lo((entry->arg[idx]).value.v64);
+		hi = get_hi((entry->args[idx]).value.v64);
+		lo = get_lo((entry->args[idx]).value.v64);
 		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
 		filter[size++] = (struct sock_filter)LT(hi, jtrue + 2, jfalse);
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
@@ -233,7 +330,7 @@ static unsigned int lt(struct sock_filter filter[], int idx,
 	case BPF_U32:
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)LT(
-			entry->arg[idx].value.v32, jtrue, jfalse);
+			entry->args[idx].value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -241,51 +338,51 @@ static unsigned int lt(struct sock_filter filter[], int idx,
 }
 
 static unsigned int neq(struct sock_filter filter[], int idx,
-			const struct notify *entry, unsigned int jtrue,
+			const struct bpf_entry *entry, unsigned int jtrue,
 			unsigned int jfalse)
 {
 	return eq(filter, idx, entry, jfalse, jtrue);
 }
 
 static unsigned int ge(struct sock_filter filter[], int idx,
-		       const struct notify *entry, unsigned int jtrue,
+		       const struct bpf_entry *entry, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	return lt(filter, idx, entry, jfalse, jtrue);
 }
 
 static unsigned int le(struct sock_filter filter[], int idx,
-		       const struct notify *entry, unsigned int jtrue,
+		       const struct bpf_entry *entry, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	return gt(filter, idx, entry, jfalse, jtrue);
 }
 
 static unsigned int and_eq (struct sock_filter filter[], int idx,
-			    const struct notify *entry, unsigned int jtrue,
+			    const struct bpf_entry *entry, unsigned int jtrue,
 			    unsigned int jfalse)
 {
 	unsigned int size = 0;
 
-	switch (entry->arg[idx].type) {
+	switch (entry->args[idx].type) {
 	case BPF_U64:
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)AND(
-			get_lo(entry->arg[idx].op2.v64));
+			get_lo(entry->args[idx].op2.v64));
 		filter[size++] = (struct sock_filter)EQ(
-			get_lo((entry->arg[idx]).value.v64), 0, jfalse);
+			get_lo((entry->args[idx]).value.v64), 0, jfalse);
 		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
 		filter[size++] = (struct sock_filter)AND(
-			get_hi(entry->arg[idx].op2.v64));
+			get_hi(entry->args[idx].op2.v64));
 		filter[size++] = (struct sock_filter)EQ(
-			get_hi(entry->arg[idx].value.v64), jtrue, jfalse);
+			get_hi(entry->args[idx].value.v64), jtrue, jfalse);
 		break;
 	case BPF_U32:
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] =
-			(struct sock_filter)AND(entry->arg[idx].op2.v32);
+			(struct sock_filter)AND(entry->args[idx].op2.v32);
 		filter[size++] = (struct sock_filter)EQ(
-			entry->arg[idx].value.v32, jtrue, jfalse);
+			entry->args[idx].value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -293,47 +390,100 @@ static unsigned int and_eq (struct sock_filter filter[], int idx,
 }
 
 static unsigned int and_ne(struct sock_filter filter[], int idx,
-			   const struct notify *entry, unsigned int jtrue,
+			   const struct bpf_entry *entry, unsigned int jtrue,
 			   unsigned int jfalse)
 {
 	unsigned int size = 0;
 
-	switch (entry->arg[idx].type) {
+	switch (entry->args[idx].type) {
 	case BPF_U64:
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] = (struct sock_filter)AND(
-			get_lo(entry->arg[idx].op2.v64));
+			get_lo(entry->args[idx].op2.v64));
 		filter[size++] = (struct sock_filter)EQ(
-			get_lo((entry->arg[idx]).value.v64), 0, jtrue + 3);
+			get_lo((entry->args[idx]).value.v64), 0, jtrue + 3);
 		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
 		filter[size++] = (struct sock_filter)AND(
-			get_hi(entry->arg[idx].op2.v64));
+			get_hi(entry->args[idx].op2.v64));
 		filter[size++] = (struct sock_filter)EQ(
-			get_hi(entry->arg[idx].value.v64), jfalse, jtrue);
+			get_hi(entry->args[idx].value.v64), jfalse, jtrue);
 		break;
 	case BPF_U32:
 		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
 		filter[size++] =
-			(struct sock_filter)AND(entry->arg[idx].op2.v32);
+			(struct sock_filter)AND(entry->args[idx].op2.v32);
 		filter[size++] = (struct sock_filter)EQ(
-			entry->arg[idx].value.v32, jfalse, jtrue);
+			entry->args[idx].value.v32, jfalse, jtrue);
 		break;
 	}
 
 	return size;
 }
 
-unsigned int filter_build(struct sock_filter filter[], unsigned int n)
+static unsigned int insert_args(struct sock_filter filter[], long nr)
+{
+	struct filter_call_input *call = filter_input + nr;
+	unsigned int i, k, size, next_offset, n_checks = 0;
+	unsigned int count = get_number_entries(nr);
+	struct bpf_entry *entry;
+	unsigned int offset = 0;
+
+	for (i = 0; i < count; i++) {
+		n_checks = 0;
+		entry = &entries[call->entries[i]];
+		next_offset = get_args_for_entry(entry);
+		for (k = 0; k < 6; k++) {
+			offset = next_offset - n_checks;
+			switch (entry->args[k].cmp) {
+			case NO_CHECK:
+				continue;
+			case EQ:
+				size += eq(&filter[size], k, entry, 0, offset);
+				break;
+			case NE:
+				size += neq(&filter[size], k, entry, 0, offset);
+				break;
+			case GT:
+				size += gt(&filter[size], k, entry, 0, offset);
+				break;
+			case LT:
+				size += lt(&filter[size], k, entry, 0, offset);
+				break;
+			case GE:
+				size += ge(&filter[size], k, entry, 0, offset);
+				break;
+			case LE:
+				size += le(&filter[size], k, entry, 0, offset);
+				break;
+			case AND_EQ:
+				size += and_eq
+					(&filter[size], k, entry, 0, offset);
+				break;
+			case AND_NE:
+				size += and_ne(&filter[size], k, entry, 0,
+					       offset);
+
+				break;
+			}
+			n_checks++;
+		}
+		if (n_checks > 0)
+			filter[size++] = (struct sock_filter)BPF_STMT(
+				BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
+	}
+
+	return size;
+}
+
+unsigned int filter_build(struct sock_filter filter[],  unsigned n)
 {
 	unsigned int offset_left, offset_right;
 	unsigned int n_nodes, notify, accept;
 	unsigned int next_offset, offset;
-	const struct notify *entry;
 	unsigned int size = 0;
-	unsigned int next_args_off;
 	int nodes[MAX_JUMPS];
-	unsigned int i, j, k;
-	unsigned n_checks;
+	unsigned int i;
+	long nr;
 
 	create_lookup_nodes(nodes, n);
 
@@ -363,25 +513,27 @@ unsigned int filter_build(struct sock_filter filter[], unsigned int n)
 			filter[size++] =
 				(struct sock_filter)JUMPA(accept - size);
 		} else {
+			nr = get_syscall(i);
 			offset_left = left_child(i) - i - 1;
 			offset_right = right_child(i) - i - 1;
 			filter[size++] = (struct sock_filter)JGE(
-				notify_call[i].nr, offset_right, offset_left);
+				get_syscall(i), offset_right, offset_left);
 		}
 	}
 
 	next_offset = n + 1;
 	/* Insert leaves */
 	for (i = 0; i < n; i++) {
-		/* If the syscall doesn't have any arguments, then notify */
-		if (check_args_syscall_entry(notify_call + i))
+		nr = get_syscall(i);
+		if (get_number_entries(nr) > 0)
 			offset = next_offset;
 		else
+		/* If the syscall doesn't have any arguments, then notify */
 			offset = notify - size - 1;
-		filter[size++] = (struct sock_filter)EQ(notify_call[i].nr,
+		filter[size++] = (struct sock_filter)EQ(nr,
 							offset,
 							accept - size);
-		next_offset += get_n_args_syscall_instr(notify_call + i, n) - 1;
+		next_offset += get_n_args_syscall_instr(nr) - 1;
 	}
 	/* Seccomp accept and notify instruction */
 	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
@@ -395,67 +547,9 @@ unsigned int filter_build(struct sock_filter filter[], unsigned int n)
 	 * check the following entry of the syscall and its arguments.
 	 */
 	for (i = 0; i < n; i++) {
-		bool has_arg = false;
-		unsigned int count = 0, x;
-
-		for (x = 0; x < 6; x++)
-			count += notify_call[i].arg[x].cmp == NO_CHECK;
-
-		for (j = 0; j < count; j++) {
-			n_checks = 0;
-			entry = notify_call + i + j;
-			next_args_off = get_n_args_syscall_entry(entry);
-			for (k = 0; k < 6; k++) {
-				offset = next_args_off - n_checks;
-				switch (entry->arg[k].cmp) {
-				case NO_CHECK:
-					continue;
-				case EQ:
-					size += eq(&filter[size], k, entry, 0,
-						   offset);
-					break;
-				case NE:
-					size += neq(&filter[size], k, entry, 0,
-						    offset);
-					break;
-				case GT:
-					size += gt(&filter[size], k, entry, 0,
-						   offset);
-					break;
-				case LT:
-					size += lt(&filter[size], k, entry, 0,
-						   offset);
-					break;
-				case GE:
-					size += ge(&filter[size], k, entry, 0,
-						   offset);
-					break;
-				case LE:
-					size += le(&filter[size], k, entry, 0,
-						   offset);
-					break;
-				case AND_EQ:
-					size += and_eq (&filter[size], k, entry,
-							0, offset);
-					break;
-				case AND_NE:
-					size += and_ne(&filter[size], k, entry,
-						       0, offset);
-
-					break;
-				}
-				n_checks++;
-				has_arg = true;
-			}
-			if (check_args_syscall_entry(notify_call + i))
-				filter[size++] = (struct sock_filter)BPF_STMT(
-					BPF_RET | BPF_K,
-					SECCOMP_RET_USER_NOTIF);
-		}
-		/* At this point none of the checks was positive, it jumps to
-		 * the default behavior
-		 */
-		if (has_arg)
+		nr = get_syscall(i);
+		size += insert_args(&filter[size], nr);
+		if (has_args(nr))
 			filter[size++] = (struct sock_filter)BPF_STMT(
 				BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 	}
@@ -463,118 +557,12 @@ unsigned int filter_build(struct sock_filter filter[], unsigned int n)
 	return size;
 }
 
-/**
- * struct filter_call_input - First input stage for cooker notification requests
- * @notify:	Notify on this system call
- * @no_args:	No argument comparisons are allowed for this call
- * @args_set:	Argument matches were already set up once for this call
- * @arg:	Argument specification
- */
-struct filter_call_input {
-	bool notify;
-	bool no_args;
-	bool args_set;
-	struct bpf_arg arg[6];
-} filter_input[512] = { 0 };
-
-static struct {
-	bool used;
-	struct bpf_arg arg[6];
-} filter_current_args;
-
-static long current_nr;
-
-/**
- * filter_notify() - Start of notification request, check/flush previous one
- * @nr:		System call number, -1 to just flush previous request
- */
-void filter_notify(long nr) {
-	struct filter_call_input *call = filter_input + nr;
-	long prev_nr = current_nr;
-
-	if (nr >= 0) {
-		current_nr = nr;
-		call->notify = true;
-	}
-
-	if (filter_current_args.used) {
-		struct filter_call_input *prev_call = filter_input + prev_nr;
-
-		/* First time arguments for previous call are flushed? */
-		if (!prev_call->args_set && !prev_call->no_args) {
-			prev_call->args_set = true;
-			memcpy(prev_call->arg, filter_current_args.arg,
-			       sizeof(filter_current_args.arg));
-			return;
-		}
-
-		prev_call->args_set = true;
-
-		/* ...not the first time: check exact overlap of matches */
-		if (memcmp(prev_call->arg, filter_current_args.arg,
-			   sizeof(filter_current_args.arg)))
-			prev_call->no_args = true;
-
-		/* Flush temporary set of arguments */
-		memset(&filter_current_args, 0, sizeof(filter_current_args));
-	}
-}
-
-/**
- * filter_needs_deref() - Mark system call as ineligible for argument evaluation
- */
-void filter_needs_deref(void) {
-	struct filter_call_input *call = filter_input + current_nr;
-
-	call->no_args = true;
-}
-
-/**
- * Use temporary filter_call_cur_args storage. When there's a new notification,
- * or the parser is done, we flush these argument matches to filter_input, and
- * check if they match (including no-matches) all the previous argument
- * specification. If they don't, the arguments can't be evaluated in the filter.
- */
-void filter_add_arg(int index, struct bpf_arg arg) {
-	struct filter_call_input *call = filter_input + current_nr;
-
-	if (call->no_args)
-		return;
-
-	memcpy(filter_current_args.arg + index, &arg, sizeof(arg));
-	filter_current_args.used = true;
-}
-
-unsigned int filter_close_input(void)
-{
-	struct notify *call;
-	int i, count = 0;
-
-	filter_notify(-1);
-
-	for (i = 0; i < 512; i++) {
-		call = notify_call + count;
-		if (filter_input[i].notify) {
-			count++;
-			call->nr = i;
-
-			if (filter_input[i].no_args)
-				continue;
-
-			memcpy(call->arg, filter_input[i].arg,
-			       sizeof(call->arg));
-		}
-	}
-
-	return count;
-}
-
 void filter_write(const char *path)
 {
 	struct sock_filter filter[MAX_FILTER];
 	int fd, n;
 
-	n = filter_close_input();
+	n = create_table_syscall();
 	n = filter_build(filter, n);
 
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,

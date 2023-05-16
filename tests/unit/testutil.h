@@ -55,7 +55,8 @@ struct args_target {
         bool open_path;
         int fd;
         int nr;
-	struct arg args[6];
+	bool filter_args[6];
+	struct bpf_arg args[6];
 	void *targs[6];
 	int (*install_filter)(struct args_target *at);
 	int (*target)(void *);

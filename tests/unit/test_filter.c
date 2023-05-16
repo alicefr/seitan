@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright 2023 Red Hat GmbH
- * Author: Alice Frosi <afrosi@redhat.com>
- */
+* Copyright 2023 Red Hat GmbH
+* Author: Alice Frosi <afrosi@redhat.com>
+*/
 
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <sys/syscall.h>
 #include <sys/mman.h>
@@ -14,23 +15,44 @@
 
 #include <check.h>
 
-#include "gluten.h"
-#include "common.h"
+#include "common/gluten.h"
+#include "common/common.h"
 #include "testutil.h"
-#include "filter.h"
-#include "disasm.h"
+#include "cooker/filter.h"
+#include "debug/disasm.h"
+
+char tfilter[] = "/tmp/test-filter.bpf";
+
+static int read_filter(struct sock_filter filter[])
+{
+	int fd, n;
+
+	fd = open(tfilter, O_CLOEXEC | O_RDONLY);
+	ck_assert_int_ge(fd, 0);
+
+	n = read(fd, filter, sizeof(struct sock_filter) * SIZE_FILTER);
+	ck_assert_int_ge(n, 0);
+	close(fd);
+
+	return n / sizeof(struct sock_filter);
+}
 
 static int generate_install_filter(struct args_target *at)
 {
-	struct bpf_call calls[1];
-	struct syscall_entry table[] = {
-		{ .count = 1, .nr = at->nr, .entry = &calls[0] }
-	};
-	struct sock_filter filter[30];
+	struct sock_filter filter[SIZE_FILTER];
 	unsigned int size;
+	bool append = false;
 
-	memcpy(&calls[0].args, &at->args, sizeof(calls[0].args));
-	size = create_bfp_program(table, filter, 1);
+	filter_notify(at->nr);
+	for (unsigned int i = 0; i < 6; i++) {
+		if (at->filter_args[i]) {
+			filter_add_arg(i, at->args[i], append);
+			append = true;
+		}
+	}
+	filter_write(tfilter);
+	size = read_filter(filter);
+	fprintf(stderr, "size %d\n", size);
 	bpf_disasm_all(filter, size);
 	return install_filter(filter, size);
 }
@@ -48,15 +70,29 @@ START_TEST(no_args)
 }
 END_TEST
 
-static void test_with_getsid(enum arg_cmp cmp, int v)
+struct t32bit_getsid_data_t {
+	enum bpf_cmp cmp;
+	int v;
+};
+
+struct t32bit_getsid_data_t t32bit_getsid_data[] = { { EQ, 0 },
+						     { GT, 0x100 },
+						     { LE, 0x1 },
+						     { GE, 0x10 },
+						     { LE, 0x10 } };
+
+START_TEST(test_with_getsid)
 {
+	enum bpf_cmp cmp = t32bit_getsid_data[_i].cmp;
+	int v = t32bit_getsid_data[_i].v;
 	int id = 0x10;
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_getsid;
 	set_args_no_check(at);
-	at->args[0].type = U32;
+	at->filter_args[0] = true;
+	at->args[0].type = BPF_U32;
 	at->args[0].value.v32 = id;
 	at->args[0].cmp = cmp;
 	if (cmp == EQ)
@@ -65,35 +101,6 @@ static void test_with_getsid(enum arg_cmp cmp, int v)
 		at->targs[0] = (void *)(long)v;
 	at->install_filter = generate_install_filter;
 	setup();
-}
-
-START_TEST(with_getsid)
-{
-	test_with_getsid(EQ, 0);
-}
-END_TEST
-
-START_TEST(with_getsid_gt)
-{
-	test_with_getsid(GT, 0x100);
-}
-END_TEST
-
-START_TEST(with_getsid_lt)
-{
-	test_with_getsid(LE, 0x1);
-}
-END_TEST
-
-START_TEST(with_getsid_ge)
-{
-	test_with_getsid(GE, 0x10);
-}
-END_TEST
-
-START_TEST(with_getsid_le)
-{
-	test_with_getsid(LE, 0x10);
 }
 END_TEST
 
@@ -106,11 +113,13 @@ START_TEST(with_getpriority)
 	at->check_fd = false;
 	at->nr = __NR_getpriority;
 	set_args_no_check(at);
+	at->filter_args[0] = true;
 	at->args[0].value.v32 = which;
-	at->args[0].type = U32;
+	at->args[0].type = BPF_U32;
 	at->args[0].cmp = EQ;
 	at->args[1].value.v32 = who;
-	at->args[1].type = U32;
+	at->filter_args[1] = true;
+	at->args[1].type = BPF_U32;
 	at->args[1].cmp = EQ;
 	at->targs[0] = (void *)(long)which;
 	at->targs[1] = (void *)(long)who;
@@ -130,16 +139,35 @@ static int target_lseek()
 	return target();
 }
 
-static void test_lseek(enum arg_cmp cmp, off_t offset, off_t v)
+struct t64b_lseek_data_t {
+	enum bpf_cmp cmp;
+	off_t offset;
+	off_t v;
+};
+
+struct t64b_lseek_data_t t64b_lseek_data[] = {
+	{ EQ, 0x1, 0 },	   { EQ, 0x0000000100000000, 0 },
+	{ GT, 0x1, 0x10 }, { GT, 0x100000000, 0x200000000 },
+	{ LT, 0x10, 0x1 }, { LT, 0x200000000, 0x100000000 },
+	{ GE, 0x1, 0x1 },  { GE, 0x100000000, 0x100000000 },
+	{ LE, 0x1, 0x1 },  { LE, 0x200000000, 0x200000000 },
+};
+
+START_TEST(test_lseek)
 {
+	enum bpf_cmp cmp = t64b_lseek_data[_i].cmp;
+	off_t offset = t64b_lseek_data[_i].offset;
+	off_t v = t64b_lseek_data[_i].v;
+
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_lseek;
 	at->target = target_lseek;
 	set_args_no_check(at);
+	at->filter_args[1] = true;
 	at->args[1].value.v64 = offset;
-	at->args[1].type = U64;
+	at->args[1].type = BPF_U64;
 	at->args[1].cmp = cmp;
 	if (cmp == EQ)
 		at->targs[1] = (void *)(long)offset;
@@ -149,79 +177,38 @@ static void test_lseek(enum arg_cmp cmp, off_t offset, off_t v)
 	setup();
 	mock_syscall_target();
 }
-
-START_TEST(with_lseek_lo)
-{
-	test_lseek(EQ, 0x1, 0);
-}
 END_TEST
 
-START_TEST(with_lseek_hi)
-{
-	test_lseek(EQ, 0x0000000100000000, 0);
-}
-END_TEST
+struct topen_and_data_t {
+	uint32_t v;
+	uint32_t mask;
+	uint32_t res;
+	enum bpf_cmp cmp;
+};
 
-START_TEST(with_lseek_lo_gt)
-{
-	test_lseek(GT, 0x1, 0x10);
-}
-END_TEST
+struct topen_and_data_t topen_and_data[] = {
+	{ O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_DIRECTORY, O_CLOEXEC, O_CLOEXEC,
+	  AND_EQ },
+	{ O_RDONLY | O_NONBLOCK | O_DIRECTORY, O_CLOEXEC, O_CLOEXEC, AND_NE },
+};
 
-START_TEST(with_lseek_hi_gt)
+START_TEST(test_open_and)
 {
-	test_lseek(GT, 0x100000000, 0x200000000);
-}
-END_TEST
-
-START_TEST(with_lseek_lo_lt)
-{
-	test_lseek(LT, 0x10, 0x1);
-}
-END_TEST
-
-START_TEST(with_lseek_hi_lt)
-{
-	test_lseek(LT, 0x200000000, 0x100000000);
-}
-END_TEST
-
-START_TEST(with_lseek_lo_ge)
-{
-	test_lseek(GE, 0x1, 0x1);
-}
-END_TEST
-
-START_TEST(with_lseek_hi_ge)
-{
-	test_lseek(GE, 0x100000000, 0x100000000);
-}
-END_TEST
-
-START_TEST(with_lseek_lo_le)
-{
-	test_lseek(LE, 0x1, 0x1);
-}
-END_TEST
-
-START_TEST(with_lseek_hi_le)
-{
-	test_lseek(LE, 0x200000000, 0x200000000);
-}
-END_TEST
-
-static void test_open_and(uint32_t v, uint32_t mask, uint32_t res,
-			  enum arg_cmp cmp)
-{
+	uint32_t v = topen_and_data[_i].v;
+	uint32_t mask = topen_and_data[_i].mask;
+       	uint32_t res = topen_and_data[_i].res;
+	enum bpf_cmp cmp = topen_and_data[_i].cmp;
 	char pathname[] = "test-abcdef";
+
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_open;
 	set_args_no_check(at);
+	at->filter_args[1] = true;
 	at->args[1].value.v32 = res;
 	at->args[1].op2.v32 = mask;
-	at->args[1].type = U32;
+	at->args[1].type = BPF_U32;
 	at->args[1].cmp = cmp;
 	at->targs[0] = (void *)(long)&pathname;
 	at->targs[1] = (void *)(long)v;
@@ -229,32 +216,38 @@ static void test_open_and(uint32_t v, uint32_t mask, uint32_t res,
 	setup();
 	mock_syscall_target();
 }
-
-START_TEST(with_open_and)
-{
-	test_open_and(O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_DIRECTORY,
-		      O_CLOEXEC, O_CLOEXEC, AND_EQ);
-}
 END_TEST
 
-START_TEST(with_open_and_ne)
-{
-	test_open_and(O_RDONLY | O_NONBLOCK | O_DIRECTORY, O_CLOEXEC, O_CLOEXEC,
-		      AND_NE);
-}
-END_TEST
+struct tprctl_and_data_t {
+	uint64_t v;
+	uint64_t mask;
+	uint64_t res;
+	enum bpf_cmp cmp;
+};
 
-static void test_prctl_and(uint64_t v, uint64_t mask, uint64_t res,
-			   enum arg_cmp cmp)
+struct tprctl_and_data_t tprctl_and_data[] = {
+	{ 0x11111111, 0x1, 0x1, AND_EQ },
+	{ 0x1111111100000000, 0x100000000, 0x100000000, AND_EQ },
+	{ 0x11111111, 0x1, 0x2, AND_NE },
+	{ 0x1111111100000000, 0x100000000, 0x200000000, AND_NE },
+};
+
+START_TEST(test_prctl_and)
 {
+	uint64_t v = tprctl_and_data[_i].v;
+	uint64_t mask = tprctl_and_data[_i].mask;
+       	uint64_t res = tprctl_and_data[_i].res;
+	enum bpf_cmp cmp = tprctl_and_data[_i].cmp;
+
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_prctl;
 	set_args_no_check(at);
+	at->filter_args[1] = true;
 	at->args[1].value.v64 = res;
 	at->args[1].op2.v64 = mask;
-	at->args[1].type = U64;
+	at->args[1].type = BPF_U64;
 	at->args[1].cmp = cmp;
 	at->targs[0] = (void *)(long)1;
 	at->targs[1] = (void *)(long)v;
@@ -262,36 +255,14 @@ static void test_prctl_and(uint64_t v, uint64_t mask, uint64_t res,
 	setup();
 	mock_syscall_target();
 }
-
-START_TEST(with_prctl_and_eq_lo)
-{
-	test_prctl_and(0x11111111, 0x1, 0x1, AND_EQ);
-}
 END_TEST
 
-START_TEST(with_prctl_and_eq_hi)
-{
-	test_prctl_and(0x1111111100000000, 0x100000000, 0x100000000, AND_EQ);
-}
-END_TEST
-
-START_TEST(with_prctl_and_ne_lo)
-{
-	test_prctl_and(0x11111111, 0x1, 0x2, AND_NE);
-}
-END_TEST
-
-START_TEST(with_prctl_and_ne_hi)
-{
-	test_prctl_and(0x1111111100000000, 0x100000000, 0x200000000, AND_NE);
-}
-END_TEST
 
 Suite *op_call_suite(void)
 {
 	Suite *s;
 	int timeout = 30;
-	TCase *simple, *args32, *args64, *cmp32, *cmp64;
+	TCase *simple, *args32, *args64, *cmp32;
 	TCase *andop32, *andop64;
 
 	s = suite_create("Test filter with target");
@@ -305,53 +276,33 @@ Suite *op_call_suite(void)
 	args32 = tcase_create("with args 32 bit");
 	tcase_add_checked_fixture(args32, NULL, teardown);
 	tcase_set_timeout(args32, timeout);
-	tcase_add_test(args32, with_getsid);
 	tcase_add_test(args32, with_getpriority);
 	suite_add_tcase(s, args32);
 
 	args64 = tcase_create("with args 64 bit");
 	tcase_add_checked_fixture(args64, NULL, teardown);
-	tcase_set_timeout(args32, timeout);
-	tcase_add_test(args64, with_lseek_lo);
-	tcase_add_test(args64, with_lseek_hi);
+	tcase_set_timeout(args64, timeout);
+	tcase_add_loop_test(args64, test_lseek, 0, ARRAY_SIZE(t64b_lseek_data));
 	suite_add_tcase(s, args64);
 
 	cmp32 = tcase_create("with args 32 bit and comparison operations");
 	tcase_add_checked_fixture(cmp32, NULL, teardown);
 	tcase_set_timeout(cmp32, timeout);
-	tcase_add_test(cmp32, with_getsid_gt);
-	tcase_add_test(cmp32, with_getsid_lt);
-	tcase_add_test(cmp32, with_getsid_ge);
-	tcase_add_test(cmp32, with_getsid_le);
+	tcase_add_loop_test(cmp32, test_with_getsid, 0,
+			    ARRAY_SIZE(t32bit_getsid_data));
 	suite_add_tcase(s, cmp32);
-
-	cmp64 = tcase_create("with args 64 bit and comparison operations");
-	tcase_add_checked_fixture(cmp64, NULL, teardown);
-	tcase_set_timeout(cmp64, timeout);
-	tcase_add_test(cmp64, with_lseek_lo_gt);
-	tcase_add_test(cmp64, with_lseek_hi_gt);
-	tcase_add_test(cmp64, with_lseek_lo_lt);
-	tcase_add_test(cmp64, with_lseek_hi_lt);
-	tcase_add_test(cmp64, with_lseek_lo_ge);
-	tcase_add_test(cmp64, with_lseek_hi_ge);
-	tcase_add_test(cmp64, with_lseek_lo_le);
-	tcase_add_test(cmp64, with_lseek_hi_le);
-	suite_add_tcase(s, cmp64);
 
 	andop32 = tcase_create("with and operation and 32 bits");
 	tcase_add_checked_fixture(andop32, NULL, teardown);
 	tcase_set_timeout(andop32, timeout);
-	tcase_add_test(andop32, with_open_and);
-	tcase_add_test(andop32, with_open_and_ne);
+	tcase_add_loop_test(andop32, test_open_and, 0,
+			    ARRAY_SIZE(topen_and_data));
 	suite_add_tcase(s, andop32);
 
 	andop64 = tcase_create("with and operation and 64 bits");
 	tcase_add_checked_fixture(andop64, NULL, teardown);
 	tcase_set_timeout(andop64, timeout);
-	tcase_add_test(andop64, with_prctl_and_eq_lo);
-	tcase_add_test(andop64, with_prctl_and_eq_hi);
-	tcase_add_test(andop64, with_prctl_and_ne_lo);
-	tcase_add_test(andop64, with_prctl_and_ne_hi);
+	tcase_add_loop_test(andop64, test_prctl_and, 0, ARRAY_SIZE(tprctl_and_data));
 	suite_add_tcase(s, andop64);
 
 	return s;

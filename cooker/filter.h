@@ -44,6 +44,10 @@
 #define MAX_JUMPS 128
 #define EMPTY -1
 
+#define N_SYSCALL 512
+#define MAX_ENTRIES_SYSCALL 16
+#define MAX_ENTRIES N_SYSCALL * MAX_ENTRIES_SYSCALL
+
 enum bpf_type { BPF_U32, BPF_U64 };
 
 union bpf_value {
@@ -60,12 +64,13 @@ struct bpf_arg {
 	union bpf_value op2;
 };
 
+struct bpf_entry {
+	struct bpf_arg args[6];
+};
+
 void filter_notify(long nr);
 void filter_needs_deref(void);
-void filter_add_arg(int index, struct bpf_arg arg);
+void filter_add_arg(int index, struct bpf_arg arg, bool append);
 void filter_write(const char *path);
 
-void create_lookup_nodes(int jumps[], unsigned int n);
-unsigned int left_child(unsigned int parent_index);
-unsigned int right_child(unsigned int parent_index);
 #endif
