@@ -44,40 +44,28 @@
 #define MAX_JUMPS 128
 #define EMPTY -1
 
-enum arg_type { U32, U64 };
+enum bpf_type { BPF_U32, BPF_U64 };
 
-union arg_value {
+union bpf_value {
 	uint32_t v32;
 	uint64_t v64;
 };
 
-enum arg_cmp { NO_CHECK, EQ, NE, LE, LT, GE, GT, AND_EQ, AND_NE };
+enum bpf_cmp { NO_CHECK = 0, EQ, NE, LE, LT, GE, GT, AND_EQ, AND_NE };
 
-struct arg {
-	union arg_value value;
-	enum arg_type type;
-	enum arg_cmp cmp;
-	union arg_value op2;
+struct bpf_arg {
+	union bpf_value value;
+	enum bpf_type type;
+	enum bpf_cmp cmp;
+	union bpf_value op2;
 };
 
-struct bpf_call {
-	char *name;
-	struct arg args[6];
-};
-
-struct syscall_entry {
-	unsigned int count;
-	long nr;
-	const struct bpf_call *entry;
-};
+void filter_notify(long nr);
+void filter_needs_deref(void);
+void filter_add_arg(int index, struct bpf_arg arg);
+void filter_write(const char *path);
 
 void create_lookup_nodes(int jumps[], unsigned int n);
 unsigned int left_child(unsigned int parent_index);
 unsigned int right_child(unsigned int parent_index);
-
-unsigned int create_bfp_program(struct syscall_entry table[],
-				struct sock_filter filter[],
-				unsigned int n_syscall);
-int convert_bpf(char *file, struct bpf_call *entries, int n);
-
 #endif

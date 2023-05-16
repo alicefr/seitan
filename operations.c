@@ -357,7 +357,7 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
 	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
 	    (res != 0 && (cmp == CMP_NE)))
-		return op->jmp;
+		return op->jmp.offset;	/* TODO: check boundaries */
 
 	return 0;
 }
@@ -385,10 +385,10 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 	return 0;
 }
 
-int eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
+int eval(struct gluten *g, const struct seccomp_notif *req,
 	 int notifier)
 {
-	struct op *op = ops;
+	struct op *op = (struct op *)g->inst;
 
 	while (op->type != OP_END) {
 		switch (op->type) {

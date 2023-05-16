@@ -135,7 +135,7 @@ static struct field connect_addr_nl[] = {
 	},
 	{
 		"groups",	U32,
-		offsetof(struct sockaddr_in6, sin6_addr),
+		offsetof(struct sockaddr_nl, nl_groups),
 		0,		{ 0 }
 	},
 	{ 0 },
@@ -148,10 +148,22 @@ static struct field connect_family = {
 };
 
 static struct select_num connect_addr_select_family[] = {
-	{ AF_UNIX,	STRUCT,	{ .d_struct = connect_addr_unix } },
-	{ AF_INET,	STRUCT,	{ .d_struct = connect_addr_ipv4 } },
-	{ AF_INET6,	STRUCT,	{ .d_struct = connect_addr_ipv6 } },
-	{ AF_NETLINK,	STRUCT,	{ .d_struct = connect_addr_nl } },
+	{
+		AF_UNIX,
+		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_unix } }
+	},
+	{
+		AF_INET,
+		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_ipv4 } }
+	},
+	{
+		AF_INET6,
+		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_ipv6 } }
+	},
+	{
+		AF_NETLINK,
+		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_nl } }
+	},
 	{ 0 },
 };
 

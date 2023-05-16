@@ -184,10 +184,10 @@ int main(int argc, char **argv)
 	struct epoll_event ev, events[EPOLL_EVENTS];
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
 	struct arguments arguments;
-	struct op operations[INST_MAX];
 	char path[PATH_MAX + 1];
 	bool running = true;
 	int pidfd, notifier;
+	struct gluten g;
 	int fd, epollfd;
 	int notifierfd;
 	int nevents, i;
@@ -195,7 +195,8 @@ int main(int argc, char **argv)
 	arguments.pid = -1;
 	parse(argc, argv, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
-	/* TODO: Load bytecode */
+	if (read(fd, &g, sizeof(g)) != sizeof(g))
+		die("Failed to read gluten file");
 	close(fd);
 
 	if (arguments.pid > 0) {
@@ -237,7 +238,7 @@ int main(int argc, char **argv)
 				/* The notifier fd was closed by the target */
 				running = false;
 			} else if (notifier == events[i].data.fd) {
-				eval(NULL, &operations[0], req, notifier);
+				eval(&g, req, notifier);
 			}
 		}
 	}

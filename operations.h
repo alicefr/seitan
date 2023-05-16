@@ -40,8 +40,7 @@ struct arg_clone {
 };
 
 int do_call(struct arg_clone *c);
-int eval(struct gluten *g, struct op *ops, const struct seccomp_notif *req,
-	  int notifier);
+int eval(struct gluten *g, const struct seccomp_notif *req, int notifier);
 int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_call *op);
 int op_block(const struct seccomp_notif *req, int notifier, struct gluten *g,

@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <sys/types.h>
 #include <linux/seccomp.h>
 
 #include <stdio.h>
@@ -38,6 +39,8 @@ enum gluten_offset_type {
 	OFFSET_INSTRUCTION = 3,
 	OFFSET_TYPE_MAX = OFFSET_INSTRUCTION,
 };
+
+extern const char *gluten_offset_name[OFFSET_TYPE_MAX + 1];
 
 struct gluten_offset {
 #ifdef __GNUC__
@@ -89,6 +92,8 @@ struct op_context {
 };
 
 enum op_type {
+	OP_END = 0,
+	OP_NR,
 	OP_CALL,
 	OP_BLOCK,
 	OP_CONT,
@@ -98,7 +103,6 @@ enum op_type {
 	OP_LOAD,
 	OP_CMP,
 	OP_RESOLVEDFD,
-	OP_END,
 };
 
 struct op_nr {
@@ -147,7 +151,7 @@ struct op_cmp {
 	struct gluten_offset y;
 	size_t size;
 	enum op_cmp_type cmp;
-	unsigned int jmp;
+	struct gluten_offset jmp;
 };
 
 struct op_resolvedfd {
@@ -237,7 +241,7 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 	if (!is_offset_valid(x))
 		return NULL;
 
-	if(x.type == OFFSET_SECCOMP_DATA && s == NULL)
+	if (x.type == OFFSET_SECCOMP_DATA && s == NULL)
 		return NULL;
 
 	switch (x.type) {

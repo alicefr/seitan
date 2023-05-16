@@ -12,6 +12,8 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include "gluten.h"
+
 #define logfn(name)							\
 void name(const char *format, ...) {					\
 	va_list args;							\
@@ -27,3 +29,6 @@ logfn(err)
 logfn(info)
 logfn(debug)
 
+const char *gluten_offset_name[OFFSET_TYPE_MAX + 1] = {
+	"read-only data", "temporary data", "seccomp data", "instruction area"
+};

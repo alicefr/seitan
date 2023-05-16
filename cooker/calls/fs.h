@@ -3,9 +3,9 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#ifndef PARSE_H
-#define PARSE_H
+#ifndef CALLS_FS_H
+#define CALLS_FS_H
 
-void parse_file(struct gluten_ctx *g, const char *path);
+extern struct call syscalls_fs[];
 
-#endif /* PARSE_H */
+#endif /* CALLS_FS_H */

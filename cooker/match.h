@@ -3,9 +3,9 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#ifndef PARSE_H
-#define PARSE_H
+#ifndef MATCH_H
+#define MATCH_H
 
-void parse_file(struct gluten_ctx *g, const char *path);
+void handle_matches(struct gluten_ctx *g, JSON_Value *value);
 
-#endif /* PARSE_H */
+#endif /* MATCH_H */
