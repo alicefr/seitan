@@ -14,23 +14,37 @@
 
 #include <check.h>
 
-#include "gluten.h"
-#include "common.h"
+#include "common/gluten.h"
+#include "common/common.h"
 #include "testutil.h"
-#include "filter.h"
-#include "disasm.h"
+#include "cooker/filter.h"
+#include "debug/disasm.h"
+
+char tfilter[] = "/tmp/test-filter.bpf";
+
+static int read_filter(struct sock_filter *filter)
+{
+	int fd, n;
+
+        fd = open(tfilter, O_CLOEXEC | O_RDONLY);
+	ck_assert_int_ge(fd, 0);
+
+        n = read(fd, filter, sizeof(struct sock_filter) * SIZE_FILTER);
+	ck_assert_int_ge(n, 0);
+        close(fd);
+
+	return n / sizeof(struct sock_filter);
+}
 
 static int generate_install_filter(struct args_target *at)
 {
-	struct bpf_call calls[1];
-	struct syscall_entry table[] = {
-		{ .count = 1, .nr = at->nr, .entry = &calls[0] }
-	};
-	struct sock_filter filter[30];
+	struct sock_filter filter[SIZE_FILTER];
 	unsigned int size;
 
-	memcpy(&calls[0].args, &at->args, sizeof(calls[0].args));
-	size = create_bfp_program(table, filter, 1);
+	filter_notify(at->nr);
+	filter_write(tfilter);
+	size = read_filter(&filter);
+	fprintf(stderr, "size %d\n", size);
 	bpf_disasm_all(filter, size);
 	return install_filter(filter, size);
 }
@@ -48,7 +62,7 @@ START_TEST(no_args)
 }
 END_TEST
 
-static void test_with_getsid(enum arg_cmp cmp, int v)
+static void test_with_getsid(enum bpf_cmp cmp, int v)
 {
 	int id = 0x10;
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
@@ -56,7 +70,7 @@ static void test_with_getsid(enum arg_cmp cmp, int v)
 	at->check_fd = false;
 	at->nr = __NR_getsid;
 	set_args_no_check(at);
-	at->args[0].type = U32;
+	at->args[0].type = BPF_U32;
 	at->args[0].value.v32 = id;
 	at->args[0].cmp = cmp;
 	if (cmp == EQ)
@@ -107,10 +121,10 @@ START_TEST(with_getpriority)
 	at->nr = __NR_getpriority;
 	set_args_no_check(at);
 	at->args[0].value.v32 = which;
-	at->args[0].type = U32;
+	at->args[0].type = BPF_U32;
 	at->args[0].cmp = EQ;
 	at->args[1].value.v32 = who;
-	at->args[1].type = U32;
+	at->args[1].type = BPF_U32;
 	at->args[1].cmp = EQ;
 	at->targs[0] = (void *)(long)which;
 	at->targs[1] = (void *)(long)who;
@@ -130,7 +144,7 @@ static int target_lseek()
 	return target();
 }
 
-static void test_lseek(enum arg_cmp cmp, off_t offset, off_t v)
+static void test_lseek(enum bpf_cmp cmp, off_t offset, off_t v)
 {
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -139,7 +153,7 @@ static void test_lseek(enum arg_cmp cmp, off_t offset, off_t v)
 	at->target = target_lseek;
 	set_args_no_check(at);
 	at->args[1].value.v64 = offset;
-	at->args[1].type = U64;
+	at->args[1].type = BPF_U64;
 	at->args[1].cmp = cmp;
 	if (cmp == EQ)
 		at->targs[1] = (void *)(long)offset;
@@ -211,7 +225,7 @@ START_TEST(with_lseek_hi_le)
 END_TEST
 
 static void test_open_and(uint32_t v, uint32_t mask, uint32_t res,
-			  enum arg_cmp cmp)
+			  enum bpf_cmp cmp)
 {
 	char pathname[] = "test-abcdef";
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
@@ -221,7 +235,7 @@ static void test_open_and(uint32_t v, uint32_t mask, uint32_t res,
 	set_args_no_check(at);
 	at->args[1].value.v32 = res;
 	at->args[1].op2.v32 = mask;
-	at->args[1].type = U32;
+	at->args[1].type = BPF_U32;
 	at->args[1].cmp = cmp;
 	at->targs[0] = (void *)(long)&pathname;
 	at->targs[1] = (void *)(long)v;
@@ -245,7 +259,7 @@ START_TEST(with_open_and_ne)
 END_TEST
 
 static void test_prctl_and(uint64_t v, uint64_t mask, uint64_t res,
-			   enum arg_cmp cmp)
+			   enum bpf_cmp cmp)
 {
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -254,7 +268,7 @@ static void test_prctl_and(uint64_t v, uint64_t mask, uint64_t res,
 	set_args_no_check(at);
 	at->args[1].value.v64 = res;
 	at->args[1].op2.v64 = mask;
-	at->args[1].type = U64;
+	at->args[1].type = BPF_U64;
 	at->args[1].cmp = cmp;
 	at->targs[0] = (void *)(long)1;
 	at->targs[1] = (void *)(long)v;
