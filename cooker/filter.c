@@ -547,12 +547,13 @@ void filter_add_arg(int index, struct bpf_arg arg) {
 
 unsigned int filter_close_input(void)
 {
-	struct notify *call = notify_call;
+	struct notify *call;
 	int i, count = 0;
 
 	filter_notify(-1);
 
 	for (i = 0; i < 512; i++) {
+		call = notify_call + count;
 		if (filter_input[i].notify) {
 			count++;
 			call->nr = i;
