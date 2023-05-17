@@ -23,6 +23,8 @@
 #include <sys/stat.h>
 
 #include "common.h"
+#include "filter.h"
+
 static struct option options[] = {
 	{ "input", required_argument, NULL, 'i' },
 	{ 0, 0, 0, 0 },
@@ -85,7 +87,7 @@ static void signal_handler(__attribute__((unused)) int s)
  */
 int main(int argc, char **argv)
 {
-	struct sock_filter filter[1024];
+	struct sock_filter filter[MAX_FILTER];
 	struct arguments arguments;
 	struct sigaction act;
 	int fd, flags;

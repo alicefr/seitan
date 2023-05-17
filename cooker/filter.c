@@ -25,6 +25,7 @@ static unsigned int index_entries = 0;
  * @entries:	Index for the arguments for every entry
  */
 struct filter_call_input {
+	bool ignore_args;
 	bool notify;
 	unsigned int count;
 	int entries[MAX_ENTRIES_SYSCALL];
@@ -58,6 +59,8 @@ static bool has_args(long nr)
 	struct filter_call_input *call = filter_input + nr;
 
 	if (call-> count < 1)
+		return false;
+	if(call-> ignore_args)
 		return false;
 
 	/* Check if the first entry has some arguments */
@@ -160,6 +163,8 @@ void filter_add_arg(int index, struct bpf_arg arg, bool append)
 		set_no_args(&entries[call->entries[0]]);
 		return;
 	}
+	if(call->ignore_args)
+		return;
 	if (!append)
 		call->entries[call->count++] = index_entries;
 	memcpy(&entries[index_entries++].args[index], &arg, sizeof(arg));
@@ -169,8 +174,8 @@ void filter_needs_deref(void)
 {
 	struct filter_call_input *call = filter_input + current_nr;
 
-	call->count = MAX_ENTRIES_SYSCALL;
-	set_no_args(&entries[call->entries[0]]);
+	call->ignore_args = true;
+	call->count = 0;
 }
 
 static int table[N_SYSCALL];
@@ -564,7 +569,6 @@ void filter_write(const char *path)
 
 	n = create_table_syscall();
 	n = filter_build(filter, n);
-
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
 		  S_IRUSR | S_IWUSR);
 	write(fd, filter, sizeof(struct sock_filter) * n);

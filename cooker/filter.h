@@ -11,6 +11,7 @@
 #include <linux/filter.h>
 #include <linux/audit.h>
 #include <linux/seccomp.h>
+#include <stdbool.h>
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define ENDIAN(_lo, _hi) _lo, _hi
