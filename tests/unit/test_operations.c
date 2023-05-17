@@ -134,8 +134,9 @@ START_TEST(test_op_call)
 				     { .call = { .nr = { OFFSET_DATA, 0 } } } },
 				   { OP_CONT, OP_EMPTY },
 				   { OP_END, OP_EMPTY } };
+	memcpy(&gluten.inst, &operations, sizeof(operations));
 	ck_write_gluten(gluten, operations[0].op.call.nr, nr);
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
 }
 END_TEST
@@ -153,8 +154,9 @@ START_TEST(test_op_call_ret)
 		{ OP_END, OP_EMPTY },
 	};
 
+	memcpy(&gluten.inst, &operations, sizeof(operations));
 	ck_write_gluten(gluten, operations[0].op.call.nr, nr);
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
 	ck_read_gluten(gluten, operations[0].op.call.ret, r);
 	ck_assert(r == getpid());
@@ -217,8 +219,9 @@ START_TEST(test_op_load)
 	struct sockaddr_un addr;
 	int v = 2;
 
+	memcpy(&gluten.inst, &operations, sizeof(operations));
 	ck_write_gluten(gluten, operations[1].op.ret.val, v);
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(v, 0, false);
 
 	ck_read_gluten(gluten, operations[0].op.load.dst, addr);
@@ -229,24 +232,26 @@ END_TEST
 
 static void test_op_cmp_int(int a, int b, enum op_cmp_type cmp)
 {
+	int jmp = 3;
 	struct op operations[] = {
 		{ OP_CMP,
 		  { .cmp = { { OFFSET_DATA, 0 },
 			     { OFFSET_DATA, 10 },
 			     sizeof(int),
 			     cmp,
-			     3 } } },
+			     { OFFSET_RO_DATA, 0 } } } },
 		{ OP_BLOCK, { .block = { -1 } } },
 		{ OP_END, OP_EMPTY },
 		{ OP_CONT, OP_EMPTY },
 		{ OP_END, OP_EMPTY },
-		{ 0 },
 	};
 
+	memcpy(&gluten.inst, &operations, sizeof(operations));
 	ck_write_gluten(gluten, operations[0].op.cmp.x, a);
 	ck_write_gluten(gluten, operations[0].op.cmp.y, b);
+	ck_write_gluten(gluten, operations[0].op.cmp.jmp, jmp);
 
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
 
@@ -290,13 +295,14 @@ START_TEST(test_op_cmp_string_eq)
 {
 	char s1[30] = "Hello Test!!";
 	char s2[30] = "Hello Test!!";
+	int jmp = 3;
 	struct op operations[] = {
 		{ OP_CMP,
 		  { .cmp = { { OFFSET_DATA, 0 },
 			     { OFFSET_DATA, 30 },
 			     sizeof(s1),
 			     CMP_EQ,
-			     3 } } },
+			     { OFFSET_RO_DATA, 0 } } } },
 		{ OP_BLOCK, { .block = { -1 } } },
 		{ OP_END, OP_EMPTY },
 		{ OP_CONT, OP_EMPTY },
@@ -305,8 +311,9 @@ START_TEST(test_op_cmp_string_eq)
 	};
 	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
 	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
+	ck_write_gluten(gluten, operations[0].op.cmp.jmp, jmp);
 
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
 END_TEST
@@ -315,13 +322,14 @@ START_TEST(test_op_cmp_string_false)
 {
 	char s1[30] = "Hello Test!!";
 	char s2[30] = "Hello Tost!!";
+	int jmp = 2;
 	struct op operations[] = {
 		{ OP_CMP,
 		  { .cmp = { { OFFSET_DATA, 0 },
 			     { OFFSET_DATA, 30 },
 			     sizeof(s1),
 			     CMP_EQ,
-			     2 } } },
+			     { OFFSET_RO_DATA, 0 } } } },
 		{ OP_CONT, OP_EMPTY },
 		{ OP_END, OP_EMPTY },
 		{ OP_BLOCK, { .block = { -1 } } },
@@ -329,10 +337,12 @@ START_TEST(test_op_cmp_string_false)
 		{ 0 },
 	};
 
+	memcpy(&gluten.inst, &operations, sizeof(operations));
 	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
 	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
+	ck_write_gluten(gluten, operations[0].op.cmp.jmp, jmp);
 
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
 END_TEST
@@ -352,10 +362,11 @@ START_TEST(test_op_resolvedfd_eq)
 		{ 0 },
 	};
 
+	memcpy(&gluten.inst, &operations, sizeof(operations));
 	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
 	ck_write_gluten(gluten, operations[0].op.resfd.path, path);
 
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(-1, 1, false);
 }
 END_TEST
@@ -375,11 +386,50 @@ START_TEST(test_op_resolvedfd_neq)
 		{ OP_END, OP_EMPTY },
 	};
 
+	memcpy(&gluten.inst, &operations, sizeof(operations));
 	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
 	ck_write_gluten(gluten, operations[0].op.resfd.path, path2);
 
-	ck_assert_int_eq(eval(&gluten, operations, &req, notifyfd), 0);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(-1, 1, false);
+}
+END_TEST
+
+
+START_TEST(test_op_nr)
+{
+	long nr = __NR_getpid;
+	int jmp = 3;
+	struct op operations[] = {
+		{ OP_NR,
+		  { .nr = { { OFFSET_RO_DATA, 0 },
+			    { OFFSET_RO_DATA, sizeof(nr) } } } },
+		{ OP_BLOCK, { .block = { -1 } } },
+		{ OP_END, OP_EMPTY },
+		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
+	};
+
+	memcpy(&gluten.inst, &operations, sizeof(operations));
+	ck_write_gluten(gluten, operations[0].op.nr.nr, nr);
+	ck_write_gluten(gluten, operations[0].op.nr.no_match, jmp);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
+	check_target_result_nonegative();
+}
+
+START_TEST(test_op_copy)
+{
+	int a[] = { 1, 2, 3, 4, 5, 6 };
+	int b[ARRAY_SIZE(a)];
+	struct op_copy op = { { OFFSET_DATA, 30 },
+			      { OFFSET_DATA, 0 },
+			      sizeof(a) };
+
+	ck_write_gluten(gluten, op.src, a);
+	ck_assert_msg(op_copy(&req, notifyfd, &gluten, &op) == 0,
+		      strerror(errno));
+	ck_read_gluten(gluten, op.dst, b);
+	ck_assert_mem_eq(a, b, sizeof(a));
 }
 END_TEST
 
@@ -390,7 +440,7 @@ Suite *op_call_suite(void)
 	TCase *cont, *block, *ret, *call, *resolvedfd;
 	TCase *cmp, *cmpint;
 	TCase *inject, *inject_a;
-	TCase *load;
+	TCase *load, *nr, *copy;
 
 	s = suite_create("Perform operations");
 
@@ -464,6 +514,16 @@ Suite *op_call_suite(void)
 	tcase_add_test(resolvedfd, test_op_resolvedfd_eq);
 	tcase_add_test(resolvedfd, test_op_resolvedfd_neq);
 	suite_add_tcase(s, resolvedfd);
+
+	nr = tcase_create("op_nr");
+	tcase_add_checked_fixture(nr, setup_without_fd, teardown);
+	tcase_set_timeout(nr, timeout);
+	tcase_add_test(nr, test_op_nr);
+	suite_add_tcase(s, nr);
+
+	copy = tcase_create("op_copy");
+	tcase_add_test(copy, test_op_copy);
+	suite_add_tcase(s, copy);
 
 	return s;
 }

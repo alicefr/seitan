@@ -59,4 +59,6 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 		  struct gluten *g, struct op_resolvedfd *op);
 int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_load *load);
+int op_copy(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	    struct op_copy *op);
 #endif /* ACTIONS_H */

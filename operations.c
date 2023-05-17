@@ -385,6 +385,33 @@ int op_resolve_fd(const struct seccomp_notif *req, int notifier,
 	return 0;
 }
 
+int op_nr(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	  struct op_nr *op)
+{
+	long nr;
+	int jmp;
+
+	(void)notifier;
+
+	if (gluten_read(NULL, g, &nr, op->nr, sizeof(nr)) == -1)
+		return -1;
+	if (gluten_read(NULL, g, &jmp, op->no_match, sizeof(jmp)) == -1)
+		return -1;
+	if (nr == req->data.nr)
+		return jmp;
+
+	return 0;
+}
+
+int op_copy(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	    struct op_copy *op)
+{
+	(void)notifier;
+
+	return gluten_write(g, op->dst, gluten_ptr(&req->data, g, op->src),
+			    op->size);
+}
+
 int eval(struct gluten *g, const struct seccomp_notif *req,
 	 int notifier)
 {
@@ -401,6 +428,8 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 			HANDLE_OP(OP_LOAD, op_load, load);
 			HANDLE_OP(OP_CMP, op_cmp, cmp);
 			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd);
+			HANDLE_OP(OP_NR, op_nr, nr);
+			HANDLE_OP(OP_COPY, op_copy, copy);
 		default:
 			ret_err(-1, "unknown operation %d", op->type);
 		}

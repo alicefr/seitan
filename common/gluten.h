@@ -103,6 +103,7 @@ enum op_type {
 	OP_LOAD,
 	OP_CMP,
 	OP_RESOLVEDFD,
+	OP_COPY,
 };
 
 struct op_nr {
@@ -161,6 +162,12 @@ struct op_resolvedfd {
 	unsigned int jmp;
 };
 
+struct op_copy {
+	struct gluten_offset src;
+	struct gluten_offset dst;
+	size_t size;
+};
+
 struct op {
 	enum op_type type;
 	union {
@@ -172,6 +179,7 @@ struct op {
 		struct op_load load;
 		struct op_cmp cmp;
 		struct op_resolvedfd resfd;
+		struct op_copy copy;
 	} op;
 };
 
