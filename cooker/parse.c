@@ -38,14 +38,14 @@ static void handle_limit(struct gluten_ctx *g, JSON_Value *value)
 
 static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 {
-	(void)g;
-	(void)value;
+	union value v = { .v_u64 = json_value_get_number(value) };
+
+	emit_return(g, emit_data(g, U64, sizeof(v.v_u64), &v));
 }
 
 static void handle_block(struct gluten_ctx *g, JSON_Value *value)
 {
-	(void)g;
-	(void)value;
+	emit_block(g, json_value_get_number(value));
 }
 
 static void handle_context(struct gluten_ctx *g, JSON_Value *value)

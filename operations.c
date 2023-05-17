@@ -357,9 +357,9 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
 	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
 	    (res != 0 && (cmp == CMP_NE)))
-		return op->jmp.offset;	/* TODO: check boundaries */
+		return 0;
 
-	return 0;
+	return op->jmp.offset;
 }
 
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,

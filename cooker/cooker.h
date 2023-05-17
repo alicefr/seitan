@@ -46,6 +46,7 @@ union desc {
 union value {
 	int			v_int;
 	uint32_t		v_u32;
+	uint64_t		v_u64;
 	long long		v_num;
 	const char		*v_str;
 };

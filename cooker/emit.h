@@ -16,6 +16,8 @@ void emit_cmp_field(struct gluten_ctx *g, enum op_cmp_type cmp,
 		    struct field *field,
 		    struct gluten_offset base, struct gluten_offset match,
 		    enum jump_type jmp);
+void emit_return(struct gluten_ctx *g, struct gluten_offset v);
+void emit_block(struct gluten_ctx *g, int32_t error);
 struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
 			       size_t str_len, union value *value);
 void link_block(struct gluten_ctx *g);

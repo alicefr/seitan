@@ -21,7 +21,7 @@
 			if (res == 0)                                   \
 				(op)++;                                 \
 			else if (res == -1)                             \
-				return -1;                            \
+				return -1;                              \
 			else                                            \
 				(op) += res;                            \
 		} while (0);                                            \

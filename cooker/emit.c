@@ -6,6 +6,7 @@
  *
  * Copyright 2023 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
+ *         Alice Frosi <afrosi@redhat.com>
  */
 
 #include "cooker.h"
@@ -136,6 +137,43 @@ void emit_cmp_field(struct gluten_ctx *g, enum op_cmp_type cmp,
 		 jmp);
 }
 
+/**
+ * emit_return() - Emit OP_RETURN instruction: return value
+ * @g:		gluten context
+ * @v:		Pointer to return value
+ */
+void emit_return(struct gluten_ctx *g, struct gluten_offset v)
+{
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct op_return *ret = &op->op.ret;
+
+	op->type = OP_RETURN;
+	ret->val = v;
+
+	debug("   %i: OP_RETURN:",  g->ip.offset);
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+}
+/**
+ * emit_block() - Emit OP_BLOCK instruction: return error value
+ * @g:		gluten context
+ * @error:	Error value
+ */
+void emit_block(struct gluten_ctx *g, int32_t error)
+{
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct op_block *block = &op->op.block;
+
+	op->type = OP_BLOCK;
+	block->error = error;
+
+	debug("   %i: OP_BLOCK: %d", g->ip.offset, error);
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+}
+
 struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
 			       size_t str_len, union value *value)
 {
@@ -152,6 +190,16 @@ struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
 		      value->v_int);
 
 		g->cp.offset += sizeof(int);
+		break;
+	case U64:
+		if (g->cp.offset + sizeof(uint64_t) > RO_DATA_SIZE)
+			die("   Read-only data section exceeded");
+
+		*(uint64_t *)p = value->v_u64;
+		debug("   C#%i: (%s) %i", g->cp.offset, type_str[type],
+		      value->v_u64);
+
+		g->cp.offset += sizeof(uint64_t);
 		break;
 	case STRING:
 		if (g->cp.offset + str_len > RO_DATA_SIZE)
