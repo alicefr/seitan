@@ -71,7 +71,8 @@ struct bpf_entry {
 
 void filter_notify(long nr);
 void filter_needs_deref(void);
-void filter_add_arg(int index, struct bpf_arg arg, bool append);
+void filter_add_arg(int index, struct bpf_arg arg);
 void filter_write(const char *path);
+void filter_flush_args();
 
 #endif

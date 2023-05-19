@@ -23,35 +23,23 @@
 
 char tfilter[] = "/tmp/test-filter.bpf";
 
-static int read_filter(struct sock_filter filter[])
-{
-	int fd, n;
-
-	fd = open(tfilter, O_CLOEXEC | O_RDONLY);
-	ck_assert_int_ge(fd, 0);
-
-	n = read(fd, filter, sizeof(struct sock_filter) * SIZE_FILTER);
-	ck_assert_int_ge(n, 0);
-	close(fd);
-
-	return n / sizeof(struct sock_filter);
-}
-
 static int generate_install_filter(struct args_target *at)
 {
 	struct sock_filter filter[SIZE_FILTER];
 	unsigned int size;
-	bool append = false;
+	bool has_arg = false;
 
 	filter_notify(at->nr);
 	for (unsigned int i = 0; i < 6; i++) {
 		if (at->filter_args[i]) {
-			filter_add_arg(i, at->args[i], append);
-			append = true;
+			filter_add_arg(i, at->args[i]);
+			has_arg = true;
 		}
 	}
+	if(has_arg)
+		filter_flush_args();
 	filter_write(tfilter);
-	size = read_filter(filter);
+	size = read_filter(filter, tfilter);
 	fprintf(stderr, "size %d\n", size);
 	bpf_disasm_all(filter, size);
 	return install_filter(filter, size);

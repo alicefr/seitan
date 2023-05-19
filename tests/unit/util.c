@@ -293,3 +293,17 @@ void ck_error_msg(char *s)
 	ck_assert_msg(strstr(stderr_buff, s) != NULL, "err=\"%s\" doesn't contain \"%s\" ",
 		      stderr_buff, s);
 }
+
+int read_filter(struct sock_filter filter[], char *file)
+{
+        int fd, n;
+
+        fd = open(file, O_CLOEXEC | O_RDONLY);
+        ck_assert_int_ge(fd, 0);
+
+        n = read(fd, filter, sizeof(struct sock_filter) * MAX_FILTER);
+        ck_assert_int_ge(n, 0);
+        close(fd);
+
+        return n / sizeof(struct sock_filter);
+}

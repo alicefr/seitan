@@ -99,4 +99,5 @@ void ck_error_msg(char *s);
 void ck_stderr();
 void ck_stdout();
 int install_single_syscall(long nr);
+int read_filter(struct sock_filter filter[], char *file);
 #endif /* TESTUTIL_H */

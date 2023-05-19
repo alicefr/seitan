@@ -148,26 +148,31 @@ void filter_notify(long nr) {
  * filter_add_arg(): Add a new argument to the current syscall
  * @index:	position of the argument
  * @arg:	the argument to add
- * @append:	if it is the first element add to the syscall entry
  */
-void filter_add_arg(int index, struct bpf_arg arg, bool append)
+void filter_add_arg(int index, struct bpf_arg arg)
 {
 	struct filter_call_input *call = filter_input + current_nr;
+	struct bpf_entry *entry = &entries[index_entries];
 
-	fprintf(stderr, "count=%d cmp=%d value=%X\n", call->count, arg.cmp,
-		arg.value.v32);
 	/* If it reaches the maximum number of entries per syscall, then we simply
 	 * notify for all the arguments and ignore the other arguments.
 	 */
 	if (call->count >= MAX_ENTRIES_SYSCALL) {
-		set_no_args(&entries[call->entries[0]]);
+		call->ignore_args = true;
 		return;
 	}
 	if(call->ignore_args)
 		return;
-	if (!append)
-		call->entries[call->count++] = index_entries;
-	memcpy(&entries[index_entries++].args[index], &arg, sizeof(arg));
+
+	call->entries[call->count] = index_entries;
+	memcpy(&entry->args[index], &arg, sizeof(arg));
+}
+
+void filter_flush_args()
+{
+	struct filter_call_input *call = filter_input + current_nr;
+	call->count++;
+	index_entries++;
 }
 
 void filter_needs_deref(void)
