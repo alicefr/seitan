@@ -345,6 +345,7 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	const void *py = gluten_ptr(&req->data, g, op->y);
 	enum op_cmp_type cmp = op->cmp;
 	int res;
+	int jmp;
 
 	(void)notifier;
 
@@ -357,10 +358,15 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
 	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
-	    (res != 0 && (cmp == CMP_NE)))
+	    (res != 0 && (cmp == CMP_NE))) {
+		debug("  execute op_cmp: successful comparison");
 		return 0;
+	}
 
-	return op->jmp.offset;
+	if (gluten_read(NULL, g, &jmp, op->jmp, sizeof(jmp)) == -1)
+		return -1;
+	debug("  execute op_cmp: jump to %d", jmp);
+	return jmp;
 }
 
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,

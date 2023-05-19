@@ -130,12 +130,12 @@ END_TEST
 START_TEST(test_op_call)
 {
 	long nr = __NR_getppid;
-	struct op operations[] = { { OP_CALL,
+	struct op ops[] = { { OP_CALL,
 				     { .call = { .nr = { OFFSET_DATA, 0 } } } },
 				   { OP_CONT, OP_EMPTY },
 				   { OP_END, OP_EMPTY } };
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[0].op.call.nr, nr);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.call.nr, nr);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
 }
@@ -145,7 +145,7 @@ START_TEST(test_op_call_ret)
 {
 	long nr = __NR_getppid;
 	long r;
-	struct op operations[] = {
+	struct op ops[] = {
 		{ OP_CALL,
 		  { .call = { .nr = { OFFSET_DATA, 0 },
 			      .ret = { OFFSET_DATA, sizeof(nr) },
@@ -154,11 +154,11 @@ START_TEST(test_op_call_ret)
 		{ OP_END, OP_EMPTY },
 	};
 
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[0].op.call.nr, nr);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.call.nr, nr);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(1, 0, true);
-	ck_read_gluten(gluten, operations[0].op.call.ret, r);
+	ck_read_gluten(gluten, ops[0].op.call.ret, r);
 	ck_assert(r == getpid());
 }
 END_TEST
@@ -207,7 +207,7 @@ END_TEST
 
 START_TEST(test_op_load)
 {
-	struct op operations[] = {
+	struct op ops[] = {
 		{ OP_LOAD,
 		  { .load = { { OFFSET_SECCOMP_DATA, 1 },
 			      { OFFSET_DATA, 0 },
@@ -219,99 +219,77 @@ START_TEST(test_op_load)
 	struct sockaddr_un addr;
 	int v = 2;
 
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[1].op.ret.val, v);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[1].op.ret.val, v);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(v, 0, false);
 
-	ck_read_gluten(gluten, operations[0].op.load.dst, addr);
+	ck_read_gluten(gluten, ops[0].op.load.dst, addr);
 	ck_assert_str_eq(addr.sun_path, "/tmp/test.sock");
 	ck_assert(addr.sun_family == AF_UNIX);
 }
 END_TEST
 
-static void test_op_cmp_int(int a, int b, enum op_cmp_type cmp)
+struct top_cmp_int_data_t {
+	int a;
+	int b;
+	enum op_cmp_type cmp;
+};
+struct top_cmp_int_data_t top_cmp_int_data[] = {
+	{ 1, 1, CMP_EQ }, { 1, 2, CMP_NE }, { 2, 1, CMP_GT },
+	{ 1, 1, CMP_GE }, { 1, 2, CMP_LT }, { 1, 1, CMP_LE },
+};
+
+START_TEST(test_op_cmp_int)
 {
-	int jmp = 3;
-	struct op operations[] = {
+	enum op_cmp_type cmp = top_cmp_int_data[_i].cmp;
+	int a = top_cmp_int_data[_i].a;
+	int b = top_cmp_int_data[_i].b;
+	int jmp = 2;
+	struct op ops[] = {
 		{ OP_CMP,
 		  { .cmp = { { OFFSET_DATA, 0 },
 			     { OFFSET_DATA, 10 },
 			     sizeof(int),
 			     cmp,
 			     { OFFSET_RO_DATA, 0 } } } },
-		{ OP_BLOCK, { .block = { -1 } } },
-		{ OP_END, OP_EMPTY },
 		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
+		{ OP_BLOCK, { .block = { -1 } } },
 		{ OP_END, OP_EMPTY },
 	};
 
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[0].op.cmp.x, a);
-	ck_write_gluten(gluten, operations[0].op.cmp.y, b);
-	ck_write_gluten(gluten, operations[0].op.cmp.jmp, jmp);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.cmp.x, a);
+	ck_write_gluten(gluten, ops[0].op.cmp.y, b);
+	ck_write_gluten(gluten, ops[0].op.cmp.jmp, jmp);
 
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
-
-START_TEST(test_op_cmp_int_eq)
-{
-	test_op_cmp_int(1, 1, CMP_EQ);
-}
-END_TEST
-
-START_TEST(test_op_cmp_int_ne)
-{
-	test_op_cmp_int(1, 2, CMP_NE);
-}
-END_TEST
-
-START_TEST(test_op_cmp_int_gt)
-{
-	test_op_cmp_int(2, 1, CMP_GT);
-}
-END_TEST
-
-START_TEST(test_op_cmp_int_ge)
-{
-	test_op_cmp_int(1, 1, CMP_GE);
-}
-END_TEST
-
-START_TEST(test_op_cmp_int_lt)
-{
-	test_op_cmp_int(1, 2, CMP_LT);
-}
-END_TEST
-
-START_TEST(test_op_cmp_int_le)
-{
-	test_op_cmp_int(1, 1, CMP_LE);
-}
-END_TEST
-
 START_TEST(test_op_cmp_string_eq)
 {
 	char s1[30] = "Hello Test!!";
 	char s2[30] = "Hello Test!!";
 	int jmp = 3;
-	struct op operations[] = {
+	struct op ops[] = {
 		{ OP_CMP,
 		  { .cmp = { { OFFSET_DATA, 0 },
 			     { OFFSET_DATA, 30 },
 			     sizeof(s1),
 			     CMP_EQ,
 			     { OFFSET_RO_DATA, 0 } } } },
-		{ OP_BLOCK, { .block = { -1 } } },
-		{ OP_END, OP_EMPTY },
 		{ OP_CONT, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
+		{ OP_BLOCK, { .block = { -1 } } },
 		{ OP_END, OP_EMPTY },
 		{ 0 },
 	};
-	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
-	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
-	ck_write_gluten(gluten, operations[0].op.cmp.jmp, jmp);
+
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.cmp.x, s1);
+	ck_write_gluten(gluten, ops[0].op.cmp.y, s2);
+	ck_write_gluten(gluten, ops[0].op.cmp.jmp, jmp);
 
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result_nonegative();
@@ -322,25 +300,25 @@ START_TEST(test_op_cmp_string_false)
 {
 	char s1[30] = "Hello Test!!";
 	char s2[30] = "Hello Tost!!";
-	int jmp = 2;
-	struct op operations[] = {
+	int jmp = 3;
+	struct op ops[] = {
 		{ OP_CMP,
 		  { .cmp = { { OFFSET_DATA, 0 },
 			     { OFFSET_DATA, 30 },
 			     sizeof(s1),
 			     CMP_EQ,
 			     { OFFSET_RO_DATA, 0 } } } },
-		{ OP_CONT, OP_EMPTY },
-		{ OP_END, OP_EMPTY },
 		{ OP_BLOCK, { .block = { -1 } } },
+		{ OP_END, OP_EMPTY },
+		{ OP_CONT, OP_EMPTY },
 		{ OP_END, OP_EMPTY },
 		{ 0 },
 	};
 
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[0].op.cmp.x, s1);
-	ck_write_gluten(gluten, operations[0].op.cmp.y, s2);
-	ck_write_gluten(gluten, operations[0].op.cmp.jmp, jmp);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.cmp.x, s1);
+	ck_write_gluten(gluten, ops[0].op.cmp.y, s2);
+	ck_write_gluten(gluten, ops[0].op.cmp.jmp, jmp);
 
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result_nonegative();
@@ -349,7 +327,7 @@ END_TEST
 
 START_TEST(test_op_resolvedfd_eq)
 {
-	struct op operations[] = {
+	struct op ops[] = {
 		{ OP_RESOLVEDFD,
 		  { .resfd = { { OFFSET_DATA, 0 },
 			       { OFFSET_DATA, 4 },
@@ -362,9 +340,9 @@ START_TEST(test_op_resolvedfd_eq)
 		{ 0 },
 	};
 
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
-	ck_write_gluten(gluten, operations[0].op.resfd.path, path);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.resfd.fd, at->fd);
+	ck_write_gluten(gluten, ops[0].op.resfd.path, path);
 
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(-1, 1, false);
@@ -374,7 +352,7 @@ END_TEST
 START_TEST(test_op_resolvedfd_neq)
 {
 	char path2[] = "/tmp/seitan-test-wrong";
-	struct op operations[] = {
+	struct op ops[] = {
 		{ OP_RESOLVEDFD,
 		  { .resfd = { { OFFSET_DATA, 0 },
 			       { OFFSET_DATA, 4 },
@@ -386,9 +364,9 @@ START_TEST(test_op_resolvedfd_neq)
 		{ OP_END, OP_EMPTY },
 	};
 
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[0].op.resfd.fd, at->fd);
-	ck_write_gluten(gluten, operations[0].op.resfd.path, path2);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.resfd.fd, at->fd);
+	ck_write_gluten(gluten, ops[0].op.resfd.path, path2);
 
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result(-1, 1, false);
@@ -400,7 +378,7 @@ START_TEST(test_op_nr)
 {
 	long nr = __NR_getpid;
 	int jmp = 3;
-	struct op operations[] = {
+	struct op ops[] = {
 		{ OP_NR,
 		  { .nr = { { OFFSET_RO_DATA, 0 },
 			    { OFFSET_RO_DATA, sizeof(nr) } } } },
@@ -410,9 +388,9 @@ START_TEST(test_op_nr)
 		{ OP_END, OP_EMPTY },
 	};
 
-	memcpy(&gluten.inst, &operations, sizeof(operations));
-	ck_write_gluten(gluten, operations[0].op.nr.nr, nr);
-	ck_write_gluten(gluten, operations[0].op.nr.no_match, jmp);
+	write_instr(gluten, ops);
+	ck_write_gluten(gluten, ops[0].op.nr.nr, nr);
+	ck_write_gluten(gluten, ops[0].op.nr.no_match, jmp);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), 0);
 	check_target_result_nonegative();
 }
@@ -442,7 +420,7 @@ Suite *op_call_suite(void)
 	TCase *inject, *inject_a;
 	TCase *load, *nr, *copy;
 
-	s = suite_create("Perform operations");
+	s = suite_create("Perform ops");
 
 	cont = tcase_create("op_continue");
 	tcase_add_checked_fixture(cont, setup_without_fd, teardown);
@@ -500,12 +478,7 @@ Suite *op_call_suite(void)
 	cmpint = tcase_create("op_cmp_int");
 	tcase_add_checked_fixture(cmpint, setup_without_fd, teardown);
 	tcase_set_timeout(cmpint, timeout);
-	tcase_add_test(cmpint, test_op_cmp_int_eq);
-	tcase_add_test(cmpint, test_op_cmp_int_ne);
-	tcase_add_test(cmpint, test_op_cmp_int_le);
-	tcase_add_test(cmpint, test_op_cmp_int_lt);
-	tcase_add_test(cmpint, test_op_cmp_int_ge);
-	tcase_add_test(cmpint, test_op_cmp_int_gt);
+	tcase_add_loop_test(cmpint, test_op_cmp_int, 0, ARRAY_SIZE(top_cmp_int_data));
 	suite_add_tcase(s, cmpint);
 
 	resolvedfd = tcase_create("op_resolvedfd");
