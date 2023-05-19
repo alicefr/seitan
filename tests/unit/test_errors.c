@@ -39,26 +39,28 @@ struct gluten_offset test_max_size_data[] = {
 START_TEST(test_bound_check)
 {
 	struct op ops[] = {
-		{ OP_RETURN, { { 0 } } },
-		{ OP_END, { { 0 } } },
+		{ OP_RETURN, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 	};
 	ops[0].op.ret.val.offset = test_max_size_data[_i].offset;
 	ops[0].op.ret.val.type = test_max_size_data[_i].type;
 
-	eval(&gluten, ops, &req, notifyfd);
+	write_instr(gluten, ops);
+	eval(&gluten, &req, notifyfd);
 }
 
 START_TEST(test_write_op_return)
 {
+	long nr = __NR_getppid;
 	struct op ops[] = {
 		{ OP_CALL,
-		  { .call = { .nr = __NR_getpid,
+		  { .call = { .nr = { OFFSET_DATA, 0 },
 			      .has_ret = true,
 			      .ret = { OFFSET_DATA, DATA_SIZE - 1 } } } },
-		{ OP_END, { { 0 } } },
 	};
-
-	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
+	ck_write_gluten(gluten, ops[0].op.call.nr, nr);
+	write_instr(gluten, ops);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
 }
 
 START_TEST(test_write_op_load)
@@ -69,10 +71,10 @@ START_TEST(test_write_op_load)
 		  { .load = { { OFFSET_SECCOMP_DATA, 1 },
 			      { OFFSET_DATA, DATA_SIZE - 1 },
 			      sizeof(a) } } },
-		{ OP_END, { { 0 } } },
 	};
 
-	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
+	write_instr(gluten, ops);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
 }
 
 struct gluten_offset test_max_size_read_data[] = {
@@ -84,20 +86,22 @@ struct gluten_offset test_max_size_read_data[] = {
 START_TEST(test_read_op_return)
 {
 	struct op ops[] = {
-		{ OP_RETURN, { { 0 } } },
-		{ OP_END, { { 0 } } },
+		{ OP_RETURN, OP_EMPTY },
+		{ OP_END, OP_EMPTY },
 	};
 	ops[0].op.ret.val.offset = test_max_size_read_data[_i].offset - 1;
 	ops[0].op.ret.val.type = test_max_size_read_data[_i].type;
 
-	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
+	write_instr(gluten, ops);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
 }
 
 static struct op_cmp test_cmp_data[] = {
-	{ { OFFSET_DATA, DATA_SIZE }, { OFFSET_DATA, 0 }, 1, CMP_EQ, 1 },
-	{ { OFFSET_DATA, 0 }, { OFFSET_DATA, DATA_SIZE }, 1, CMP_EQ, 1 },
-	{ { OFFSET_DATA, DATA_SIZE - 1 }, { OFFSET_DATA, 0 }, 10, CMP_EQ, 1 },
-	{ { OFFSET_DATA, 0 }, { OFFSET_DATA, DATA_SIZE - 1 }, 10, CMP_EQ, 1 },
+	{ .x = { OFFSET_DATA, DATA_SIZE } },
+	{ .y = { OFFSET_DATA, DATA_SIZE } },
+	{ .x = { OFFSET_DATA, DATA_SIZE - 1 }, .size = 10 },
+	{ .y = { OFFSET_DATA, DATA_SIZE - 1 }, .size = 10 },
+	{ .jmp = { OFFSET_DATA, DATA_SIZE } },
 };
 
 START_TEST(test_op_cmp)
@@ -113,24 +117,25 @@ START_TEST(test_op_cmp)
 	ops[0].op.cmp.jmp = test_cmp_data[_i].jmp;
 	ops[1].type = OP_END;
 
-	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
+	write_instr(gluten, ops);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
 }
-static struct ttargetnoexisting_data {
+
+struct ttargetnoexisting_data {
 	struct op op;
 	char err_msg[BUFSIZ];
 };
 
 struct ttargetnoexisting_data test_target_noexisting_data[] = {
-	{ { OP_CONT, { { 0 } } }, "the response id isn't valid" },
-	{ { OP_BLOCK, { { 0 } } }, "the response id isn't valid" },
-	{ { OP_RETURN, { { 0 } } }, "the response id isn't valid" },
+	{ { OP_CONT, OP_EMPTY }, "the response id isn't valid" },
+	{ { OP_BLOCK, { .block = { -1 } } }, "the response id isn't valid" },
+	{ { OP_RETURN, { .ret = { { OFFSET_DATA, 0 } } } },
+	  "the response id isn't valid" },
 	{ { OP_INJECT,
 	    { .inject = { { OFFSET_DATA, 0 }, { OFFSET_DATA, 0 } } } },
 	  "the response id isn't valid" },
 	{ { OP_INJECT_A,
 	    { .inject = { { OFFSET_DATA, 0 }, { OFFSET_DATA, 0 } } } },
-	  "the response id isn't valid" },
-	{ { OP_CALL, { .call = { __NR_getpid, false } } },
 	  "the response id isn't valid" },
 	{ { OP_LOAD,
 	    { .load = { { OFFSET_SECCOMP_DATA, 1 }, { OFFSET_DATA, 0 }, 0 } } },
@@ -150,7 +155,8 @@ START_TEST(test_target_noexisting)
 	ops[0] = test_target_noexisting_data[_i].op;
 	ops[1].type = OP_END;
 
-	ck_assert_int_eq(eval(&gluten, ops, &req, notifyfd), -1);
+	write_instr(gluten, ops);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
 	ck_error_msg(test_target_noexisting_data[_i].err_msg);
 }
 

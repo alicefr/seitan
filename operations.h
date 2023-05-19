@@ -6,6 +6,7 @@
 #ifndef ACIONS_H
 #define ACTIONS_H
 
+#include <limits.h>
 #include <errno.h>
 #include <linux/seccomp.h>
 
