@@ -84,27 +84,70 @@ static void proc_ns_name(unsigned i, char *ns)
 	}
 }
 
+static struct gluten_offset *get_syscall_ret(struct syscall_desc *s)
+{
+	if (s == NULL)
+		return NULL;
+	if (s->has_ret == 0)
+		return NULL;
+	if (s->arg_count == 0)
+		return s->data;
+	return s->data + s->arg_count + 1;
+}
+
+static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
+			     const struct arg_clone *c)
+{
+	struct gluten_offset *p = get_syscall_ret(s);
+
+	if (p != NULL)
+		return gluten_write(g, *p, &c->ret, sizeof(c->ret));
+
+	return 0;
+}
+
 static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
-			     const struct op_call *op, struct arg_clone *c)
+			     const struct op_call *op, struct syscall_desc *s,
+			     struct arg_clone *c)
 {
 	char ns_name[PATH_MAX / 2];
 	const struct ns_spec *ns;
+	struct op_context context;
 	char p[PATH_MAX];
+	struct gluten_offset x;
 	unsigned int i;
+	long arg;
 	pid_t pid;
+
+	if (gluten_read(NULL, g, s, op->syscall, sizeof(struct syscall_desc)) == -1)
+		return -1;
+	if (gluten_read(NULL, g, &context, op->context, sizeof(context)) == -1)
+		return -1;
 
 	c->err = 0;
 	c->ret = -1;
+	c->nr = s-> nr;
 
-	if (gluten_read(NULL, g, &c->nr, op->nr, sizeof(c->nr)) == -1)
-		return -1;
-	for (i = 0; i < 6; i++)
-		if (gluten_read(NULL, g, &c->args[i], op->args[i],
-				sizeof(c->args[i])) == -1)
+	for (i = 0; i < s->arg_count; i++) {
+		if (gluten_read(NULL, g, &arg, s->data[i], sizeof(arg)) == -1)
 			return -1;
+		/* If arg is a pointer then need to calculate the absolute
+		 * address and the value of arg is the relative offset of the actual
+		 * value.
+		*/
+		if (GET_BIT(s->arg_deref, i) == 1) {
+			x.type = s->data[i].type;
+			x.offset = arg;
+			if (gluten_read(NULL, g, &c->args[i], x,
+					sizeof(c->args[i])) == -1)
+				return -1;
+		} else {
+			c->args[i] = (void *)arg;
+		}
+	}
 
-	for (i = 0; i < sizeof(enum ns_type); i++) {
-		ns = &op->context.ns[i];
+	for (i = 0; i < NS_NUM; i++) {
+		ns = &context.ns[i];
 		proc_ns_name(i, ns_name);
 		switch (ns->type) {
 		case NS_NONE:
@@ -127,6 +170,7 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 			break;
 		}
 	}
+
 	return 0;
 }
 
@@ -165,6 +209,49 @@ static int execute_syscall(void *args)
 	exit(0);
 }
 
+int do_call(struct arg_clone *c)
+{
+	char stack[STACK_SIZE];
+	pid_t child;
+
+	/* Create a process that will be moved to the namespace */
+	child = clone(execute_syscall, stack + sizeof(stack),
+		      CLONE_FILES | CLONE_VM | CLONE_VFORK | SIGCHLD, (void *)c);
+	if (child == -1)
+		ret_err(-1, "clone");
+	return 0;
+}
+
+int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	    struct op_call *op)
+{
+	struct seccomp_notif_resp resp;
+	struct syscall_desc s;
+	struct arg_clone c;
+
+	resp.id = req->id;
+	resp.val = 0;
+	resp.flags = 0;
+	resp.error = 0;
+
+	if (prepare_arg_clone(req, g, op, &s, &c) == -1)
+		return -1;
+	debug("  op_call: execute syscall nr=%ld", c.nr);
+	if (do_call(&c) == -1) {
+		resp.error = -1;
+		if (send_target(&resp, notifier) == -1)
+			return -1;
+	}
+	if (c.err != 0) {
+		err("  failed executing call: %s", strerror(c.err));
+		resp.error = -1;
+		if (send_target(&resp, notifier) == -1)
+			return -1;
+	}
+
+	return write_syscall_ret(g, &s, &c);
+}
+
 int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_load *load)
 {
@@ -197,54 +284,6 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 out:
 	close(fd);
 	return ret;
-}
-
-int do_call(struct arg_clone *c)
-{
-	char stack[STACK_SIZE];
-	pid_t child;
-
-	/* Create a process that will be moved to the namespace */
-	child = clone(execute_syscall, stack + sizeof(stack),
-		      CLONE_FILES | CLONE_VM | CLONE_VFORK | SIGCHLD, (void *)c);
-	if (child == -1)
-		ret_err(-1, "clone");
-	return 0;
-}
-
-int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
-	    struct op_call *op)
-{
-	struct seccomp_notif_resp resp;
-	struct arg_clone c;
-
-	resp.id = req->id;
-	resp.val = 0;
-	resp.flags = 0;
-	resp.error = 0;
-
-	if (prepare_arg_clone(req, g, op, &c) == -1)
-		return -1;
-	debug("  op_call: execute syscall nr=%ld", c.nr);
-	if (do_call(&c) == -1) {
-		resp.error = -1;
-		if (send_target(&resp, notifier) == -1)
-			return -1;
-	}
-	if (c.err != 0) {
-		err("  failed executing call: %s", strerror(c.err));
-		resp.error = -1;
-		if (send_target(&resp, notifier) == -1)
-			return -1;
-	}
-	/*
-	 * The result of the call needs to be save as
-	 * reference
-	 */
-	if (op->has_ret)
-		return gluten_write(g, op->ret, &c.ret, sizeof(c.ret));
-
-	return 0;
 }
 
 int op_block(const struct seccomp_notif *req, int notifier, struct gluten *g,

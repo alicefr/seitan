@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +12,7 @@
 
 #include <linux/audit.h>
 #include <linux/seccomp.h>
+#include <linux/limits.h>
 
 #include "util.h"
 #include "common.h"

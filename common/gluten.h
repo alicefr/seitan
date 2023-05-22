@@ -33,6 +33,7 @@ extern struct seccomp_data anonymous_seccomp_data;
 #define NO_FIELD block
 
 #define NS_NUM sizeof(enum ns_type)
+#define GET_BIT(x, i) (((x) & (1UL << (i))) != 0)
 
 enum gluten_offset_type {
 	OFFSET_RO_DATA = 0,
@@ -113,12 +114,17 @@ struct op_nr {
 	struct gluten_offset no_match;
 };
 
+struct syscall_desc {
+        unsigned nr : 9;
+        unsigned arg_count : 3;
+        unsigned has_ret : 1;
+        unsigned arg_deref : 6;
+        struct gluten_offset data[];
+};
+
 struct op_call {
-	struct gluten_offset nr;
-	struct gluten_offset args[6];
-	struct op_context context;
-	struct gluten_offset ret;
-	bool has_ret;
+        struct gluten_offset syscall;
+        struct gluten_offset context;
 };
 
 struct op_block {

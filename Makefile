@@ -17,7 +17,7 @@ HEADERS := $(COMMON_DIR)/common.h $(COMMON_DIR)/gluten.h \
 	   $(COMMON_DIR)/numbers.h $(COMMON_DIR)/util.h operations.h
 
 CFLAGS += -DTMP_DATA_SIZE=1000
-CFLAGS += -Wall -Wextra -pedantic -I$(COMMON_DIR)
+CFLAGS += -Wall -Wextra -pedantic -std=c99 -I$(COMMON_DIR)
 
 all: cooker eater seitan
 
