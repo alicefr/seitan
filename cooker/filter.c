@@ -42,7 +42,6 @@ static void set_no_args(struct bpf_entry *entry)
 static unsigned int get_number_entries(long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
-
 	return call->count;
 }
 
@@ -58,9 +57,9 @@ static bool has_args(long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
 
-	if (call-> count < 1)
+	if (call->count < 1)
 		return false;
-	if(call-> ignore_args)
+	if (call->ignore_args)
 		return false;
 
 	/* Check if the first entry has some arguments */
@@ -127,7 +126,6 @@ static unsigned int get_n_args_syscall_instr(long nr)
 	* accept */
 	if (has_args(nr))
 		total_instr++;
-
 	return total_instr;
 }
 
@@ -135,7 +133,8 @@ static unsigned int get_n_args_syscall_instr(long nr)
  * filter_notify() - Start of notification request, check/flush previous one
  * @nr:		System call number, -1 to just flush previous request
  */
-void filter_notify(long nr) {
+void filter_notify(long nr)
+{
 	struct filter_call_input *call = filter_input + nr;
 
 	if (nr >= 0) {
@@ -161,9 +160,8 @@ void filter_add_arg(int index, struct bpf_arg arg)
 		call->ignore_args = true;
 		return;
 	}
-	if(call->ignore_args)
+	if (call->ignore_args)
 		return;
-
 	call->entries[call->count] = index_entries;
 	memcpy(&entry->args[index], &arg, sizeof(arg));
 }
@@ -199,7 +197,6 @@ static long get_syscall(unsigned int i)
 {
 	return (long)table[i];
 }
-
 
 static unsigned int count_shift_right(unsigned int n)
 {
@@ -433,14 +430,21 @@ static unsigned int and_ne(struct sock_filter filter[], int idx,
 static unsigned int insert_args(struct sock_filter filter[], long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
-	unsigned int i, k, size, next_offset, n_checks = 0;
+	unsigned int next_offset, n_checks = 0;
 	unsigned int count = get_number_entries(nr);
 	struct bpf_entry *entry;
 	unsigned int offset = 0;
+	unsigned int size = 0;
+	unsigned int i, k;
 
 	for (i = 0; i < count; i++) {
 		n_checks = 0;
 		entry = &entries[call->entries[i]];
+		/* If there are multiple entries for the syscall @nr, then the next group
+	         * of arguments to check (i.e. the next offset) is after the number of
+	         * arguments of the current entry. The next_offset is used to
+		 * jump to the next group if the check is false.
+		 */
 		next_offset = get_args_for_entry(entry);
 		for (k = 0; k < 6; k++) {
 			offset = next_offset - n_checks;
@@ -477,6 +481,8 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 			}
 			n_checks++;
 		}
+		/* If there were no arguments for this entry, then we don't need
+		 * to add the notification */
 		if (n_checks > 0)
 			filter[size++] = (struct sock_filter)BPF_STMT(
 				BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
@@ -485,7 +491,7 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 	return size;
 }
 
-unsigned int filter_build(struct sock_filter filter[],  unsigned n)
+unsigned int filter_build(struct sock_filter filter[], unsigned n)
 {
 	unsigned int offset_left, offset_right;
 	unsigned int n_nodes, notify, accept;
@@ -523,11 +529,11 @@ unsigned int filter_build(struct sock_filter filter[],  unsigned n)
 			filter[size++] =
 				(struct sock_filter)JUMPA(accept - size);
 		} else {
-			nr = get_syscall(i);
+			nr = get_syscall(nodes[i]);
 			offset_left = left_child(i) - i - 1;
 			offset_right = right_child(i) - i - 1;
 			filter[size++] = (struct sock_filter)JGE(
-				get_syscall(i), offset_right, offset_left);
+				nr, offset_right, offset_left);
 		}
 	}
 
@@ -535,14 +541,17 @@ unsigned int filter_build(struct sock_filter filter[],  unsigned n)
 	/* Insert leaves */
 	for (i = 0; i < n; i++) {
 		nr = get_syscall(i);
-		if (get_number_entries(nr) > 0)
+		if (get_number_entries(nr) > 0) {
 			offset = next_offset;
-		else
-		/* If the syscall doesn't have any arguments, then notify */
+		} else {
+			/* If the syscall doesn't have any arguments, then notify */
 			offset = notify - size - 1;
-		filter[size++] = (struct sock_filter)EQ(nr,
-							offset,
-							accept - size);
+		}
+		filter[size++] =
+			(struct sock_filter)EQ(nr, offset, accept - size);
+		/* The arguments block of the next entry are after the total
+		 * number of the instructions for checking the arguments of the current entry
+		 */
 		next_offset += get_n_args_syscall_instr(nr) - 1;
 	}
 	/* Seccomp accept and notify instruction */
