@@ -14,19 +14,10 @@
 #include "gluten.h"
 #include "emit.h"
 #include "filter.h"
+#include "parse.h"
 #include "util.h"
 
 #include "calls/net.h"
-
-/**
- * struct rule_parser - Parsing handler for JSON rule type
- * @type:	JSON key name
- * @fn:		Parsing function
- */
-struct rule_parser {
-	const char *type;
-	int (*fn)(struct gluten_ctx *g, JSON_Value *value);
-};
 
 /**
  * arg_load() - Allocate and build bytecode for one syscall argument
@@ -37,16 +28,17 @@ struct rule_parser {
  */
 static struct gluten_offset arg_load(struct gluten_ctx *g, struct arg *a)
 {
+	struct gluten_offset offset;
 	int index = a->pos;
 	size_t size;
 
-	if (a->type == SELECTED) {
-		if (g->selected_arg[index]->type != UNDEF)
-			size = g->selected_arg[index]->size;
+	if (a->f.type == SELECTED) {
+		if (g->selected_arg[index]->f.type != UNDEF)
+			size = g->selected_arg[index]->f.size;
 		else
-			die("   no storage size for argument %s", a->name);
+			die("   no storage size for argument %s", a->f.name);
 	} else {
-		size = a->size;
+		size = a->f.size;
 	}
 
 	if (!size) {
@@ -61,182 +53,121 @@ static struct gluten_offset arg_load(struct gluten_ctx *g, struct arg *a)
 	if (g->match_dst[index].len)	/* Already allocated */
 		return g->match_dst[index].offset;
 
-	g->match_dst[index].offset = gluten_alloc(g, size);
+	offset = gluten_rw_alloc(g, size);
+
+	g->match_dst[index].offset = offset;
 	g->match_dst[index].len = size;
 
-	emit_load(g, g->match_dst[index].offset, index, size);
+	emit_load(g, offset, index, size);
 
-	return g->match_dst[index].offset;
+	return offset;
 }
 
 /**
- * value_get_num() - Get numeric value from description matching JSON input
- * @desc:	Description of possible values from model
- * @value:	JSON value
- *
- * Return: numeric value
- */
-static long long value_get_num(struct num *desc, JSON_Value *value)
-{
-	const char *s = NULL;
-	long long n;
-
-	if (desc) {
-		s = json_value_get_string(value);
-		for (; desc->name && s && strcmp(s, desc->name); desc++);
-		if (s && !desc->name)
-			die("   Invalid value %s", s);
-
-		n = desc->value;
-	}
-
-	if (!s) {
-		if (json_value_get_type(value) != JSONNumber)
-			die("   Invalid value type");
-
-		n = json_value_get_number(value);
-	}
-
-	return n;
-}
-
-/**
- * value_get() - Get generic value from description matching JSON input
- * @desc:	Description of possible values from model
- * @type:	Data type from model
- * @value:	JSON value
- * @out:	Corresponding bytecode value, set on return
- */
-static void value_get(union desc desc, enum type type, JSON_Value *value,
-		      union value *out)
-{
-	if (TYPE_IS_NUM(type))
-		out->v_num = value_get_num(desc.d_num, value);
-}
-
-/**
- * select_desc() - Get description and type for selected value
+ * parse_field() - Parse generic field along with JSON value
  * @g:		gluten context
- * @s:		Possible selection choices
- * @v:		Selector value
- * @pos:	Index of syscall argument being parsed
- * @type:	Type of selected value, set on return
- * @desc:	Description of selected value, set on return
- */
-static void select_desc(struct gluten_ctx *g, struct select *s, union value v,
-			int pos, enum type *type, union desc *desc)
-{
-	if (TYPE_IS_NUM(s->field->type)) {
-		struct select_num *d_num;
-
-		for (d_num = s->desc.d_num; d_num->target.type; d_num++) {
-			if (d_num->value == v.v_num) {
-				if (d_num->target.pos == pos) {
-					*type = d_num->target.type;
-					*desc = d_num->target.desc;
-				} else {
-					pos = d_num->target.pos;
-					g->selected_arg[pos] = &d_num->target;
-					*type = NONE;
-				}
-
-				return;
-			}
-		}
-
-		if (!d_num->target.type)
-			die("   No match for numeric selector %i", v.v_num);
-	}
-
-	die("   not supported yet");
-}
-
-/**
- * parse_value() - Parse JSON value for generic item of data description
- * @g:		gluten context
- * @index:	Index of parent syscall argument
  * @offset:	Base offset of container field (actual offset for non-compound)
- * @type:	Data type, from model
- * @str_len:	Length of string, valid for STRING type only
- * @desc:	Description of possible values, from model
- * @value:	JSON value
+ * @index:	Index of parent syscall argument
+ * @f:		Field from syscall model
+ * @jvalue:	JSON value
+ *
+ * Return: parsed value for simple types, empty value otherwise
  */
-static void parse_value(struct gluten_ctx *g, int index,
-			struct gluten_offset offset, enum type type,
-			size_t str_len, union desc desc, JSON_Value *value)
+static union value parse_field(struct gluten_ctx *g,
+			       struct gluten_offset offset,
+			       int index, struct field *f, JSON_Value *jvalue)
 {
-	struct gluten_offset data_offset, const_offset;
+	struct gluten_offset const_offset;
+	union value v = { .v_num = 0 };
+	struct field *f_inner;
 	const char *tag_name;
 	JSON_Object *tmp;
-	struct field *f;
-	union value v;
+	JSON_Value *sel;
 
-	if (type == SELECT) {
-		struct select *select = desc.d_select;
-		struct field *field = select->field;
+	if (f->name)
+		debug("   parsing field name %s", f->name);
+
+/*
+	if (f->type == SELECT) {
+		struct select *select = f->desc.d_select;
+		struct field *s_field = select->field;
 		JSON_Value *sel;
 
 		if ((tmp = json_value_get_object(value))) {
-			if (!(sel = json_object_get_value(tmp, field->name)))
-				die("   no selector for '%s'", field->name);
+			if (!(sel = json_object_get_value(tmp, s_field->name)))
+				die("   no selector for '%s'", s_field->name);
 		} else {
 			sel = value;
 		}
 
-		value_get(field->desc, field->type, sel, &v);
-		const_offset = emit_data(g, field->type, field->strlen, &v);
+		value_get(s_field->desc, s_field->type, sel, &v);
+		const_offset = emit_data(g, s_field->type, s_field->size, &v);
 
 		data_offset = offset;
-		data_offset.offset += field->offset;
+		data_offset.offset += s_field->offset;
 
-		emit_cmp_field(g, CMP_NE, field, data_offset, const_offset,
+		emit_cmp_field(g, CMP_NE, s_field, data_offset, const_offset,
 			       JUMP_NEXT_BLOCK);
 
-		select_desc(g, select, v, index, &type, &desc);
+		swap_field(g, select, v, index, &f);
 
-		if (type == NONE)
+		if (!f)
 			return;
 	}
+*/
 
-	if (json_value_get_type(value) == JSONObject &&
-	    (tmp = json_value_get_object(value)) &&
+	if (json_value_get_type(jvalue) == JSONObject &&
+	    (tmp = json_value_get_object(jvalue)) &&
 	    (tag_name = json_object_get_string(tmp, "tag"))) {
-		if (TYPE_IS_COMPOUND(type))
-			die("Tag reference '%s' to compound value", tag_name);
-
 		debug("   setting tag reference '%s'", tag_name);
 		gluten_add_tag(g, tag_name, offset);
 
-		value = json_object_get_value(tmp, "value");
+		jvalue = json_object_get_value(tmp, "value");
 	}
 
 	/* Nothing to match on: just store as reference */
-	if (!value)
-		return;
+	if (!jvalue)
+		return v;
 
-	switch (type) {
-	case INTFLAGS:
-	case LONGFLAGS:
-	case U32FLAGS:
-		/* fetch/combine expr algebra loop */
-	case INTMASK:
-		/* calculate mask first */
-		break;
+	offset.offset += f->offset;
+
+	switch (f->type) {
 	case INT:
 	case LONG:
 	case U32:
-		v.v_num = value_get_num(desc.d_num, value);
-		const_offset = emit_data(g, type, 0, &v);
-		emit_cmp(g, CMP_NE, offset, const_offset, gluten_size[type],
+		if (f->flags == FLAGS) {
+			/* fetch/combine expr algebra loop */
+			;
+		}
+		if (f->flags == MASK) {
+			/* calculate mask first */
+			;
+		}
+
+		v.v_num = value_get_num(f->desc.d_num, jvalue);
+		const_offset = emit_data(g, f->type, 0, &v);
+		emit_cmp(g, CMP_NE, offset, const_offset, gluten_size[f->type],
 			 JUMP_NEXT_BLOCK);
 		break;
 	case SELECT:
-		/* TODO: check how nested selects should work */
-		parse_value(g, index, offset, type, 0, desc, value);
+		f_inner = f->desc.d_select->field;
+
+		if ((tmp = json_value_get_object(jvalue))) {
+			if (!(sel = json_object_get_value(tmp, f_inner->name)))
+				die("   no selector for '%s'", f_inner->name);
+		} else {
+			sel = jvalue;
+		}
+
+		v = parse_field(g, offset, index, f_inner, sel);
+
+		f = select_field(g, index, f->desc.d_select, v);
+		if (f)
+			parse_field(g, offset, index, f, jvalue);
 		break;
 	case STRING:
-		v.v_str = json_value_get_string(value);
-		if (strlen(v.v_str) + 1 > str_len)
+		v.v_str = json_value_get_string(jvalue);
+		if (strlen(v.v_str) + 1 > f->size)
 			die("   string %s too long for field", v.v_str);
 
 		const_offset = emit_data(g, STRING, strlen(v.v_str) + 1, &v);
@@ -244,43 +175,43 @@ static void parse_value(struct gluten_ctx *g, int index,
 			 JUMP_NEXT_BLOCK);
 		break;
 	case STRUCT:
-		for (f = desc.d_struct; f->name; f++) {
+		for (f_inner = f->desc.d_struct; f_inner->name; f_inner++) {
 			JSON_Value *field_value;
 
-			tmp = json_value_get_object(value);
-			field_value = json_object_get_value(tmp, f->name);
+			tmp = json_value_get_object(jvalue);
+			field_value = json_object_get_value(tmp, f_inner->name);
 			if (!field_value)
 				continue;
 
-			parse_value(g, index, offset, f->type, f->strlen,
-				    f->desc, field_value);
+			parse_field(g, offset, index, f_inner, field_value);
 		}
+		break;
 	default:
 		;
 	}
+
+	return v;
 }
 
 /**
  * parse_arg() - Parse syscall argument from JSON, following model
  * @g:		gluten context
- * @name:	Name of argument (key) in JSON and model
- * @value:	JSON value for argument
  * @a:		Argument description from model
+ * @value:	JSON value for argument
  */
-static void parse_arg(struct gluten_ctx *g, const char *name, JSON_Value *value,
-		      struct arg *a)
+static void parse_arg(struct gluten_ctx *g, JSON_Value *jvalue, struct arg *a)
 {
 	struct gluten_offset offset;
 
-	debug("  Parsing match argument %s", name);
+	debug("  Parsing match argument %s", a->f.name);
 
 	offset = arg_load(g, a);
 
-	parse_value(g, a->pos, offset, a->type, a->size, a->desc, value);
+	parse_field(g, offset, a->pos, &a->f, jvalue);
 }
 
 /**
- * parse_match() - Parse one syscall rule in "match" array
+ * parse_match() - Parse one "match" item in syscall rules
  * @g:		gluten context
  * @obj:	Matching rule for one syscall
  * @args:	Description of arguments from syscall model
@@ -291,18 +222,18 @@ static void parse_match(struct gluten_ctx *g, JSON_Object *obj,
 	unsigned count = 0;
 	struct arg *a;
 
-	for (a = args; a->name; a++) {
+	for (a = args; a->f.name; a++) {
 		struct arg *real_arg = a;
-		JSON_Value *value;
+		JSON_Value *jvalue;
 
-		if (a->type == SELECTED) {
+		if (a->f.type == SELECTED) {
 			if (!(real_arg = g->selected_arg[a->pos]))
-				die("  No selection for argument %s", a->name);
+				die("  No argument selected for %s", a->f.name);
 		}
 
-		if ((value = json_object_get_value(obj, real_arg->name))) {
+		if ((jvalue = json_object_get_value(obj, real_arg->f.name))) {
 			count++;
-			parse_arg(g, real_arg->name, value, real_arg);
+			parse_arg(g, jvalue, real_arg);
 		}
 	}
 

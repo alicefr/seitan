@@ -71,38 +71,50 @@ static struct num tun_ifr_flags[] = {
 
 static struct field tun_ifr[] = {	/* netdevice(7) */
 	{
-		"name",		STRING,
+		"name",		STRING,	0,
 		offsetof(struct ifreq, ifr_name),
 		IFNAMSIZ,	{ 0 },
 	},
 	{
-		"flags",	INT,	/* One allowed at a time? */
+		"flags",	INT,	/* One allowed at a time? */ 0,
 		offsetof(struct ifreq, ifr_flags),
 		0,		{ .d_num = tun_ifr_flags },
 	},
 };
 
 static struct select_num ioctl_request_arg[] = {
-	{
-		FS_IOC_GETFLAGS,
-		{ 2, "argp",	INTFLAGS, sizeof(int), { .d_num = attr } }
+	{ FS_IOC_GETFLAGS,
+		{ 2,
+			{
+				"argp",	INT,	FLAGS,
+				sizeof(int),		0,
+				{ .d_num = attr }
+			}
+		}
 	},
-	{
-		FS_IOC_SETFLAGS,
-		{ 2, "argp",	INTFLAGS, sizeof(int), { .d_num = attr } }
+	{ FS_IOC_SETFLAGS,
+		{ 2,
+			{
+				"argp",	INT,	FLAGS,
+				sizeof(int),		0,
+				{ .d_num = attr }
+			}
+		}
 	},
-	{
-		TUNSETIFF,
-		{
-			2, "ifr",	STRUCT, sizeof(struct ifreq),
-			{ .d_struct = tun_ifr }
+	{ TUNSETIFF,
+		{ 2,
+			{
+				"ifr",	STRUCT,	0,
+				sizeof(struct ifreq),	0,
+				{ .d_struct = tun_ifr }
+			}
 		}
 	},
 	{ 0 },
 };
 
 static struct field ioctl_request = {
-	"request", INT, 0, 0, { .d_num = request },
+	"request", INT, 0, 0, 0, { .d_num = request },
 };
 
 static struct select ioctl_request_select = {
@@ -110,21 +122,29 @@ static struct select ioctl_request_select = {
 };
 
 static struct arg ioctl_args[] = {
-	{
-		0,	"path",		FDPATH,		0,
-		{ 0 }
+	{ 0,
+		{
+			"path",		FDPATH,		0,	0,	0,
+			{ 0 }
+		}
 	},
-	{
-		0,	"fd",		INT,		0,
-		{ 0 }
+	{ 0,
+		{
+			"fd",		INT,		0,	0,	0,
+			{ 0 }
+		}
 	},
-	{
-		1,	"request",	SELECT,		0,
-		{ .d_select = &ioctl_request_select }
+	{ 1,
+		{
+			"request",	SELECT,		0,	0,	0,
+			{ .d_select = &ioctl_request_select }
+		}
 	},
-	{
-		2,	"arg",		SELECTED,	-1,
-		{ 0 }
+	{ 2,
+		{
+			"arg",		SELECTED,	0,	-1,	0,
+			{ 0 }
+		}
 	},
 	{ 0 },
 };

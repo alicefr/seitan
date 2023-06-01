@@ -36,25 +36,26 @@ extern struct seccomp_data anonymous_seccomp_data;
 #define GET_BIT(x, i) (((x) & (1UL << (i))) != 0)
 
 enum gluten_offset_type {
-	OFFSET_RO_DATA = 0,
-	OFFSET_DATA = 1,
-	OFFSET_SECCOMP_DATA = 2,
-	OFFSET_INSTRUCTION = 3,
-	OFFSET_TYPE_MAX = OFFSET_INSTRUCTION,
+	OFFSET_NULL		= 0,
+	OFFSET_RO_DATA		= 1,
+	OFFSET_DATA		= 2,
+	OFFSET_SECCOMP_DATA	= 3,
+	OFFSET_INSTRUCTION	= 4,
+	OFFSET_TYPE_MAX		= OFFSET_INSTRUCTION,
 };
 
 extern const char *gluten_offset_name[OFFSET_TYPE_MAX + 1];
 
 struct gluten_offset {
 #ifdef __GNUC__
-	enum gluten_offset_type type : BITS_PER_NUM(OFFSET_TYPE_MAX);
+	enum gluten_offset_type type	:BITS_PER_NUM(OFFSET_TYPE_MAX);
 #else
-	uint16_t type : BITS_PER_NUM(OFFSET_TYPE_MAX);
+	uint32_t type			:BITS_PER_NUM(OFFSET_TYPE_MAX);
 #endif
-	uint16_t offset : BITS_PER_NUM(OFFSET_MAX);
+	uint32_t offset			:BITS_PER_NUM(OFFSET_MAX);
 };
 
-BUILD_BUG_ON(BITS_PER_NUM(OFFSET_TYPE_MAX) + BITS_PER_NUM(OFFSET_MAX) > 16)
+BUILD_BUG_ON(BITS_PER_NUM(OFFSET_TYPE_MAX) + BITS_PER_NUM(OFFSET_MAX) > 32)
 
 enum ns_spec_type {
 	NS_NONE,
@@ -98,6 +99,7 @@ enum op_type {
 	OP_END = 0,
 	OP_NR,
 	OP_CALL,
+	OP_COPY,
 	OP_BLOCK,
 	OP_CONT,
 	OP_INJECT,
@@ -106,7 +108,6 @@ enum op_type {
 	OP_LOAD,
 	OP_CMP,
 	OP_RESOLVEDFD,
-	OP_COPY,
 };
 
 struct op_nr {
@@ -212,6 +213,8 @@ BUILD_BUG_ON(INST_SIZE < INST_MAX * sizeof(struct op))
 static inline bool is_offset_valid(const struct gluten_offset x)
 {
 	switch (x.type) {
+	case OFFSET_NULL:
+		return false;
 	case OFFSET_DATA:
 		return x.offset < DATA_SIZE;
 	case OFFSET_RO_DATA:

@@ -16,10 +16,7 @@
 
 static const char *type_str[] = {
 	"UNDEF", "NONE",
-	"INT",  "INTMASK",  "INTFLAGS",
-	"U32",  "U32MASK",  "U32FLAGS",
-	"U64",  "U64MASK",  "U64FLAGS",
-	"LONG", "LONGMASK", "LONGFLAGS",
+	"INT", "U32", "U64", "LONG",
 	"STRING",
 	"STRUCT", "SELECT",
 	"PID",
@@ -48,8 +45,8 @@ void emit_nr(struct gluten_ctx *g, struct gluten_offset number)
 	nr->no_match.type = OFFSET_INSTRUCTION;
 	nr->no_match.offset = JUMP_NEXT_BLOCK;
 
-	debug("   %i: OP_NR: if syscall number is not %li, jump to %s",
-	      g->ip.offset, number, jump_name[nr->no_match.offset]);
+	debug("   %i: OP_NR: if syscall number is not C#%lu, jump to %s",
+	      g->ip.offset, number.offset, jump_name[nr->no_match.offset]);
 
 	if (++g->ip.offset > INST_MAX)
 		die("Too many instructions");
@@ -133,7 +130,7 @@ void emit_cmp_field(struct gluten_ctx *g, enum op_cmp_type cmp,
 		    enum jump_type jmp)
 {
 	emit_cmp(g, cmp, x, y,
-		 field->strlen ? field->strlen : gluten_size[field->type],
+		 field->size ? field->size : gluten_size[field->type],
 		 jmp);
 }
 
@@ -174,48 +171,127 @@ void emit_block(struct gluten_ctx *g, int32_t error)
 		die("Too many instructions");
 }
 
-struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
-			       size_t str_len, union value *value)
+/**
+ * emit_copy(): Emit OP_COPY instruction: copy between given offsets
+ * @g:		gluten context
+ * @dst:	gluten pointer to destination
+ * @src:	gluten pointer to source
+ * @size:	Bytes to copy
+ */
+void emit_copy(struct gluten_ctx *g,
+	       struct gluten_offset dst, struct gluten_offset src, size_t size)
 {
-	void *p = gluten_ptr(&g->g, g->cp);
-	struct gluten_offset ret = g->cp;
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct op_copy *copy = &op->op.copy;
+
+	op->type = OP_COPY;
+
+	copy->dst = dst;
+	copy->src = src;
+	copy->size = size;
+
+	debug("   %i: OP_COPY: %lu bytes from %s: #%lu to %s: #%lu",
+	      g->ip.offset, size,
+	      gluten_offset_name[src.type], src.offset,
+	      gluten_offset_name[dst.type], dst.offset);
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+}
+
+/**
+ * emit_copy_field() - Emit OP_COPY for a given field type
+ * @g:		gluten context
+ * @field:	Description of field from system call model
+ * @dst:	gluten pointer to destination
+ * @src:	gluten pointer to source
+ */
+void emit_copy_field(struct gluten_ctx *g, struct field *field,
+		     struct gluten_offset dst, struct gluten_offset src)
+{
+	emit_copy(g, dst, src,
+		  field->size ? field->size : gluten_size[field->type]);
+}
+
+static struct gluten_offset emit_data_do(struct gluten_ctx *g,
+					 struct gluten_offset offset,
+					 enum type type, size_t str_len,
+					 union value *value, bool add)
+{
+	void *p = gluten_ptr(&g->g, offset);
+	struct gluten_offset ret = offset;
+
+	if (!p) {
+		if (type == STRING)
+			ret = gluten_ro_alloc(g, str_len);
+		else
+			ret = gluten_ro_alloc_type(g, type);
+
+		p = gluten_ptr(&g->g, ret);
+	}
 
 	switch (type) {
 	case INT:
-		if (g->cp.offset + sizeof(int) > RO_DATA_SIZE)
-			die("   Read-only data section exceeded");
+		if (add) {
+			*(int *)p |= value->v_int;
+			debug("   C#%i |= (%s) %i",
+			      ret.offset, type_str[type], value->v_int);
+		} else {
+			*(int *)p = value->v_int;
+			debug("   C#%i := (%s) %i",
+			      ret.offset, type_str[type], value->v_int);
+		}
 
-		*(int *)p = value->v_int;
-		debug("   C#%i: (%s) %i", g->cp.offset, type_str[type],
-		      value->v_int);
-
-		g->cp.offset += sizeof(int);
 		break;
 	case U64:
-		if (g->cp.offset + sizeof(uint64_t) > RO_DATA_SIZE)
-			die("   Read-only data section exceeded");
+		if (add) {
+			*(uint64_t *)p |= value->v_num;
+			debug("   C#%i |= (%s) %llu",
+			      ret.offset, type_str[type], value->v_num);
+		} else {
+			*(uint64_t *)p = value->v_num;
+			debug("   C#%i := (%s) %llu",
+			      ret.offset, type_str[type], value->v_num);
+		}
 
-		*(uint64_t *)p = value->v_u64;
-		debug("   C#%i: (%s) %i", g->cp.offset, type_str[type],
-		      value->v_u64);
-
-		g->cp.offset += sizeof(uint64_t);
 		break;
 	case STRING:
-		if (g->cp.offset + str_len > RO_DATA_SIZE)
-			die("   Read-only data section exceeded");
-
 		strncpy(p, value->v_str, str_len);
 		debug("   C#%i: (%s:%i) %s", g->cp.offset, type_str[type],
 		      str_len, value->v_str);
 
-		g->cp.offset += str_len;
 		break;
 	default:
 		;
 	}
 
 	return ret;
+}
+
+struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
+			       size_t str_len, union value *value)
+{
+	struct gluten_offset offset = { .type = OFFSET_NULL, .offset = 0 };
+
+	return emit_data_do(g, offset, type, str_len, value, false);
+}
+
+struct gluten_offset emit_data_at(struct gluten_ctx *g,
+				  struct gluten_offset offset,
+				  enum type type, union value *value)
+{
+	return emit_data_do(g, offset, type,
+			    (type == STRING) ? strlen(value->v_str) : 0, value,
+			    false);
+}
+
+struct gluten_offset emit_data_or(struct gluten_ctx *g,
+				  struct gluten_offset offset,
+				  enum type type, union value *value)
+{
+	return emit_data_do(g, offset, type,
+			    (type == STRING) ? strlen(value->v_str) : 0, value,
+			    true);
 }
 
 static void gluten_link(struct gluten_ctx *g, enum jump_type type,
@@ -246,7 +322,7 @@ static void gluten_link(struct gluten_ctx *g, enum jump_type type,
 
 void link_block(struct gluten_ctx *g)
 {
-	debug("   Linking block...");
+	debug(" Linking block...");
 	gluten_link(g, JUMP_NEXT_BLOCK, (struct op *)gluten_ptr(&g->g, g->lr));
 }
 

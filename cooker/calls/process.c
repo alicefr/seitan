@@ -36,13 +36,15 @@ clone3
 #include "../calls.h"
 
 static struct arg unshare_args[] = {
-	{
-		0,	"flags",	INTFLAGS,	0,
-		{ 0 /* TODO */ }
-	},
+	{ 0,
+		{
+			"flags",	UNDEF /* TODO */, FLAGS, 0,	0,
+			{ 0 /* TODO */ }
+		}
+	}
 };
 
 struct call syscalls_process[] = {
 	{ __NR_unshare, "unshare", unshare_args },
-	{ 0 },
+	{ 0 }
 };

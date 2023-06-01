@@ -3,7 +3,10 @@
     "match": [ /* qemu-pr-helper and similar */
       { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "fd": { "tag": "fd" } } }
     ],
-    "call": { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "ret": "y" } },
+    "call": [
+      { "socket": { "family": "unix", "type": "stream", "flags": 0, "protocol": 0 }, "ret": "new_fd" },
+      { "connect": { "fd": { "tag": { "get": "new_fd" } }, "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" } }, "ret": "y" }
+    ],
     "inject": { "what": "fd", "new": { "tag": "y" }, "old": { "tag": "fd" }, "return": 0 }
   },
   {
@@ -31,7 +34,7 @@
       { "mknod": { "path": { "tag": "path" }, "mode": "c", "major": 1, "minor": { "in": [ 3, 5, 7, 8, 9 ], "tag": "minor" } } }
     ],
     "context": { "userns": "init", "mountns": "caller" },
-    "call": { "mknod": { "path": { "tag": "path" }, "mode": "c", "major": 1, "minor": { "tag": "minor" }, "ret": "x" } },
+    "call": { "mknod": { "path": { "tag": { "get": "path" } }, "mode": "c", "major": 1, "minor": { "tag": { "get": "minor" } } }, "ret": "x" },
     "inject": { "what": "fd", "new": { "tag": "x" } },
     "return": { "tag": "x" }
   }

@@ -8,6 +8,7 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#include "parson.h"
 #include "cooker.h"
 #include "gluten.h"
 #include "parse.h"

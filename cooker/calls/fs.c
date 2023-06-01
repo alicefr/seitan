@@ -66,23 +66,35 @@ swapoff
 #include "../calls.h"
 
 static struct arg mknod_args[] = {
-	{
-		0,	"path",		STRING,		1 /* TODO: PATH_MAX */,
-		{ 0 }
+	{ 0,
+		{
+			"path",		STRING,			0,
+			0,	1 /* TODO: PATH_MAX */,
+			{ 0 }
+		}
 	},
-	{
-		1,	"mode",		INTFLAGS,	0,
-		{ 0 /* TODO */ },
+	{ 1,
+		{
+			"mode",		UNDEF /* TODO */,	FLAGS,
+			0,	0,
+			{ 0 /* TODO */ },
+		}
 	},
-	{
-		2,	"major",	UNDEF /* TODO */, 0,
-		{ 0 },
+	{ 2,
+		{
+			"major",	UNDEF /* TODO */,	0,
+			0,	0,
+			{ 0 },
+		}
 	},
-	{
-		2,	"minor",	UNDEF /* TODO */, 0,
-		{ 0 },
+	{ 2,
+		{
+			"minor",	UNDEF /* TODO */,	0,
+			0,	0,
+			{ 0 },
+		}
 	},
-	{ 0 },
+	{ 0 }
 };
 
 struct call syscalls_fs[] = {

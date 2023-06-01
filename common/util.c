@@ -30,5 +30,6 @@ logfn(info)
 logfn(debug)
 
 const char *gluten_offset_name[OFFSET_TYPE_MAX + 1] = {
+	"NULL",
 	"read-only data", "temporary data", "seccomp data", "instruction area"
 };

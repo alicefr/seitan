@@ -17,23 +17,28 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 
+#include <util.h>
+
 #define TAGS_MAX			256
 #define CALL_ARGS			6
 
 struct num;
 struct field;
 struct select;
+struct size;
 
 /**
  * union desc - Description of lists of numbers, structs or selector fields
  * @d_num:	Pointer to a list of numbers and their labels
  * @d_struct:	Pointer to a struct description
  * @d_select:	Pointer to description of a selector
+ * @d_arg_size:	Position of argument whose pointed length is described
  */
 union desc {
 	struct num		*d_num;
 	struct field		*d_struct;
 	struct select		*d_select;
+	int			d_arg_size;
 };
 
 /**
@@ -59,20 +64,9 @@ enum type {
 	NONE,
 
 	INT,
-	INTMASK,
-	INTFLAGS,
-
 	U32,
-	U32MASK,
-	U32FLAGS,
-
 	U64,
-	U64MASK,
-	U64FLAGS,
-
 	LONG,
-	LONGMASK,
-	LONGFLAGS,
 
 	STRING,
 
@@ -91,10 +85,28 @@ enum type {
 	TYPE_END,
 };
 
+enum flags {
+	/* Mask field with all possible values, first */
+	MASK	= BIT(1),
+	/* Intersection of multiple bits */
+	FLAGS	= BIT(2),
+	/* Represent size of another argument */
+	SIZE	= BIT(3),
+
+	COPY_ON_CALL = BIT(4),
+
+	/* Don't copy value from original call, but fill on return */
+	RBUF	= BIT(5),
+	/* Copy value from original call, ignore on return */
+	WBUF	= BIT(6),
+};
+
 #define TYPE_COUNT		(TYPE_END - 1)
 
-#define TYPE_IS_COMPOUND(t)	((t) == STRUCT || (t) == SELECT)
-#define TYPE_IS_NUM(t)		((t) == INT || (t) == U32 || (t) == LONG)
+#define TYPE_IS_COMPOUND(t)						\
+	((t) == STRUCT || (t) == SELECT)
+#define TYPE_IS_NUM(t)							\
+	((t) == INT || (t) == U32 || (t) == U64 || (t) == LONG)
 
 /**
  * struct num - A numeric value and its label
@@ -107,31 +119,21 @@ struct num {
 };
 
 /**
- * struct field - Field inside a struct
+ * struct field - Field inside argument or struct
  * @name:	Name of field
  * @type:	Type of field
- * @offset:	Offset of field within struct, in bytes
- * @strlen:	Length of string for string types, 0 otherwise
+ * @flags:	Modifier flags for type
+ * @offset:	Offset of field within argument or struct, in bytes
+ * @size:	Turns int into int *, char into string, humans into paperclips
  * @desc:	Description of possible values for field, or linked struct
  */
 struct field {
 	char *name;
 	enum type type;
+	enum flags flags;
+
 	off_t offset;
 
-	size_t strlen;
-
-	union desc desc;
-};
-
-/**
- * struct select_target - Description of value selected by selector field
- * @type:	Type of value
- * @size:	Size to dereference for pointers, 0 otherwise
- * @desc:	Description for selected value
- */
-struct select_target {
-	enum type type;		/* TODO: Almost a struct arg? */
 	size_t size;
 
 	union desc desc;
@@ -140,19 +142,11 @@ struct select_target {
 /**
  * struct arg - Description of part of, or complete system call argument
  * @pos:	Index of argument in system call
- * @name:	JSON name used for matches and calls
- * @type:	Argument type
- * @size:	Size of pointed area if any, 0 otherwise
- * @desc:	Description of list of numbers, struct or selector field
+ * @f:		Field describing part or complete argument
  */
 struct arg {
 	int pos;
-	char *name;
-
-	enum type type;
-	size_t size;
-
-	union desc desc;
+	struct field f;
 };
 
 /**
@@ -162,7 +156,6 @@ struct arg {
  */
 struct select_num {
 	long long value;
-
 	struct arg target;
 };
 

@@ -14,16 +14,9 @@
 
 size_t gluten_size[TYPE_COUNT] = {
 	[INT]		= sizeof(int),
-	[INTMASK]	= sizeof(int),
-	[INTFLAGS]	= sizeof(int),
-
 	[U32]		= sizeof(uint32_t),
-	[U32MASK]	= sizeof(uint32_t),
-	[U32FLAGS]	= sizeof(uint32_t),
-
+	[U64]		= sizeof(uint64_t),
 	[LONG]		= sizeof(long),
-	[LONGMASK]	= sizeof(long),
-	[LONGFLAGS]	= sizeof(long),
 
 	[PID]		= sizeof(pid_t),
 	[PORT]		= sizeof(in_port_t),
@@ -35,17 +28,17 @@ size_t gluten_size[TYPE_COUNT] = {
 const char *jump_name[JUMP_COUNT] = { "next block", "next match", "end" };
 
 /**
- * gluten_alloc() - Allocate in temporary (seitan read-write) data area
+ * gluten_rw_alloc() - Allocate in temporary (seitan read-write) data area
  * @g:		gluten context
  * @size:	Bytes to allocate
  *
  * Return: offset to allocated area
  */
-struct gluten_offset gluten_alloc(struct gluten_ctx *g, size_t size)
+struct gluten_offset gluten_rw_alloc(struct gluten_ctx *g, size_t size)
 {
 	struct gluten_offset ret = g->dp;
 
-	debug("   allocating %lu at offset %i", size, g->dp.offset);
+	debug("   allocating %lu at read-write offset %i", size, g->dp.offset);
 	if ((g->dp.offset += size) >= DATA_SIZE)
 		die("Temporary data size exceeded");
 
@@ -53,15 +46,45 @@ struct gluten_offset gluten_alloc(struct gluten_ctx *g, size_t size)
 }
 
 /**
- * gluten_alloc() - Allocate storage for given type in temporary data area
+ * gluten_rw_alloc_type() - Allocate storage for given type in temporary area
  * @g:		gluten context
  * @type:	Data type
  *
  * Return: offset to allocated area
  */
-struct gluten_offset gluten_alloc_type(struct gluten_ctx *g, enum type type)
+struct gluten_offset gluten_rw_alloc_type(struct gluten_ctx *g, enum type type)
 {
-	return gluten_alloc(g, gluten_size[type]);
+	return gluten_rw_alloc(g, gluten_size[type]);
+}
+
+/**
+ * gluten_ro_alloc() - Allocate in read-only data area
+ * @g:		gluten context
+ * @size:	Bytes to allocate
+ *
+ * Return: offset to allocated area
+ */
+struct gluten_offset gluten_ro_alloc(struct gluten_ctx *g, size_t size)
+{
+	struct gluten_offset ret = g->cp;
+
+	debug("   allocating %lu at read-only offset %i", size, g->cp.offset);
+	if ((g->cp.offset += size) >= RO_DATA_SIZE)
+		die("Read-only data size exceeded");
+
+	return ret;
+}
+
+/**
+ * gluten_ro_alloc_type() - Allocate storage for given type in read-only area
+ * @g:		gluten context
+ * @type:	Data type
+ *
+ * Return: offset to allocated area
+ */
+struct gluten_offset gluten_ro_alloc_type(struct gluten_ctx *g, enum type type)
+{
+	return gluten_ro_alloc(g, gluten_size[type]);
 }
 
 void gluten_add_tag(struct gluten_ctx *g, const char *name,
@@ -78,6 +101,26 @@ void gluten_add_tag(struct gluten_ctx *g, const char *name,
 
 	debug("   tag '%s' now refers to %s at %i",
 	      name, gluten_offset_name[offset.type], offset.offset);
+}
+
+void gluten_add_tag_post(struct gluten_ctx *g, const char *name,
+			 struct gluten_offset offset)
+{
+	/* TODO: Mark as invalid for current rule */
+	gluten_add_tag(g, name, offset);
+}
+
+struct gluten_offset gluten_get_tag(struct gluten_ctx *g, const char *name)
+{
+	int i;
+
+	for (i = 0; i < TAGS_MAX && g->tags[i].name; i++) {
+		if (!strcmp(g->tags[i].name, name))
+			return g->tags[i].offset;
+	}
+
+	die("   tag '%s' not found", name);
+	return g->tags[0].offset;	/* Pro forma, not actually happening */
 }
 
 /**

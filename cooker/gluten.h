@@ -47,10 +47,15 @@ enum jump_type {
 	JUMP_COUNT,
 };
 
-struct gluten_offset gluten_alloc(struct gluten_ctx *g, size_t size);
-struct gluten_offset gluten_alloc_type(struct gluten_ctx *g, enum type type);
+struct gluten_offset gluten_rw_alloc(struct gluten_ctx *g, size_t size);
+struct gluten_offset gluten_rw_alloc_type(struct gluten_ctx *g, enum type type);
+struct gluten_offset gluten_ro_alloc(struct gluten_ctx *g, size_t size);
+struct gluten_offset gluten_ro_alloc_type(struct gluten_ctx *g, enum type type);
 void gluten_add_tag(struct gluten_ctx *g, const char *name,
 		    struct gluten_offset offset);
+void gluten_add_tag_post(struct gluten_ctx *g, const char *name,
+			 struct gluten_offset offset);
+struct gluten_offset gluten_get_tag(struct gluten_ctx *g, const char *name);
 void gluten_init(struct gluten_ctx *g);
 void gluten_block_init(struct gluten_ctx *g);
 void gluten_write(struct gluten_ctx *g, const char *path);

@@ -83,16 +83,36 @@ static struct num protocols[] = {
 };
 
 static struct arg socket_args[] = {
-	{ 0, "family",		INT,		0, { .d_num = af } },
-	{ 1, "type",		INTMASK,	0, { .d_num = socket_types } },
-	{ 1, "flags",		INTFLAGS,	0, { .d_num = socket_flags } },
-	{ 2, "protocol",	INT,		0, { .d_num = protocols } },
+	{ 0,
+		{
+			"family",	INT,	0,	0,	0,
+			{ .d_num = af }
+		}
+	},
+	{ 1,
+		{
+			"type",		INT,	MASK,	0,	0,
+			{ .d_num = socket_types }
+		}
+	},
+	{ 1,
+		{
+			"flags",	INT,	FLAGS,	0,	0,
+			{ .d_num = socket_flags }
+		}
+	},
+	{ 2,
+		{
+			"protocol",	INT,	0,	0,	0,
+			{ .d_num = protocols }
+		}
+	},
 	{ 0 },
 };
 
 static struct field connect_addr_unix[] = {
 	{
-		"path",		STRING,
+		"path",		STRING,	0,
 		offsetof(struct sockaddr_un, sun_path),
 		UNIX_PATH_MAX,	{ 0 }
 	},
@@ -101,12 +121,12 @@ static struct field connect_addr_unix[] = {
 
 static struct field connect_addr_ipv4[] = {
 	{
-		"port",		PORT,
+		"port",		PORT,	0,
 		offsetof(struct sockaddr_in, sin_port),
 		0,		{ 0 }
 	},
 	{
-		"addr",		IPV4,
+		"addr",		IPV4,	0,
 		offsetof(struct sockaddr_in, sin_addr),
 		0,		{ 0 }
 	},
@@ -115,12 +135,12 @@ static struct field connect_addr_ipv4[] = {
 
 static struct field connect_addr_ipv6[] = {
 	{
-		"port",		PORT,
+		"port",		PORT,	0,
 		offsetof(struct sockaddr_in6, sin6_port),
 		0,		{ 0 }
 	},
 	{
-		"addr",		IPV6,
+		"addr",		IPV6,	0,
 		offsetof(struct sockaddr_in6, sin6_addr),
 		0,		{ 0 }
 	},
@@ -129,12 +149,12 @@ static struct field connect_addr_ipv6[] = {
 
 static struct field connect_addr_nl[] = {
 	{
-		"pid",		PID,
+		"pid",		PID,	0,
 		offsetof(struct sockaddr_nl, nl_pid),
 		0,		{ 0 }
 	},
 	{
-		"groups",	U32,
+		"groups",	U32,	0,
 		offsetof(struct sockaddr_nl, nl_groups),
 		0,		{ 0 }
 	},
@@ -142,27 +162,43 @@ static struct field connect_addr_nl[] = {
 };
 
 static struct field connect_family = {
-	"family",	INT,
+	"family",	INT,	0,
 	offsetof(struct sockaddr, sa_family),
 	0,		{ .d_num = af }
 };
 
 static struct select_num connect_addr_select_family[] = {
-	{
-		AF_UNIX,
-		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_unix } }
+	{ AF_UNIX,
+		{ 1,
+			{
+				NULL, STRUCT, 0, 0, 0,
+				{ .d_struct = connect_addr_unix }
+			}
+		}
 	},
-	{
-		AF_INET,
-		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_ipv4 } }
+	{ AF_INET,
+		{ 1,
+			{
+				NULL, STRUCT, 0, 0, 0,
+				{ .d_struct = connect_addr_ipv4 }
+			}
+		}
 	},
-	{
-		AF_INET6,
-		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_ipv6 } }
+	{ AF_INET6,
+		{ 1,
+			{
+				NULL, STRUCT, 0, 0, 0,
+				{ .d_struct = connect_addr_ipv6 }
+			}
+		}
 	},
-	{
-		AF_NETLINK,
-		{ 1, NULL, STRUCT, 0, { .d_struct = connect_addr_nl } }
+	{ AF_NETLINK,
+		{ 1,
+			{
+				NULL, STRUCT, 0, 0, 0,
+				{ .d_struct = connect_addr_nl }
+			}
+		}
 	},
 	{ 0 },
 };
@@ -172,21 +208,37 @@ static struct select connect_addr_select = {
 };
 
 static struct arg connect_args[] = {
-	{
-		0, "fd",	INT,	0,
-		{ 0 },
+	{ 0,
+		{
+			"fd",		INT,		0,
+			0,
+			0,
+			{ 0 },
+		},
 	},
-	{
-		0, "path",	FDPATH,	0,
-		{ 0 },
+	{ 0,
+		{
+			"path",		FDPATH,		0,
+			0,
+			0,
+			{ 0 },
+		},
 	},
-	{
-		1, "addr",	SELECT,	sizeof(struct sockaddr_storage),
-		{ .d_select = &connect_addr_select },
+	{ 1,
+		{
+			"addr",		SELECT,		0,
+			0,
+			sizeof(struct sockaddr_storage),
+			{ .d_select = &connect_addr_select },
+		},
 	},
-	{
-		2, "addrlen",	LONG,	0,
-		{ 0 },
+	{ 2,
+		{
+			"addrlen",	LONG,		SIZE,
+			0,
+			0,
+			{ .d_arg_size = 1 },
+		},
 	},
 };
 
