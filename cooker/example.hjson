@@ -1,13 +1,13 @@
 [
   {
     "match": [ /* qemu-pr-helper and similar */
-      { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "fd": { "tag": "fd" } } }
+      { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "fd": { "tag": "orig_fd" } } }
     ],
     "call": [
       { "socket": { "family": "unix", "type": "stream", "flags": 0, "protocol": 0 }, "ret": "new_fd" },
       { "connect": { "fd": { "tag": { "get": "new_fd" } }, "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" } }, "ret": "y" }
     ],
-    "inject": { "what": "fd", "new": { "tag": "y" }, "old": { "tag": "fd" }, "return": 0 }
+    "fd": { "src": { "tag": "new_fd" }, "new": { "tag": "orig_fd" }, "return": true, "close_on_exec": false }
   },
   {
     "match": [ /* qemu creates a tap interface */
@@ -38,7 +38,6 @@
       "ret": "x",
       "context": { "user": "init", "mnt": "caller" }
     },
-    "inject": { "what": "fd", "new": { "tag": "x" } },
     "return": { "tag": "x" }
   }
 ]

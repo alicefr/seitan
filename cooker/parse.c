@@ -17,10 +17,52 @@
 #include "emit.h"
 #include "util.h"
 
-static void handle_inject(struct gluten_ctx *g, JSON_Value *value)
+static void handle_fd(struct gluten_ctx *g, JSON_Value *value)
 {
-	(void)g;
-	(void)value;
+	JSON_Object *obj = json_value_get_object(value), *tmp;
+	struct fd_desc desc = { .cloexec = 1 };
+	JSON_Value *jvalue;
+	const char *tag;
+
+	debug(" Parsing \"fd\"");
+
+	jvalue = json_object_get_value(obj, "src");
+	if (json_value_get_type(jvalue) == JSONObject) {
+		tmp = json_object_get_object(obj, "src");
+		if (!tmp || !(tag = json_object_get_string(tmp, "tag")))
+			die("invalid tag specification");
+		desc.srcfd = gluten_get_tag(g, tag);
+	} else if (json_value_get_type(jvalue) == JSONNumber) {
+		union value v = { .v_num = json_value_get_number(jvalue) };
+		desc.srcfd = emit_data(g, U32, 0, &v);
+	} else {
+		die("no valid \"src\" in \"fd\"");
+	}
+
+	jvalue = json_object_get_value(obj, "new");
+	if (!jvalue) {
+		;
+	} else if (json_value_get_type(jvalue) == JSONObject) {
+		tmp = json_object_get_object(obj, "new");
+		if (!tmp || !(tag = json_object_get_string(tmp, "tag")))
+			die("invalid tag specification");
+		desc.newfd = gluten_get_tag(g, tag);
+		desc.setfd = 1;
+	} else if (json_value_get_type(jvalue) == JSONNumber) {
+		union value v = { .v_num = json_value_get_number(jvalue) };
+		desc.newfd = emit_data(g, U32, 0, &v);
+		desc.setfd = 1;
+	} else {
+		die("invalid \"new\" in \"fd\"");
+	}
+
+	if (json_object_get_boolean(obj, "return"))
+		desc.do_return = 1;
+
+	if (json_object_get_value(obj, "close_on_exec"))
+		desc.cloexec = json_object_get_boolean(obj, "close_on_exec");
+
+	emit_fd(g, &desc);
 }
 
 static void handle_limit(struct gluten_ctx *g, JSON_Value *value)
@@ -58,7 +100,7 @@ struct rule_parser {
 } parsers[] = {
 	{ "match",	handle_matches },
 	{ "call",	handle_calls },
-	{ "inject",	handle_inject },
+	{ "fd",		handle_fd },
 	{ "limit",	handle_limit },
 	{ "return",	handle_return },
 	{ "block",	handle_block },

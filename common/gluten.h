@@ -65,8 +65,7 @@ enum op_type {
 	OP_COPY,
 	OP_BLOCK,
 	OP_CONT,
-	OP_INJECT,
-	OP_INJECT_A,
+	OP_FD,
 	OP_RETURN,
 	OP_LOAD,
 	OP_CMP,
@@ -149,6 +148,14 @@ struct syscall_desc {
         struct gluten_offset args[];
 };
 
+struct fd_desc {
+	struct gluten_offset srcfd;
+	struct gluten_offset newfd;
+	uint8_t setfd		:1;
+	uint8_t cloexec		:1;
+	uint8_t do_return	:1;
+};
+
 struct op_call {
         struct gluten_offset desc;
 };
@@ -167,9 +174,8 @@ struct op_return {
 	struct gluten_offset val;
 };
 
-struct op_inject {
-	struct gluten_offset new_fd;
-	struct gluten_offset old_fd;
+struct op_fd {
+	struct gluten_offset desc;	/* struct fd_desc */
 };
 
 struct op_load {
@@ -215,7 +221,7 @@ struct op {
 		struct op_call call;
 		struct op_block block;
 		struct op_return ret;
-		struct op_inject inject;
+		struct op_fd fd;
 		struct op_load load;
 		struct op_cmp cmp;
 		struct op_resolvedfd resfd;

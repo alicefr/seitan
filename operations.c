@@ -309,40 +309,37 @@ int op_continue(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	return 0;
 }
 
-static int do_inject(const struct seccomp_notif *req, int notifier,
-		     struct gluten *g, struct op_inject *op, bool atomic)
+static int op_fd(const struct seccomp_notif *req, int notifier,
+		 struct gluten *g, struct op_fd *op)
 {
+	const struct fd_desc *desc = gluten_ptr(&req->data, g, op->desc);
 	struct seccomp_notif_addfd resp;
+	void *fd;
+
+	if (!desc)
+		return -1;
 
 	resp.flags = SECCOMP_ADDFD_FLAG_SETFD;
-	resp.newfd_flags = 0;
+	resp.flags |= desc->do_return ? SECCOMP_ADDFD_FLAG_SEND : 0;
+	resp.newfd_flags = desc->cloexec ? O_CLOEXEC : 0;
 	resp.id = req->id;
 
-	if (gluten_read(&req->data, g, &resp.newfd, op->new_fd,
-			sizeof(resp.newfd)) == -1)
+	if (!(fd = gluten_ptr(&req->data, g, desc->srcfd)))
 		return -1;
-	if (gluten_read(&req->data, g, &resp.srcfd, op->old_fd,
-			sizeof(resp.srcfd)) == -1)
-		return -1;
+	resp.srcfd = *(uint32_t *)fd;
 
-	if (atomic)
-		resp.flags |= SECCOMP_ADDFD_FLAG_SEND;
+	if (desc->setfd) {
+		if (!(fd = gluten_ptr(&req->data, g, desc->newfd)))
+			return -1;
+		resp.newfd = *(uint32_t *)fd;
+	} else {
+		resp.newfd = 0;
+	}
+
 	if (send_inject_target(&resp, notifier) == -1)
 		return -1;
 
 	return 0;
-}
-
-int op_inject(const struct seccomp_notif *req, int notifier, struct gluten *g,
-	      struct op_inject *op)
-{
-	return do_inject(req, notifier, g, op, false);
-}
-
-int op_inject_a(const struct seccomp_notif *req, int notifier, struct gluten *g,
-		struct op_inject *op)
-{
-	return do_inject(req, notifier, g, op, true);
 }
 
 int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,

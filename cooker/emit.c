@@ -53,6 +53,31 @@ void emit_nr(struct gluten_ctx *g, struct gluten_offset number)
 }
 
 /**
+ * emit_fd() - Emit OP_FD instruction: add/set file descriptor in target
+ * @g:		gluten context
+ * @desc:	Pointer to file descriptors specification
+ */
+void emit_fd(struct gluten_ctx *g, struct fd_desc *desc)
+{
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct op_fd *fd = &op->op.fd;
+	struct gluten_offset o;
+	struct fd_desc *dst;
+
+	op->type = OP_FD;
+
+	o = gluten_ro_alloc(g, sizeof(struct fd_desc));
+	dst = (struct fd_desc *)gluten_ptr(&g->g, o);
+	memcpy(dst, desc, sizeof(struct fd_desc));
+	fd->desc = o;
+
+	debug("   %i: OP_FD: ...", g->ip.offset);
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+}
+
+/**
  * emit_call() - Emit OP_CALL instruction: execute a system call
  * @g:		gluten context
  * @ns:		NS_SPEC_NONE-terminated array of namespaces references

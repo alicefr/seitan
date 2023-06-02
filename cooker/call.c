@@ -215,8 +215,8 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 			f_value = json_object_get_value(tmp1, f_inner->name);
 			if (!f_value)
 				continue;
-			parse_field(g, args, &struct_start, index, f_inner, f_value,
-				    false, add);
+			parse_field(g, args, &struct_start, index, f_inner,
+				    f_value, false, add);
 		}
 		break;
 	default:
