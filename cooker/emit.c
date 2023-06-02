@@ -73,6 +73,7 @@ void emit_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
 	unsigned ns_count, i;
 	struct ns_spec *ctx;
 
+	op->type = OP_CALL;
 	for (ns_count = 0; ns[ns_count].spec != NS_SPEC_NONE; ns_count++);
 
 	if (ns_count) {
@@ -92,14 +93,16 @@ void emit_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
 		desc->arg_deref |= BIT(i) * is_ptr[i];
 	desc->context = o1;
 	memcpy(desc->args, offset, sizeof(struct gluten_offset) * count);
-	desc->args[count + 1] = ret_offset;
+	desc->args[count] = ret_offset;
 
 	debug("   %i: OP_CALL: %i, arguments:", g->ip.offset, nr);
 	for (i = 0; i < count; i++) {
 		debug("\t%i: %s %s%i", i, gluten_offset_name[offset[i].type],
 		      is_ptr[i] ? "*" : "", offset[i].offset);
 	}
-
+	if (desc->has_ret)
+		debug("\treturn: %s %i", gluten_offset_name[ret_offset.type],
+		      offset[i].offset);
 	call->desc = o2;
 
 	if (++g->ip.offset > INST_MAX)
@@ -298,6 +301,7 @@ static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 		}
 
 		break;
+	case LONG:
 	case U64:
 		if (add) {
 			*(uint64_t *)p |= value->v_num;

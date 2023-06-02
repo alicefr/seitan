@@ -57,7 +57,7 @@ Examples of arguments:
 				parse_arg() passes ro_data offset
 
 - STRUCT: 1, 2		write struct to ro_data, and pointer to it
-				parse_tag() passes ro_data offset
+				parse_arg() passes ro_data offset
 
 - STRUCT: "get" <tag>	write pointer to tag
 				parse_arg() passes null offset
@@ -208,14 +208,14 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 		break;
 	case STRUCT:
 		for (f_inner = f->desc.d_struct; f_inner->name; f_inner++) {
+			struct gluten_offset struct_start = offset;
 			JSON_Value *f_value;
 
 			tmp1 = json_value_get_object(jvalue);
 			f_value = json_object_get_value(tmp1, f_inner->name);
 			if (!f_value)
 				continue;
-
-			parse_field(g, args, &offset, index, f_inner, f_value,
+			parse_field(g, args, &struct_start, index, f_inner, f_value,
 				    false, add);
 		}
 		break;
@@ -323,7 +323,6 @@ static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *args,
 		offset = gluten_rw_alloc(g, a->f.size);
 	else if (a->f.size && !top_level_tag)
 		offset = gluten_ro_alloc(g, a->f.size);
-
 	parse_field(g, args, &offset, a->pos, &a->f, jvalue, false, false);
 
 	return offset;

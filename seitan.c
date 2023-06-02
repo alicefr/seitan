@@ -238,7 +238,8 @@ int main(int argc, char **argv)
 				/* The notifier fd was closed by the target */
 				running = false;
 			} else if (notifier == events[i].data.fd) {
-				eval(&g, req, notifier);
+				if (eval(&g, req, notifier) == -1 )
+					err("  an error occured during the evaluation");
 			}
 		}
 	}

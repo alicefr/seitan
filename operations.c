@@ -59,8 +59,8 @@ static struct gluten_offset *get_syscall_ret(struct syscall_desc *s)
 	if (s->has_ret == 0)
 		return NULL;
 	if (s->arg_count == 0)
-		return s->args;
-	return s->args + s->arg_count + 1;
+		return &s->args[0];
+	return &s->args[s->arg_count];
 }
 
 static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
@@ -68,8 +68,11 @@ static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
 {
 	struct gluten_offset *p = get_syscall_ret(s);
 
-	if (p != NULL)
-		return gluten_write(g, *p, &c->ret, sizeof(c->ret));
+	if (p != NULL) {
+		debug("  op_call: write return value=%ld",c->ret);
+		if (gluten_write(g, *p, &c->ret, sizeof(c->ret)) == -1)
+			ret_err(-1, "  failed writing return value at %d", p->offset);
+	}
 
 	return 0;
 }
@@ -78,7 +81,6 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 			     struct syscall_desc *s, struct ns_spec *ctx,
 			     struct arg_clone *c)
 {
-	struct gluten_offset x;
 	unsigned int i, n = 0;
 	long arg;
 
@@ -87,22 +89,26 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 	c->nr = s->nr;
 
 	for (i = 0; i < s->arg_count; i++) {
-		if (gluten_read(NULL, g, &arg, s->args[i], sizeof(arg)) == -1)
-			return -1;
 		/* If arg is a pointer then need to calculate the absolute
 		 * address and the value of arg is the relative offset of the actual
 		 * value.
 		*/
 		if (GET_BIT(s->arg_deref, i) == 1) {
-			x.type = s->args[i].type;
-			x.offset = arg;
-			if (gluten_read(NULL, g, &c->args[i], x,
-					sizeof(c->args[i])) == -1)
-				return -1;
+			c->args[i] = gluten_ptr(NULL, g, s->args[i]);
+			debug("  read pointer arg%d at offset %d", i, s->args[i].offset);
 		} else {
+			if (gluten_read(NULL, g, &arg, s->args[i],
+					sizeof(arg)) == -1)
+				ret_err(-1, "  failed reading arg %d", i);
+			debug("  read arg%d at offset %d v=%ld", i,
+			      s->args[i].offset, arg);
 			c->args[i] = (void *)arg;
 		}
 	}
+
+	/* TODO: add proper check when there is no context */
+	if (ctx == NULL)
+		return 0;
 
 	for (; ctx->spec != NS_SPEC_NONE; ctx++) {
 		enum ns_spec_type spec = ctx->spec;
@@ -218,6 +224,8 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	const long unsigned int *src = gluten_ptr(&req->data, g, load->src);
 	char path[PATH_MAX];
 	int fd, ret = 0;
+
+	debug("  op_load: argument %d", load->src.offset);
 
 	snprintf(path, sizeof(path), "/proc/%d/mem", req->pid);
 	if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0)
@@ -358,13 +366,13 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
 	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
 	    (res != 0 && (cmp == CMP_NE))) {
-		debug("  execute op_cmp: successful comparison");
+		debug("  op_cmp: successful comparison");
 		return 0;
 	}
 
 	if (gluten_read(NULL, g, &jmp, op->jmp, sizeof(jmp)) == -1)
 		return -1;
-	debug("  execute op_cmp: jump to %d", jmp);
+	debug("  op_cmp: jump to %d", jmp);
 	return jmp;
 }
 
@@ -403,6 +411,7 @@ int op_nr(const struct seccomp_notif *req, int notifier, struct gluten *g,
 		return -1;
 	if (gluten_read(NULL, g, &jmp, op->no_match, sizeof(jmp)) == -1)
 		return -1;
+	debug("  op_nr: checking syscall=%ld");
 	if (nr == req->data.nr)
 		return jmp;
 
