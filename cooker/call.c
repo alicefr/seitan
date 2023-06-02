@@ -71,7 +71,7 @@ Examples of arguments:
 				parse_arg() passes data offset
  */
 
-static union value parse_field(struct gluten_ctx *g,
+static union value parse_field(struct gluten_ctx *g, struct arg *args,
 			       struct gluten_offset *base_offset,
 			       int index, struct field *f, JSON_Value *jvalue,
 			       bool dry_run, bool add)
@@ -83,7 +83,7 @@ static union value parse_field(struct gluten_ctx *g,
 	JSON_Value *sel;
 
 	if (f->name)
-		debug("   parsing field name %s", f->name);
+		debug("    parsing field name %s", f->name);
 
 	if (offset.type != OFFSET_NULL)
 		offset.offset += f->offset;
@@ -96,7 +96,7 @@ static union value parse_field(struct gluten_ctx *g,
 
 		if ((tag_set = json_object_get_string(tmp2, "set"))) {
 			count++;
-			debug("   setting tag reference (post) '%s'", tag_set);
+			debug("    setting tag reference (post) '%s'", tag_set);
 
 			if (!dry_run)
 				gluten_add_tag_post(g, tag_set, offset);
@@ -106,7 +106,7 @@ static union value parse_field(struct gluten_ctx *g,
 			struct gluten_offset tag_offset;
 
 			count++;
-			debug("   getting tag reference '%s'", tag_get);
+			debug("    getting tag reference '%s'", tag_get);
 
 			/* TODO: Check type */
 			tag_offset = gluten_get_tag(g, tag_get);
@@ -135,23 +135,37 @@ static union value parse_field(struct gluten_ctx *g,
 		}
 	}
 
-	if (!jvalue)
+	if (!jvalue && !(f->flags & SIZE))
 		return v;
 
 	switch (f->type) {
 	case INT:
 	case LONG:
 	case U32:
-		if (f->flags == FLAGS) {
-			/* fetch/combine expr algebra loop */
-			;
-		}
-		if (f->flags == MASK) {
-			/* calculate mask first */
-			;
+		if (f->flags == SIZE && !dry_run) {
+			unsigned i;
+
+			for (i = 0; args[i].f.type; i++) {
+				if (args[i].pos == f->desc.d_arg_size)
+					break;
+			}
+			if (!args[i].f.type)
+				die("no argument found for SIZE field");
+
+			v.v_num = args[i].f.size;
+		} else {
+			if (f->flags == FLAGS) {
+				/* fetch/combine expr algebra loop */
+				;
+			}
+			if (f->flags == MASK) {
+				/* calculate mask first */
+				;
+			}
+
+			v.v_num = value_get_num(f->desc.d_num, jvalue);
 		}
 
-		v.v_num = value_get_num(f->desc.d_num, jvalue);
 		if (dry_run)
 			break;
 
@@ -173,11 +187,14 @@ static union value parse_field(struct gluten_ctx *g,
 			sel = jvalue;
 		}
 
-		v = parse_field(g, &offset, index, f_inner, sel, false, false);
+		v = parse_field(g, args, &offset, index, f_inner, sel,
+				false, false);
 
 		f = select_field(g, index, f->desc.d_select, v);
-		if (f)
-			parse_field(g, &offset, index, f, jvalue, false, add);
+		if (f) {
+			parse_field(g, args, &offset, index, f, jvalue,
+				    false, add);
+		}
 		break;
 	case STRING:
 		v.v_str = json_value_get_string(jvalue);
@@ -198,8 +215,8 @@ static union value parse_field(struct gluten_ctx *g,
 			if (!f_value)
 				continue;
 
-			parse_field(g, &offset, index, f_inner, f_value, false,
-				    add);
+			parse_field(g, args, &offset, index, f_inner, f_value,
+				    false, add);
 		}
 		break;
 	default:
@@ -256,7 +273,8 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 			sel = jvalue;
 		}
 
-		v = parse_field(NULL, &unused, pos, f_inner, sel, true, false);
+		v = parse_field(NULL, NULL, &unused, pos, f_inner, sel,
+				true, false);
 
 		f = select_field(NULL, pos, f->desc.d_select, v);
 		if (f)
@@ -286,16 +304,18 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 	return false;
 }
 
-static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *a,
+static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *args,
+				      struct arg *a,
 				      struct gluten_offset offset,
 				      JSON_Value *jvalue)
 {
 	bool top_level_tag = false;
 
-	debug("  Parsing call argument %s", a->f.name);
+	debug("   Parsing call argument %s", a->f.name);
 
 	if (offset.type != OFFSET_NULL) {
-		parse_field(g, &offset, a->pos, &a->f, jvalue, false, true);
+		parse_field(g, args, &offset, a->pos, &a->f, jvalue,
+			    false, true);
 		return offset;
 	}
 
@@ -304,15 +324,16 @@ static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *a,
 	else if (a->f.size && !top_level_tag)
 		offset = gluten_ro_alloc(g, a->f.size);
 
-	parse_field(g, &offset, a->pos, &a->f, jvalue, false, false);
+	parse_field(g, args, &offset, a->pos, &a->f, jvalue, false, false);
 
 	return offset;
 }
 
-static void parse_call(struct gluten_ctx *g, JSON_Object *obj, const char *ret,
-		       struct arg *args)
+static void parse_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
+		       JSON_Object *obj, const char *ret, struct arg *args)
 {
 	struct gluten_offset offset[6] = { 0 }, ret_offset = { 0 };
+	bool is_ptr[6] = { false };
 	/* Minimum requirements for argument specification:
 	 * - if argument can be FDPATH, exactly one value for that position
 	 * - if argument is a size field, value is optional
@@ -322,6 +343,7 @@ static void parse_call(struct gluten_ctx *g, JSON_Object *obj, const char *ret,
 		bool needs_fd;
 		bool has_fd;
 	} arg_check[6] = { 0 };
+	int arg_max_pos = -1;
 	unsigned count = 0;
 	struct arg *a;
 
@@ -335,6 +357,12 @@ static void parse_call(struct gluten_ctx *g, JSON_Object *obj, const char *ret,
 
 		if (a->f.type == FDPATH)
 			arg_check[a->pos].needs_fd = true;
+
+		if (a->f.size)
+			is_ptr[a->pos] = true;
+
+		if (a->pos > arg_max_pos)
+			arg_max_pos = a->pos;
 	}
 
 	/* TODO: Factor this out into a function in... parse.c? */
@@ -351,14 +379,14 @@ static void parse_call(struct gluten_ctx *g, JSON_Object *obj, const char *ret,
 			else if (arg_check[a->pos].needs_fd)
 				arg_check[a->pos].has_fd = true;
 
-			offset[a->pos] = parse_arg(g, a, offset[a->pos],
+			offset[a->pos] = parse_arg(g, args, a, offset[a->pos],
 						   jvalue);
 			count++;
 		} else if (arg_check[a->pos].needs_fd &&
 			   arg_check[a->pos].has_fd) {
 			;
 		} else if (a->f.flags & SIZE) {
-			offset[a->pos] = parse_arg(g, a, offset[a->pos],
+			offset[a->pos] = parse_arg(g, args, a, offset[a->pos],
 						   jvalue);
 		} else {
 			die("  No specification for argument %s", a->f.name);
@@ -370,16 +398,62 @@ static void parse_call(struct gluten_ctx *g, JSON_Object *obj, const char *ret,
 		gluten_add_tag_post(g, ret, ret_offset);
 	}
 
-	/* emit_call() */
-
 	if (count != json_object_get_count(obj))
 		die("  Stray elements in call");
+
+	emit_call(g, ns, nr, arg_max_pos + 1, is_ptr, offset, ret_offset);
+}
+
+static void parse_context(struct ns_spec *ns, JSON_Object *obj)
+{
+	unsigned i, n = 0;
+
+	/* Key order gives setns() order */
+	for (i = 0; i < json_object_get_count(obj); i++) {
+		const char *name = json_object_get_name(obj, i);
+		const char **ns_name = ns_type_name, *str;
+		enum ns_type type;
+		double num;
+
+		for (ns_name = ns_type_name; *ns_name; ns_name++) {
+			if (!strcmp(name, *ns_name))
+				break;
+		}
+
+		if (!*ns_name)
+			die("invalid namespace type \"%s\"", name);
+
+		type = ns_name - ns_type_name;
+		ns[n].ns = type;
+		if ((str = json_object_get_string(obj, name))) {
+			if (!strcmp(str, "init"))
+				continue;
+
+			debug("   '%s' namespace: %s", name, str);
+
+			if (!strcmp(str, "caller")) {
+				ns[n].spec = NS_SPEC_CALLER;
+			} else {
+				ns[n].spec = NS_SPEC_PATH;
+				strncpy(ns[n].target.path, str, PATH_MAX);
+			}
+		} else if ((num = json_object_get_number(obj, name))) {
+			debug("   '%s' namespace: %lli", name, num);
+
+			ns[n].spec = NS_SPEC_PID;
+			ns[n].target.pid = num;
+		} else {
+			die("invalid namespace specification");
+		}
+		n++;
+	}
 }
 
 void handle_calls(struct gluten_ctx *g, JSON_Value *value)
 {
 	JSON_Array *calls = json_value_get_array(value);
-	unsigned i, count;
+	unsigned i, j, count;
+	int n;
 
 	if (calls)
 		count = json_array_get_count(calls);
@@ -387,8 +461,9 @@ void handle_calls(struct gluten_ctx *g, JSON_Value *value)
 		count = 1;
 
 	for (i = 0; i < count; i++) {
+		struct ns_spec ns[NS_TYPE_MAX + 1] = { 0 };
+		JSON_Object *obj, *args, *ctx;
 		struct call **set, *call;
-		JSON_Object *obj, *args;
 		const char *name, *ret;
 
 		if (calls)
@@ -396,13 +471,25 @@ void handle_calls(struct gluten_ctx *g, JSON_Value *value)
 		else
 			obj = json_value_get_object(value);
 
-		name = json_object_get_name(obj, 0);
-		value = json_object_get_value_at(obj, 0);
+		for (j = 0, n = -1; j < json_object_get_count(obj); j++) {
+			if (strcmp(json_object_get_name(obj, j), "ret") &&
+			    strcmp(json_object_get_name(obj, j), "context")) {
+				if (n >= 0)
+					die("stray object in \"call\"");
+				n = j;
+			}
+		}
+
+		name = json_object_get_name(obj, n);
+		value = json_object_get_value_at(obj, n);
 		args = json_object_get_object(obj, name);
 
 		debug(" Parsing call %s", name);
 
 		ret = json_object_get_string(obj, "ret");
+
+		ctx = json_object_get_object(obj, "context");
+		parse_context(ns, ctx);
 
 		/* TODO: Factor this out into a function in calls.c */
 		for (set = call_sets, call = set[0]; *set; ) {
@@ -415,7 +502,8 @@ void handle_calls(struct gluten_ctx *g, JSON_Value *value)
 			if (!strcmp(name, call->name)) {
 				debug("  Found description for %s",
 				      name);
-				parse_call(g, args, ret, call->args);
+				parse_call(g, ns, call->number,
+					   args, ret, call->args);
 				break;
 			}
 			call++;

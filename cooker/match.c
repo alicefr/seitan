@@ -85,41 +85,12 @@ static union value parse_field(struct gluten_ctx *g,
 	JSON_Value *sel;
 
 	if (f->name)
-		debug("   parsing field name %s", f->name);
-
-/*
-	if (f->type == SELECT) {
-		struct select *select = f->desc.d_select;
-		struct field *s_field = select->field;
-		JSON_Value *sel;
-
-		if ((tmp = json_value_get_object(value))) {
-			if (!(sel = json_object_get_value(tmp, s_field->name)))
-				die("   no selector for '%s'", s_field->name);
-		} else {
-			sel = value;
-		}
-
-		value_get(s_field->desc, s_field->type, sel, &v);
-		const_offset = emit_data(g, s_field->type, s_field->size, &v);
-
-		data_offset = offset;
-		data_offset.offset += s_field->offset;
-
-		emit_cmp_field(g, CMP_NE, s_field, data_offset, const_offset,
-			       JUMP_NEXT_BLOCK);
-
-		swap_field(g, select, v, index, &f);
-
-		if (!f)
-			return;
-	}
-*/
+		debug("    parsing field name %s", f->name);
 
 	if (json_value_get_type(jvalue) == JSONObject &&
 	    (tmp = json_value_get_object(jvalue)) &&
 	    (tag_name = json_object_get_string(tmp, "tag"))) {
-		debug("   setting tag reference '%s'", tag_name);
+		debug("    setting tag reference '%s'", tag_name);
 		gluten_add_tag(g, tag_name, offset);
 
 		jvalue = json_object_get_value(tmp, "value");
@@ -203,7 +174,7 @@ static void parse_arg(struct gluten_ctx *g, JSON_Value *jvalue, struct arg *a)
 {
 	struct gluten_offset offset;
 
-	debug("  Parsing match argument %s", a->f.name);
+	debug("   Parsing match argument %s", a->f.name);
 
 	offset = arg_load(g, a);
 

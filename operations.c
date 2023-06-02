@@ -52,38 +52,6 @@ static int send_inject_target(const struct seccomp_notif_addfd *resp,
 	return 0;
 }
 
-static void proc_ns_name(unsigned i, char *ns)
-{
-	switch (i) {
-	case NS_CGROUP:
-		snprintf(ns, PATH_MAX + 1, "cgroup");
-		break;
-	case NS_IPC:
-		snprintf(ns, PATH_MAX + 1, "ipc");
-		break;
-	case NS_NET:
-		snprintf(ns, PATH_MAX + 1, "net");
-		break;
-	case NS_MOUNT:
-		snprintf(ns, PATH_MAX + 1, "mnt");
-		break;
-	case NS_PID:
-		snprintf(ns, PATH_MAX + 1, "pid");
-		break;
-	case NS_USER:
-		snprintf(ns, PATH_MAX + 1, "user");
-		break;
-	case NS_UTS:
-		snprintf(ns, PATH_MAX + 1, "uts");
-		break;
-	case NS_TIME:
-		snprintf(ns, PATH_MAX + 1, "time");
-		break;
-	default:
-		err("unrecognized namespace index %d\n", i);
-	}
-}
-
 static struct gluten_offset *get_syscall_ret(struct syscall_desc *s)
 {
 	if (s == NULL)
@@ -91,8 +59,8 @@ static struct gluten_offset *get_syscall_ret(struct syscall_desc *s)
 	if (s->has_ret == 0)
 		return NULL;
 	if (s->arg_count == 0)
-		return s->data;
-	return s->data + s->arg_count + 1;
+		return s->args;
+	return s->args + s->arg_count + 1;
 }
 
 static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
@@ -107,36 +75,26 @@ static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
 }
 
 static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
-			     const struct op_call *op, struct syscall_desc *s,
+			     struct syscall_desc *s, struct ns_spec *ctx,
 			     struct arg_clone *c)
 {
-	char ns_name[PATH_MAX / 2];
-	const struct ns_spec *ns;
-	struct op_context context;
-	char p[PATH_MAX];
 	struct gluten_offset x;
-	unsigned int i;
+	unsigned int i, n = 0;
 	long arg;
-	pid_t pid;
-
-	if (gluten_read(NULL, g, s, op->syscall, sizeof(struct syscall_desc)) == -1)
-		return -1;
-	if (gluten_read(NULL, g, &context, op->context, sizeof(context)) == -1)
-		return -1;
 
 	c->err = 0;
 	c->ret = -1;
-	c->nr = s-> nr;
+	c->nr = s->nr;
 
 	for (i = 0; i < s->arg_count; i++) {
-		if (gluten_read(NULL, g, &arg, s->data[i], sizeof(arg)) == -1)
+		if (gluten_read(NULL, g, &arg, s->args[i], sizeof(arg)) == -1)
 			return -1;
 		/* If arg is a pointer then need to calculate the absolute
 		 * address and the value of arg is the relative offset of the actual
 		 * value.
 		*/
 		if (GET_BIT(s->arg_deref, i) == 1) {
-			x.type = s->data[i].type;
+			x.type = s->args[i].type;
 			x.offset = arg;
 			if (gluten_read(NULL, g, &c->args[i], x,
 					sizeof(c->args[i])) == -1)
@@ -146,44 +104,41 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 		}
 	}
 
-	for (i = 0; i < NS_NUM; i++) {
-		ns = &context.ns[i];
-		proc_ns_name(i, ns_name);
-		switch (ns->type) {
-		case NS_NONE:
-			strncpy(c->ns[i].path, "", PATH_MAX);
+	for (; ctx->spec != NS_SPEC_NONE; ctx++) {
+		enum ns_spec_type spec = ctx->spec;
+		enum ns_type ns = ctx->ns;
+
+		switch (spec) {
+		case NS_SPEC_NONE:
 			break;
-		case NS_SPEC_TARGET:
-			snprintf(c->ns[i].path, PATH_MAX, "/proc/%d/ns/%s",
-				 req->pid, ns_name);
+		case NS_SPEC_CALLER:
+			snprintf(c->ns_path[n++], PATH_MAX, "/proc/%d/ns/%s",
+				 req->pid, ns_type_name[ns]);
 			break;
 		case NS_SPEC_PID:
-			if (gluten_read(NULL, g, &pid, ns->id, ns->size) == -1)
-				return -1;
-			snprintf(c->ns[i].path, PATH_MAX, "/proc/%d/ns/%s", pid,
-				 ns_name);
+			snprintf(c->ns_path[n++], PATH_MAX, "/proc/%d/ns/%s",
+				 ctx->target.pid, ns_type_name[ns]);
 			break;
 		case NS_SPEC_PATH:
-			if (gluten_read(NULL, g, &p, ns->id, ns->size) == -1)
-				return -1;
-			snprintf(c->ns[i].path, PATH_MAX, "%s", p);
+			strncpy(c->ns_path[n++], ctx->target.path,
+				PATH_MAX);
 			break;
 		}
 	}
+
+	*c->ns_path[n] = 0;
 
 	return 0;
 }
 
 static int set_namespaces(struct arg_clone *c)
 {
-	unsigned int i;
+	char *path;
 	int fd;
 
-	for (i = 0; i < sizeof(enum ns_type); i++) {
-		if (strcmp(c->ns[i].path, "") == 0)
-			continue;
-		if ((fd = open(c->ns[i].path, O_CLOEXEC)) < 0)
-			ret_err(-1, "open for file %s", c->ns[i].path);
+	for (path = c->ns_path[0]; *path; path++) {
+		if ((fd = open(path, O_CLOEXEC)) < 0)
+			ret_err(-1, "open for file %s", path);
 
 		if (setns(fd, 0) != 0)
 			ret_err(-1, "setns");
@@ -226,16 +181,21 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_call *op)
 {
 	struct seccomp_notif_resp resp;
-	struct syscall_desc s;
-	struct arg_clone c;
+	struct arg_clone c = { 0 };
+	struct syscall_desc *s;
+	struct ns_spec *ctx;
 
 	resp.id = req->id;
 	resp.val = 0;
 	resp.flags = 0;
 	resp.error = 0;
 
-	if (prepare_arg_clone(req, g, op, &s, &c) == -1)
+	s = (struct syscall_desc *)gluten_ptr(NULL, g, op->desc);
+	ctx = (struct ns_spec *)gluten_ptr(NULL, g, s->context);
+
+	if (prepare_arg_clone(req, g, s, ctx, &c) == -1)
 		return -1;
+
 	debug("  op_call: execute syscall nr=%ld", c.nr);
 	if (do_call(&c) == -1) {
 		resp.error = -1;
@@ -249,7 +209,7 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 			return -1;
 	}
 
-	return write_syscall_ret(g, &s, &c);
+	return write_syscall_ret(g, s, &c);
 }
 
 int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,

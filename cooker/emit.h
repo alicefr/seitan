@@ -7,6 +7,9 @@
 #define EMIT_H
 
 void emit_nr(struct gluten_ctx *g, struct gluten_offset number);
+void emit_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
+	       unsigned count, bool is_ptr[6],
+	       struct gluten_offset offset[6], struct gluten_offset ret_offset);
 void emit_load(struct gluten_ctx *g, struct gluten_offset dst,
 	       int index, size_t len);
 void emit_cmp(struct gluten_ctx *g, enum op_cmp_type cmp,

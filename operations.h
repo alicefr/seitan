@@ -34,7 +34,7 @@ struct ns_path {
 struct arg_clone {
 	long nr;
 	void *args[6];
-	struct ns_path ns[NS_NUM];
+	char ns_path[NS_TYPE_MAX + 1][PATH_MAX];
 	long ret;
 	int err;
 };

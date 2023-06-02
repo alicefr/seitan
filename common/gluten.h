@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
+#include <linux/limits.h>
 #include <linux/seccomp.h>
 
 #include <stdio.h>
@@ -19,12 +20,12 @@
 
 extern struct seccomp_data anonymous_seccomp_data;
 
-#define HEADER_SIZE		4096
-#define INST_SIZE		4096
-#define RO_DATA_SIZE		4096
-#define DATA_SIZE		4096
+#define HEADER_SIZE		65536
+#define INST_SIZE		65536
+#define RO_DATA_SIZE		65536
+#define DATA_SIZE		65536
 
-#define INST_MAX		16
+#define INST_MAX		256
 #define OFFSET_MAX                                       \
 	MAX(MAX(MAX(DATA_SIZE, RO_DATA_SIZE), INST_MAX), \
 	    ARRAY_SIZE(anonymous_seccomp_data.args))
@@ -57,44 +58,6 @@ struct gluten_offset {
 
 BUILD_BUG_ON(BITS_PER_NUM(OFFSET_TYPE_MAX) + BITS_PER_NUM(OFFSET_MAX) > 32)
 
-enum ns_spec_type {
-	NS_NONE,
-	/* Read the pid from seccomp_data */
-	NS_SPEC_TARGET,
-	/* Read the pid from gluten */
-	NS_SPEC_PID,
-	NS_SPEC_PATH,
-};
-
-struct ns_spec {
-	enum ns_spec_type type;
-	/* Pid or path based on the type */
-	struct gluten_offset id;
-	size_t size;
-};
-
-/*
- * enum ns_type - Type of namespaces
- */
-enum ns_type {
-	NS_CGROUP,
-	NS_IPC,
-	NS_NET,
-	NS_MOUNT,
-	NS_PID,
-	NS_TIME,
-	NS_USER,
-	NS_UTS,
-};
-
-/*
- * struct op_context - Description of the context where the call needs to be executed
- * @ns:	Descrption of the each namespace where the call needs to be executed
- */
-struct op_context {
-	struct ns_spec ns[sizeof(enum ns_type)];
-};
-
 enum op_type {
 	OP_END = 0,
 	OP_NR,
@@ -110,22 +73,90 @@ enum op_type {
 	OP_RESOLVEDFD,
 };
 
-struct op_nr {
-	struct gluten_offset nr;
-	struct gluten_offset no_match;
+/**
+ * enum ns_spec_type - Type of reference to target namespace
+ */
+enum ns_spec_type {
+	NS_SPEC_NONE		= 0,
+
+	/* PID from seccomp_data */
+	NS_SPEC_CALLER		= 1,
+
+	/* PID/path from gluten, resolved in seitan */
+	NS_SPEC_PID		= 2,
+	NS_SPEC_PATH		= 3,
+
+	NS_SPEC_TYPE_MAX	= NS_SPEC_PATH,
+};
+
+/**
+ * enum ns_type - Namespace types: see <linux/sched.h>
+ */
+enum ns_type {
+	NS_MOUNT	= 0,
+	NS_CGROUP	= 1,
+	NS_UTS		= 2,
+	NS_IPC		= 3,
+	NS_USER		= 4,
+	NS_PID		= 5,
+	NS_NET		= 6,
+	NS_TIME		= 7,
+	NS_TYPE_MAX	= NS_TIME,
+};
+
+extern const char *ns_type_name[NS_TYPE_MAX + 1];
+
+/**
+ * struct ns_spec - Identification of one type of target namespace
+ * @ns:			Namespace type
+ * @spec:		Reference type
+ * @target.pid:		PID in procfs reference
+ * @target.path:	Filesystem-bound (nsfs) reference
+ */
+struct ns_spec {
+#ifdef __GNUC__
+	enum ns_type ns			:BITS_PER_NUM(NS_TYPE_MAX);
+	enum ns_spec_type spec		:BITS_PER_NUM(NS_SPEC_TYPE_MAX);
+#else
+	uint8_t ns			:BITS_PER_NUM(NS_TYPE_MAX);
+	uint8_t spec			:BITS_PER_NUM(NS_SPEC_TYPE_MAX);
+#endif
+	union {
+		pid_t pid;
+		char path[PATH_MAX];
+	} target;
+};
+
+BUILD_BUG_ON(BITS_PER_NUM(NS_TYPE_MAX) + BITS_PER_NUM(NS_SPEC_TYPE_MAX) > 8)
+
+/**
+ * struct context_desc - Description of context where the call is executed
+ * @count:	Number of namespace specifications
+ * @ns:		Namespace specifications
+ */
+struct context_desc {
+	uint8_t count;
+	struct ns_spec ns[];
 };
 
 struct syscall_desc {
-        unsigned nr : 9;
-        unsigned arg_count : 3;
-        unsigned has_ret : 1;
-        unsigned arg_deref : 6;
-        struct gluten_offset data[];
+	uint32_t nr		:9;
+	uint32_t arg_count	:3;
+	uint32_t has_ret	:1;
+	uint32_t arg_deref	:6;
+
+	struct gluten_offset context;	/* struct ns_spec [] */
+        struct gluten_offset args[];
 };
 
 struct op_call {
-        struct gluten_offset syscall;
-        struct gluten_offset context;
+        struct gluten_offset desc;
+};
+
+
+struct op_nr {
+	struct gluten_offset nr;
+	struct gluten_offset no_match;
 };
 
 struct op_block {

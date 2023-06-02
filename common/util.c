@@ -31,5 +31,9 @@ logfn(debug)
 
 const char *gluten_offset_name[OFFSET_TYPE_MAX + 1] = {
 	"NULL",
-	"read-only data", "temporary data", "seccomp data", "instruction area"
+	"read-only data", "temporary data", "seccomp data", "instruction area",
+};
+
+const char *ns_type_name[NS_TYPE_MAX + 1] = {
+	"mnt", "cgroup", "uts", "ipc", "user", "pid", "net", "time",
 };

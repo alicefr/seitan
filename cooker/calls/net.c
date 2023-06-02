@@ -240,6 +240,7 @@ static struct arg connect_args[] = {
 			{ .d_arg_size = 1 },
 		},
 	},
+	{ 0 }
 };
 
 struct call syscalls_net[] = {

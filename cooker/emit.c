@@ -53,6 +53,60 @@ void emit_nr(struct gluten_ctx *g, struct gluten_offset number)
 }
 
 /**
+ * emit_call() - Emit OP_CALL instruction: execute a system call
+ * @g:		gluten context
+ * @ns:		NS_SPEC_NONE-terminated array of namespaces references
+ * @nr:		System call number
+ * @count:	Argument count
+ * @is_ptr:	Array indicating whether arguments need to be dereferenced
+ * @args:	Offsets of arguments
+ * @ret_offset:	Offset where return value must be saved, can be OFFSET_NULL
+ */
+void emit_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
+	       unsigned count, bool is_ptr[6],
+	       struct gluten_offset offset[6], struct gluten_offset ret_offset)
+{
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct gluten_offset o1 = { 0 }, o2 = { 0 };
+	struct op_call *call = &op->op.call;
+	struct syscall_desc *desc;
+	unsigned ns_count, i;
+	struct ns_spec *ctx;
+
+	for (ns_count = 0; ns[ns_count].spec != NS_SPEC_NONE; ns_count++);
+
+	if (ns_count) {
+		o1 = gluten_ro_alloc(g, sizeof(struct ns_spec) * ns_count);
+		ctx = (struct ns_spec *)gluten_ptr(&g->g, o1);
+		memcpy(ctx, ns, sizeof(struct ns_spec) * ns_count);
+	}
+
+	o2 = gluten_ro_alloc(g, sizeof(struct syscall_desc) +
+			       sizeof(struct gluten_offset) *
+			       (count + (ret_offset.type != OFFSET_NULL)));
+	desc = (struct syscall_desc *)gluten_ptr(&g->g, o2);
+	desc->nr = nr;
+	desc->arg_count = count;
+	desc->has_ret = ret_offset.type != OFFSET_NULL;
+	for (i = 0; i < count; i++)
+		desc->arg_deref |= BIT(i) * is_ptr[i];
+	desc->context = o1;
+	memcpy(desc->args, offset, sizeof(struct gluten_offset) * count);
+	desc->args[count + 1] = ret_offset;
+
+	debug("   %i: OP_CALL: %i, arguments:", g->ip.offset, nr);
+	for (i = 0; i < count; i++) {
+		debug("\t%i: %s %s%i", i, gluten_offset_name[offset[i].type],
+		      is_ptr[i] ? "*" : "", offset[i].offset);
+	}
+
+	call->desc = o2;
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+}
+
+/**
  * emit_load() - Emit OP_LOAD instruction: dereference and copy syscall argument
  * @g:		gluten context
  * @dst:	gluten destination to copy dereferenced data
@@ -152,6 +206,7 @@ void emit_return(struct gluten_ctx *g, struct gluten_offset v)
 	if (++g->ip.offset > INST_MAX)
 		die("Too many instructions");
 }
+
 /**
  * emit_block() - Emit OP_BLOCK instruction: return error value
  * @g:		gluten context
