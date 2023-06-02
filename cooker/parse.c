@@ -56,8 +56,8 @@ static void handle_fd(struct gluten_ctx *g, JSON_Value *value)
 		die("invalid \"new\" in \"fd\"");
 	}
 
-	if (json_object_get_boolean(obj, "return"))
-		desc.do_return = 1;
+	if (json_object_get_value(obj, "return"))
+		desc.do_return = json_object_get_boolean(obj, "return")
 
 	if (json_object_get_value(obj, "close_on_exec"))
 		desc.cloexec = json_object_get_boolean(obj, "close_on_exec");
