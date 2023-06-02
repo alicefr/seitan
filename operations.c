@@ -314,7 +314,7 @@ int op_fd(const struct seccomp_notif *req, int notifier,
 {
 	const struct fd_desc *desc = gluten_ptr(&req->data, g, op->desc);
 	struct seccomp_notif_addfd resp;
-	void *fd;
+	const void *fd;
 
 	if (!desc)
 		return -1;
