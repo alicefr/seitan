@@ -49,10 +49,6 @@ int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	      struct op_return *op);
 int op_continue(const struct seccomp_notif *req, int notifier, struct gluten *g,
 		void *);
-int op_inject(const struct seccomp_notif *req, int notifier, struct gluten *g,
-	      struct op_inject *op);
-int op_inject_a(const struct seccomp_notif *req, int notifier, struct gluten *g,
-		struct op_inject *op);
 int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	   struct op_cmp *op);
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,
@@ -61,4 +57,6 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_load *load);
 int op_copy(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_copy *op);
+int op_fd(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	  struct op_fd *op);
 #endif /* ACTIONS_H */

@@ -309,8 +309,8 @@ int op_continue(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	return 0;
 }
 
-static int op_fd(const struct seccomp_notif *req, int notifier,
-		 struct gluten *g, struct op_fd *op)
+int op_fd(const struct seccomp_notif *req, int notifier,
+	  struct gluten *g, struct op_fd *op)
 {
 	const struct fd_desc *desc = gluten_ptr(&req->data, g, op->desc);
 	struct seccomp_notif_addfd resp;
@@ -435,8 +435,7 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 			HANDLE_OP(OP_BLOCK, op_block, block);
 			HANDLE_OP(OP_RETURN, op_return, ret);
 			HANDLE_OP(OP_CONT, op_continue, NO_FIELD);
-			HANDLE_OP(OP_INJECT_A, op_inject_a, inject);
-			HANDLE_OP(OP_INJECT, op_inject, inject);
+			HANDLE_OP(OP_FD, op_fd, fd);
 			HANDLE_OP(OP_LOAD, op_load, load);
 			HANDLE_OP(OP_CMP, op_cmp, cmp);
 			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd);
