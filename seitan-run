@@ -1,7 +1,7 @@
+#!/bin/sh -ex
+#
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-#!/bin/sh -ex
-# 
 # seitan - Syscall Expressive Interpreter, Transformer and Notifier
 #
 # seitan-run - Convenience script: run target command with syscall model
@@ -15,23 +15,27 @@ usage() {
 	exit 1
 }
 
-[ ${#} -lt 2 ] && usage
+cleanup() {
+	rm -rf "${DIR}"
+}
 
-[ -z "${DIR}" ] && DIR="$(mktemp -d)"
+trap cleanup EXIT INT
 
-[ -z "${COOKER}" ] && COOKER="$(command -v ./seitan-cooker seitan-cooker)"
-[ -z "${COOKER}" ] && echo "seitan-cooker not found" && exit 1
+[ ${#} -lt 2 ]		&& usage
 
-[ -z "${EATER}" ] && EATER="$(command -v ./seitan-eater seitan-eater)"
-[ -z "${EATER}" ] && echo "seitan-eater not found" && exit 1
+[ -z "${DIR}" ]		&& DIR="$(mktemp -d)"
 
-[ -z "${SEITAN}" ] && SEITAN="$(command -v ./seitan seitan)"
-[ -z "${SEITAN}" ] && echo "seitan not found" && exit 1
+[ -z "${COOKER}" ]	&& COOKER="$(command -v ./seitan-cooker seitan-cooker)"
+[ -z "${COOKER}" ]	&& echo "seitan-cooker not found"	&& exit 1
+
+[ -z "${EATER}" ]	&& EATER="$(command -v ./seitan-eater seitan-eater)"
+[ -z "${EATER}" ]	&& echo "seitan-eater not found"	&& exit 1
+
+[ -z "${SEITAN}" ]	&& SEITAN="$(command -v ./seitan seitan)"
+[ -z "${SEITAN}" ]	&& echo "seitan not found"		&& exit 1
 
 "${COOKER}" "${1}" "${DIR}/gluten" "${DIR}/bpf"
 shift
 ( "${EATER}" -i "${DIR}/bpf" -- ${@} & echo "${!}" > "${DIR}/eater.pid" 2>&1 ) &
-sleep 1
-"${SEITAN}" -p "$(cat ${DIR}/eater.pid)" -i "${DIR}/gluten"
-
-rm -rf "${DIR}"
+sleep 0.1 || sleep 1
+"${SEITAN}" -p "$(cat "${DIR}/eater.pid")" -i "${DIR}/gluten"
