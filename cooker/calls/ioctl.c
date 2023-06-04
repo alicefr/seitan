@@ -83,7 +83,7 @@ static struct field tun_ifr[] = {	/* netdevice(7) */
 };
 
 static struct select_num ioctl_request_arg[] = {
-	{ FS_IOC_GETFLAGS,
+	{ FS_IOC_GETFLAGS, -1,
 		{ 2,
 			{
 				"argp",	INT,	FLAGS,
@@ -92,7 +92,7 @@ static struct select_num ioctl_request_arg[] = {
 			}
 		}
 	},
-	{ FS_IOC_SETFLAGS,
+	{ FS_IOC_SETFLAGS, -1,
 		{ 2,
 			{
 				"argp",	INT,	FLAGS,
@@ -101,7 +101,7 @@ static struct select_num ioctl_request_arg[] = {
 			}
 		}
 	},
-	{ TUNSETIFF,
+	{ TUNSETIFF, -1,
 		{ 2,
 			{
 				"ifr",	STRUCT,	0,

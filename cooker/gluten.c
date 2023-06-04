@@ -123,6 +123,36 @@ struct gluten_offset gluten_get_tag(struct gluten_ctx *g, const char *name)
 	return g->tags[0].offset;	/* Pro forma, not actually happening */
 }
 
+void gluten_add_attr(struct gluten_ctx *g, enum attr_type type, intptr_t id,
+		     union value v)
+{
+	int i;
+
+	for (i = 0; i < ATTRS_MAX && g->attrs[i].id; i++);
+	if (i == ATTRS_MAX)
+		die("Too many attributes");
+
+	g->attrs[i].type = type;
+	g->attrs[i].id = id;
+	g->attrs[i].v = v;
+
+	debug("   attribute '%p' set", id);
+}
+
+union value gluten_get_attr(struct gluten_ctx *g, enum attr_type type,
+			    intptr_t id)
+{
+	int i;
+
+	for (i = 0; i < ATTRS_MAX && g->attrs[i].type; i++) {
+		if (g->attrs[i].type == type && g->attrs[i].id == id)
+			return g->attrs[i].v;
+	}
+
+	die("   attribute '%p' not found", id);
+	return g->attrs[0].v;		/* Pro forma, not actually happening */
+}
+
 /**
  * gluten_init() - Initialise gluten structures and layout
  * @g:		gluten context

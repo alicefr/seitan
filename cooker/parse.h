@@ -7,6 +7,7 @@
 #define PARSE_H
 
 long long value_get_num(struct num *desc, JSON_Value *value);
+size_t value_get_size(struct gluten_ctx *g, intptr_t id);
 void value_get(union desc desc, enum type type, JSON_Value *value,
 	       union value *out);
 struct field *select_field(struct gluten_ctx *g, int pos,

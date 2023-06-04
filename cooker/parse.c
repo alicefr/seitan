@@ -57,7 +57,7 @@ static void handle_fd(struct gluten_ctx *g, JSON_Value *value)
 	}
 
 	if (json_object_get_value(obj, "return"))
-		desc.do_return = json_object_get_boolean(obj, "return")
+		desc.do_return = json_object_get_boolean(obj, "return");
 
 	if (json_object_get_value(obj, "close_on_exec"))
 		desc.cloexec = json_object_get_boolean(obj, "close_on_exec");
@@ -139,6 +139,14 @@ long long value_get_num(struct num *desc, JSON_Value *value)
 	return n;
 }
 
+ssize_t value_get_size(struct gluten_ctx *g, intptr_t id)
+{
+	if (!g)
+		return -1;
+
+	return gluten_get_attr(g, ATTR_SIZE, id).v_num;
+}
+
 /**
  * value_get() - Get generic value from description matching JSON input
  * @desc:	Description of possible values from model
@@ -170,6 +178,12 @@ struct field *select_field(struct gluten_ctx *g, int pos,
 
 		for (d_num = s->desc.d_num; d_num->target.f.type; d_num++) {
 			if (d_num->value == v.v_num) {
+				if (g && d_num->sel_size != -1) {
+					v.v_num = d_num->sel_size;
+					gluten_add_attr(g, ATTR_SIZE,
+							(intptr_t)s, v);
+				}
+
 				if (d_num->target.pos == pos)
 					return &d_num->target.f;
 

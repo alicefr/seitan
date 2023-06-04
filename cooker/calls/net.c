@@ -168,7 +168,7 @@ static struct field connect_family = {
 };
 
 static struct select_num connect_addr_select_family[] = {
-	{ AF_UNIX,
+	{ AF_UNIX, sizeof(struct sockaddr_un),
 		{ 1,
 			{
 				NULL, STRUCT, 0, 0, 0,
@@ -176,7 +176,7 @@ static struct select_num connect_addr_select_family[] = {
 			}
 		}
 	},
-	{ AF_INET,
+	{ AF_INET, sizeof(struct sockaddr_in),
 		{ 1,
 			{
 				NULL, STRUCT, 0, 0, 0,
@@ -184,7 +184,7 @@ static struct select_num connect_addr_select_family[] = {
 			}
 		}
 	},
-	{ AF_INET6,
+	{ AF_INET6, sizeof(struct sockaddr_in6),
 		{ 1,
 			{
 				NULL, STRUCT, 0, 0, 0,
@@ -192,7 +192,7 @@ static struct select_num connect_addr_select_family[] = {
 			}
 		}
 	},
-	{ AF_NETLINK,
+	{ AF_NETLINK, sizeof(struct sockaddr_nl),
 		{ 1,
 			{
 				NULL, STRUCT, 0, 0, 0,
@@ -228,7 +228,7 @@ static struct arg connect_args[] = {
 		{
 			"addr",		SELECT,		0,
 			0,
-			sizeof(struct sockaddr_un),
+			sizeof(struct sockaddr_storage),
 			{ .d_select = &connect_addr_select },
 		},
 	},
@@ -237,7 +237,7 @@ static struct arg connect_args[] = {
 			"addrlen",	LONG,		SIZE,
 			0,
 			0,
-			{ .d_arg_size = 1 },
+			{ .d_size = (intptr_t)&connect_addr_select },
 		},
 	},
 	{ 0 }

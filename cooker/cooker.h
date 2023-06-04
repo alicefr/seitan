@@ -20,6 +20,7 @@
 #include <util.h>
 
 #define TAGS_MAX			256
+#define ATTRS_MAX			256
 #define CALL_ARGS			6
 
 struct num;
@@ -38,7 +39,7 @@ union desc {
 	struct num		*d_num;
 	struct field		*d_struct;
 	struct select		*d_select;
-	int			d_arg_size;
+	intptr_t		d_size;
 };
 
 /**
@@ -152,10 +153,12 @@ struct arg {
 /**
  * struct select_num - List of possible selections based on numeric selector
  * @value:	Numeric value of the selector
+ * @sel_size:	Size associated with selection (not necessarily argument size)
  * @target:	Argument description defined by this selector
  */
 struct select_num {
 	long long value;
+	ssize_t sel_size;
 	struct arg target;
 };
 
@@ -170,6 +173,22 @@ struct select {
 	union {
 		struct select_num *d_num;
 	} desc;
+};
+
+enum attr_type {
+	ATTR_NONE = 0,
+	ATTR_SIZE,
+};
+
+/**
+ * struct attr - Generic attribute for syscall model with link
+ * @id:		Link
+ * @v:		Attribute value
+ */
+struct attr {
+	enum attr_type type;
+	intptr_t id;
+	union value v;
 };
 
 #endif /* COOKER_H */

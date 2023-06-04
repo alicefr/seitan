@@ -142,27 +142,15 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 	case INT:
 	case LONG:
 	case U32:
-		if (f->flags == SIZE && !dry_run) {
-			unsigned i;
-
-			for (i = 0; args[i].f.type; i++) {
-				if (args[i].pos == f->desc.d_arg_size)
-					break;
-			}
-			if (!args[i].f.type)
-				die("no argument found for SIZE field");
-
-			v.v_num = args[i].f.size;
+		if (f->flags == SIZE) {
+			v.v_num = value_get_size(g, f->desc.d_size);
+		} else if (f->flags == FLAGS) {
+			/* fetch/combine expr algebra loop */
+			v.v_num = value_get_num(f->desc.d_num, jvalue);
+		} else if (f->flags == MASK) {
+			/* calculate mask first */
+			v.v_num = value_get_num(f->desc.d_num, jvalue);
 		} else {
-			if (f->flags == FLAGS) {
-				/* fetch/combine expr algebra loop */
-				;
-			}
-			if (f->flags == MASK) {
-				/* calculate mask first */
-				;
-			}
-
 			v.v_num = value_get_num(f->desc.d_num, jvalue);
 		}
 

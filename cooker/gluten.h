@@ -34,6 +34,8 @@ struct gluten_ctx {
 
 	struct gluten_tag_data tags[TAGS_MAX];
 
+	struct attr attrs[ATTRS_MAX];
+
 	struct arg *selected_arg[6];
 };
 
@@ -56,6 +58,10 @@ void gluten_add_tag(struct gluten_ctx *g, const char *name,
 void gluten_add_tag_post(struct gluten_ctx *g, const char *name,
 			 struct gluten_offset offset);
 struct gluten_offset gluten_get_tag(struct gluten_ctx *g, const char *name);
+void gluten_add_attr(struct gluten_ctx *g, enum attr_type type, intptr_t id,
+		     union value v);
+union value gluten_get_attr(struct gluten_ctx *g, enum attr_type type,
+			    intptr_t id);
 void gluten_init(struct gluten_ctx *g);
 void gluten_block_init(struct gluten_ctx *g);
 void gluten_write(struct gluten_ctx *g, const char *path);
