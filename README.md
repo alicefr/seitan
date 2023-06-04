@@ -1,3 +1,9 @@
+<!---
+SPDX-License-Identifier: GPL-2.0-or-later
+Copyright (c) 2023 Red Hat GmbH
+Author: Stefano Brivio <sbrivio@redhat.com>
+-->
+
 <style>
 .markdown-body {
   display: block;

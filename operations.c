@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /* seitan - Syscall Expressive Interpreter, Transformer and Notifier
  *
  * operations.c - Execution of bytecode operations

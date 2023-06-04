@@ -1,3 +1,9 @@
+<!---
+SPDX-License-Identifier: GPL-2.0-or-later
+Copyright (c) 2023 Red Hat GmbH
+Author: Alice Frosi <afrosi@redhat.com>
+-->
+
 # Howto setup and run the integration tests
 
 The integration tests require access to podman socket activation (root) as

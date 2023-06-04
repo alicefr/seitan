@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 /* seitan - Syscall Expressive Interpreter, Transformer and Notifier
  *
@@ -228,7 +228,7 @@ static struct arg connect_args[] = {
 		{
 			"addr",		SELECT,		0,
 			0,
-			sizeof(struct sockaddr_storage),
+			sizeof(struct sockaddr_un),
 			{ .d_select = &connect_addr_select },
 		},
 	},

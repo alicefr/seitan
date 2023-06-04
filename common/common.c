@@ -1,3 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+/* seitan - Syscall Expressive Interpreter, Transformer and Notifier
+ *
+ * common/common.c - Common routines for seitan, seitan-eater and seitan-cooker
+ *
+ * Copyright 2023 Red Hat GmbH
+ * Authors: Alice Frosi <afrosi@redhat.com>
+ *	    Stefano Brivio <sbrivio@redhat.com>
+ */
+
 #define _GNU_SOURCE
 #include <stddef.h>
 #include <stdio.h>

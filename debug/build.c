@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+/* seitan - Syscall Expressive Interpreter, Transformer and Notifier
+ *
+ * debug/build.c - Dump BPF file in readable format
+ *
+ * Copyright 2023 Red Hat GmbH
+ * Author: Alice Frosi <afrosi@redhat.com>
+ */
+
 #define _GNU_SOURCE
 #include <stdbool.h>
 #include <stddef.h>

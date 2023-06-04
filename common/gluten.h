@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: GPL-3.0-or-later
+/* SPDX-License-Identifier: GPL-2.0-or-later
 * Copyright 2023 Red Hat GmbH
 * Authors: Alice Frosi <afrosi@redhat.com>
-*          Stefano Brivio <sbrivio@redhat.com>
+*	   Stefano Brivio <sbrivio@redhat.com>
 */
 
 #ifndef COMMON_GLUTEN_H
