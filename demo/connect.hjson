@@ -1,0 +1,13 @@
+[
+  {
+    "match": [
+      { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "fd": { "tag": "fd" } } }
+    ],
+    "call": [
+      { "socket": { "family": "unix", "type": "stream", "flags": 0, "protocol": 0 }, "ret": "new_fd" },
+      { "connect": { "fd": { "tag": { "get": "new_fd" } }, "addr": { "family": "unix", "path": "/tmp/demo.sock" } }, "ret": "y" }
+    ],
+    "fd": { "src": { "tag": "fd" }, "new": { "tag": "new_fd" }, "close_on_exec": false },
+    "return": 0
+  }
+]
