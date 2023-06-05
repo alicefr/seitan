@@ -153,6 +153,7 @@ void emit_load(struct gluten_ctx *g, struct gluten_offset dst,
 	load->src.offset = index;
 
 	load->dst = dst;
+	load->size = len;
 
 	debug("   %i: OP_LOAD: #%i < args[%i] (size: %lu)",
 	      g->ip.offset, dst.offset, index, len);
