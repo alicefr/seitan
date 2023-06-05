@@ -162,7 +162,7 @@ static struct field connect_addr_nl[] = {
 };
 
 static struct field connect_family = {
-	"family",	INT,	0,
+	"family",	USHORT,	0,
 	offsetof(struct sockaddr, sa_family),
 	0,		{ .d_num = af }
 };

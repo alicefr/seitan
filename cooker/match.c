@@ -103,6 +103,7 @@ static union value parse_field(struct gluten_ctx *g,
 	offset.offset += f->offset;
 
 	switch (f->type) {
+	case USHORT:
 	case INT:
 	case LONG:
 	case U32:

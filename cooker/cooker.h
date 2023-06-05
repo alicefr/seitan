@@ -64,6 +64,7 @@ enum type {
 	UNDEF = 0,
 	NONE,
 
+	USHORT,
 	INT,
 	U32,
 	U64,
@@ -107,7 +108,7 @@ enum flags {
 #define TYPE_IS_COMPOUND(t)						\
 	((t) == STRUCT || (t) == SELECT)
 #define TYPE_IS_NUM(t)							\
-	((t) == INT || (t) == U32 || (t) == U64 || (t) == LONG)
+	((t) == INT || (t) == U32 || (t) == U64 || (t) == LONG || (t) == USHORT)
 
 /**
  * struct num - A numeric value and its label

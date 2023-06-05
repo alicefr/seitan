@@ -16,7 +16,7 @@
 
 static const char *type_str[] = {
 	"UNDEF", "NONE",
-	"INT", "U32", "U64", "LONG",
+	"USHORT", "INT", "U32", "U64", "LONG",
 	"STRING",
 	"STRUCT", "SELECT",
 	"PID",
@@ -331,6 +331,7 @@ static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 	}
 
 	switch (type) {
+	case USHORT:
 	case INT:
 		if (add) {
 			*(int *)p |= value->v_int;

@@ -13,6 +13,7 @@
 #include "util.h"
 
 size_t gluten_size[TYPE_COUNT] = {
+	[USHORT]	= sizeof(unsigned short),
 	[INT]		= sizeof(int),
 	[U32]		= sizeof(uint32_t),
 	[U64]		= sizeof(uint64_t),

@@ -139,6 +139,7 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 		return v;
 
 	switch (f->type) {
+	case USHORT:
 	case INT:
 	case LONG:
 	case U32:
@@ -245,6 +246,7 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 	}
 
 	switch (f->type) {
+	case USHORT:
 	case INT:
 	case LONG:
 	case U32:
