@@ -16,8 +16,7 @@ usage() {
 }
 
 cleanup() {
-	rm -rf "${DIR}/*.bpf"
-	rm -rf "${DIR}/*.gluten"
+	rm -rf "${DIR}"
 }
 
 trap cleanup EXIT INT
