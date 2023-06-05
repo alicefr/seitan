@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/sh -e
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
@@ -16,7 +16,8 @@ usage() {
 }
 
 cleanup() {
-	rm -rf "${DIR}"
+	rm -rf "${DIR}/gluten" "${DIR}/bpf" "${DIR}/eater.pid"
+	rmdir "${DIR}" 2>/dev/null || :
 }
 
 trap cleanup EXIT INT
