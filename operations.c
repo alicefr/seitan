@@ -364,15 +364,13 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 
 	res = memcmp(px, py, op->size);
 
-	if (gluten_read(NULL, g, &jmp, op->jmp, sizeof(jmp)) == -1)
-		return -1;
 	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
 	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
 	    (res != 0 && (cmp == CMP_NE))) {
 		debug("  op_cmp: successful comparison");
-		debug("  op_cmp: jump to %d", jmp);
-		return jmp;
+		debug("  op_cmp: jump to %d", op->jmp.offset);
+		return op->jmp.offset;
 	}
 
 	return 0;
