@@ -354,7 +354,6 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	const void *py = gluten_ptr(&req->data, g, op->y);
 	enum op_cmp_type cmp = op->cmp;
 	int res;
-	int jmp;
 
 	(void)notifier;
 
@@ -403,20 +402,17 @@ int op_nr(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	  struct op_nr *op)
 {
 	long nr;
-	int jmp;
 
 	(void)notifier;
 
 	if (gluten_read(NULL, g, &nr, op->nr, sizeof(nr)) == -1)
 		return -1;
-	if (gluten_read(NULL, g, &jmp, op->no_match, sizeof(jmp)) == -1)
-		return -1;
 	debug("  op_nr: checking syscall=%ld", nr);
 	if (nr == req->data.nr)
 		return 0;
 
-	debug("  op_nr: jmp to instr %d", jmp);
-	return jmp;
+	debug("  op_nr: jmp to instr %d", op->no_match.offset);
+	return op->no_match.offset;
 }
 
 int op_copy(const struct seccomp_notif *req, int notifier, struct gluten *g,
