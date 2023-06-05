@@ -14,16 +14,17 @@
 #include "common/util.h"
 
 #define STACK_SIZE (1024 * 1024 / 8)
-#define HANDLE_OP(code, call, type)                                     \
+#define HANDLE_OP(code, call, type, g)                                  \
 	case code:                                                      \
 		do {                                                    \
+			struct op *start = (struct op *)g->inst;        \
 			int res = call(req, notifier, g, &op->op.type); \
 			if (res == 0)                                   \
 				(op)++;                                 \
 			else if (res == -1)                             \
 				return -1;                              \
 			else                                            \
-				(op) += res;                            \
+				(op) = start + res;                     \
 		} while (0);                                            \
 		break
 

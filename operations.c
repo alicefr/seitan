@@ -224,15 +224,18 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_load *load)
 {
 	const long unsigned int *src = gluten_ptr(&req->data, g, load->src);
+	void *dst = gluten_write_ptr(g, load->dst);
 	char path[PATH_MAX];
 	int fd, ret = 0;
 
-	debug("  op_load: argument %d", load->src.offset);
+	debug("  op_load: argument %d in %d", load->src.offset, load->dst.offset);
+
+	if(dst == NULL)
+		ret_err(-1, "  op_load: empty destination");
 
 	snprintf(path, sizeof(path), "/proc/%d/mem", req->pid);
 	if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0)
 		ret_err(-1, "error opening mem for %d", req->pid);
-
 	/*
          * Avoid the TOCTOU and check if the read mappings are still valid
          */
@@ -245,7 +248,7 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 		ret = -1;
 		goto out;
 	}
-	if (pread(fd, gluten_write_ptr(g, load->dst), load->size, *src) < 0) {
+	if (pread(fd, dst, load->size, *src) < 0) {
 		err("pread");
 		ret = -1;
 		goto out;
@@ -361,18 +364,18 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 
 	res = memcmp(px, py, op->size);
 
+	if (gluten_read(NULL, g, &jmp, op->jmp, sizeof(jmp)) == -1)
+		return -1;
 	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
 	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
 	    (res != 0 && (cmp == CMP_NE))) {
 		debug("  op_cmp: successful comparison");
-		return 0;
+		debug("  op_cmp: jump to %d", jmp);
+		return jmp;
 	}
 
-	if (gluten_read(NULL, g, &jmp, op->jmp, sizeof(jmp)) == -1)
-		return -1;
-	debug("  op_cmp: jump to %d", jmp);
-	return jmp;
+	return 0;
 }
 
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,
@@ -410,11 +413,12 @@ int op_nr(const struct seccomp_notif *req, int notifier, struct gluten *g,
 		return -1;
 	if (gluten_read(NULL, g, &jmp, op->no_match, sizeof(jmp)) == -1)
 		return -1;
-	debug("  op_nr: checking syscall=%ld");
+	debug("  op_nr: checking syscall=%ld", nr);
 	if (nr == req->data.nr)
-		return jmp;
+		return 0;
 
-	return 0;
+	debug("  op_nr: jmp to instr %d", jmp);
+	return jmp;
 }
 
 int op_copy(const struct seccomp_notif *req, int notifier, struct gluten *g,
@@ -433,16 +437,16 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 
 	while (op->type != OP_END) {
 		switch (op->type) {
-			HANDLE_OP(OP_CALL, op_call, call);
-			HANDLE_OP(OP_BLOCK, op_block, block);
-			HANDLE_OP(OP_RETURN, op_return, ret);
-			HANDLE_OP(OP_CONT, op_continue, NO_FIELD);
-			HANDLE_OP(OP_FD, op_fd, fd);
-			HANDLE_OP(OP_LOAD, op_load, load);
-			HANDLE_OP(OP_CMP, op_cmp, cmp);
-			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd);
-			HANDLE_OP(OP_NR, op_nr, nr);
-			HANDLE_OP(OP_COPY, op_copy, copy);
+			HANDLE_OP(OP_CALL, op_call, call, g);
+			HANDLE_OP(OP_BLOCK, op_block, block, g);
+			HANDLE_OP(OP_RETURN, op_return, ret, g);
+			HANDLE_OP(OP_CONT, op_continue, NO_FIELD, g);
+			HANDLE_OP(OP_FD, op_fd, fd, g);
+			HANDLE_OP(OP_LOAD, op_load, load, g);
+			HANDLE_OP(OP_CMP, op_cmp, cmp, g);
+			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd, g);
+			HANDLE_OP(OP_NR, op_nr, nr, g);
+			HANDLE_OP(OP_COPY, op_copy, copy, g);
 		default:
 			ret_err(-1, "unknown operation %d", op->type);
 		}
