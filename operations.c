@@ -228,7 +228,9 @@ int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	char path[PATH_MAX];
 	int fd, ret = 0;
 
-	debug("  op_load: argument %d in %d", load->src.offset, load->dst.offset);
+	debug("  op_load: argument (%s %d) in (%s %d) size=%d",
+	      gluten_offset_name[load->src.type], load->src.offset,
+	      gluten_offset_name[load->dst.type], load->dst.offset, load->size);
 
 	if(dst == NULL)
 		ret_err(-1, "  op_load: empty destination");
@@ -361,16 +363,19 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    !check_gluten_limits(op->y, op->size))
 		return -1;
 
+	debug("  op_cmp: operands x=(%s %d) y=(%s %d) size=%d",
+	      gluten_offset_name[op->x.type], op->x.offset,
+	      gluten_offset_name[op->y.type], op->y.offset, op->size);
 	res = memcmp(px, py, op->size);
-
 	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
 	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
 	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
 	    (res != 0 && (cmp == CMP_NE))) {
-		debug("  op_cmp: successful comparison");
-		debug("  op_cmp: jump to %d", op->jmp.offset);
+		debug("  op_cmp: successful comparison jump to %d",
+		      op->jmp.offset);
 		return op->jmp.offset;
 	}
+	debug("  op_cmp: comparison is false");
 
 	return 0;
 }
