@@ -1,5 +1,11 @@
 [
-  {
+  { /* fake connect syscall */
+    "match": [
+      { "connect": { "addr": { "family": "unix", "path": "/fake.sock" } } }
+    ],
+    "return": 0
+  },
+  { /* connect to another path (/var/run/pr-helper.sock -> /tmp/demo.sock) */
     "match": [
       { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "fd": { "tag": "fd" } } }
     ],
@@ -9,5 +15,11 @@
     ],
     "fd": { "src": { "tag": "fd" }, "new": { "tag": "new_fd" }, "close_on_exec": false },
     "return": 0
+  },
+  { /* Inject permission denied error */
+    "match": [
+      { "connect": { "addr": { "family": "unix", "path": "/error.sock" } } }
+    ],
+    "block": -1
   }
 ]
