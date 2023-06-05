@@ -234,7 +234,7 @@ static void parse_block(struct gluten_ctx *g, JSON_Object *block)
 		if (!parser->type)
 			die(" Invalid rule type: \"%s\"", type);
 	}
-
+	emit_end(g);
 	link_block(g);
 }
 

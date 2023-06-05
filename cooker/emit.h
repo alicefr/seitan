@@ -26,6 +26,7 @@ void emit_copy(struct gluten_ctx *g,
 	       struct gluten_offset dst, struct gluten_offset src, size_t size);
 void emit_copy_field(struct gluten_ctx *g, struct field *field,
 		     struct gluten_offset dst, struct gluten_offset src);
+void emit_end(struct gluten_ctx *g);
 struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
 			       size_t str_len, union value *value);
 struct gluten_offset emit_data_at(struct gluten_ctx *g,

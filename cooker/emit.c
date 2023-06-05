@@ -296,6 +296,22 @@ void emit_copy_field(struct gluten_ctx *g, struct field *field,
 		  field->size ? field->size : gluten_size[field->type]);
 }
 
+/**
+ * emit_end() - Emit OP_END instruction: end of the operation block
+ * @g:         gluten context
+ */
+void emit_end(struct gluten_ctx *g)
+{
+       struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+
+       op->type = OP_END;
+
+       debug("   %i: OP_END",  g->ip.offset);
+
+       if (++g->ip.offset > INST_MAX)
+               die("Too many instructions");
+}
+
 static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 					 struct gluten_offset offset,
 					 enum type type, size_t str_len,
