@@ -1,0 +1,42 @@
+[
+  {
+    "match": [ /* Giuseppe's example */
+      { "mknodat": { "path": { "tag": "path" }, "mode": 8630, "major": 1, "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "tag": "minor" } } }
+    ],
+    "call": {
+      "mknod": { "path": { "tag": { "get": "path" } }, "mode": 8630, "major": 1, "minor": 7 /* { "tag": { "get": "minor" } }*/ },
+      "ret": "x"/*,
+      "context": { "user": "init", "mnt": "caller" }*/
+    },
+    "return": { "tag": "x" }
+  }
+]
+
+/*
+ * INTFLAGS, LONGFLAGS, U32FLAGS
+ *
+ * "field": { "in": [ "ipc", "mount", "uts" ] }
+ *   flags & set
+ *   !!(flags & (ipc | mount | ns))
+ *
+ * "field": { "all": [ "ipc", "mount", "uts" ] }
+ *   flags & set == set
+ *   flags & (ipc | mount | ns) == (ipc | mount | ns)
+ *
+ * "field": { "not": [ "ipc", "mount", "uts" ] }
+ *   !(flags & set)
+ *
+ * "field": { "ipc": false, "mount": true, "uts": false }
+ *   flags & set == set
+ *   !(flags & ipc) && (flags & mount) && !(flags & utc)
+ *
+ * "field": { "ipc" }
+ *   flags == ipc
+ *
+ * INTMASK
+ *   value = (target value & known values)
+ *
+ * INT, LONG, U32
+ *   "arg": { "in": [ 0, 1 ] }
+ *   arg == 0 || arg == 1
+ */
