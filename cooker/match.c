@@ -75,13 +75,15 @@ static struct gluten_offset arg_load(struct gluten_ctx *g, struct arg *a)
  */
 static union value parse_field(struct gluten_ctx *g,
 			       struct gluten_offset offset,
+			       enum op_cmp_type cmp, enum jump_type jump,
 			       int index, struct field *f, JSON_Value *jvalue)
 {
-	struct gluten_offset const_offset;
+	struct gluten_offset const_offset, mask_offset, data_offset;
 	union value v = { .v_num = 0 };
 	struct field *f_inner;
 	const char *tag_name;
 	JSON_Object *tmp;
+	JSON_Array *set;
 	JSON_Value *sel;
 
 	if (f->name)
@@ -94,6 +96,30 @@ static union value parse_field(struct gluten_ctx *g,
 		gluten_add_tag(g, tag_name, offset);
 
 		jvalue = json_object_get_value(tmp, "value");
+	}
+
+	if (json_value_get_type(jvalue) == JSONObject &&
+	    (tmp = json_value_get_object(jvalue)) &&
+	    (set = json_object_get_array(tmp, "in"))) {
+		unsigned i, count = json_array_get_count(set);
+
+		if (cmp != CMP_NE || jump != JUMP_NEXT_BLOCK)
+			die("unsupported nested set");
+
+		for (i = 0; i < count; i++) {
+			if (i == count - 1) {
+				cmp = CMP_NE;
+				jump = JUMP_NEXT_BLOCK;
+			} else {
+				cmp = CMP_EQ;
+				jump = JUMP_NEXT_ACTION;
+			}
+
+			jvalue = json_array_get_value(set, i);
+			parse_field(g, offset, cmp, jump, index, f, jvalue);
+		}
+
+		return v; /* No SELECT based on sets... of course */
 	}
 
 	/* Nothing to match on: just store as reference */
@@ -115,11 +141,41 @@ static union value parse_field(struct gluten_ctx *g,
 			/* calculate mask first */
 			;
 		}
-
+		/* Falls through */
 		v.v_num = value_get_num(f->desc.d_num, jvalue);
 		const_offset = emit_data(g, f->type, 0, &v);
-		emit_cmp(g, CMP_NE, offset, const_offset, gluten_size[f->type],
-			 JUMP_NEXT_BLOCK);
+		emit_cmp(g, cmp, offset, const_offset, gluten_size[f->type],
+			 jump);
+		break;
+	case GNU_DEV_MAJOR:
+		/*
+xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
+______________________                            _____________
+		*/
+		v.v_num = ((long long)0xfff << 44) | (0xfff << 8);
+		mask_offset = emit_data(g, U64, 0, &v);
+
+		v.v_num = value_get_num(f->desc.d_num, jvalue);
+		v.v_num = (v.v_num & 0xfff) << 8 | (v.v_num & ~0xfff) << 32;
+		const_offset = emit_data(g, U64, 0, &v);
+
+		data_offset = emit_mask(g, U64, offset, mask_offset);
+		emit_cmp_field(g, cmp, f, data_offset, const_offset, jump);
+		break;
+	case GNU_DEV_MINOR:
+		/*
+xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
+                      ____________________________              ________
+		*/
+		v.v_num = 0xff | ((long long)0xffffff << 12);
+		mask_offset = emit_data(g, U64, 0, &v);
+
+		v.v_num = value_get_num(f->desc.d_num, jvalue);
+		v.v_num = (v.v_num & 0xff) | (v.v_num & ~0xfff) << 12;
+		const_offset = emit_data(g, U64, 0, &v);
+
+		data_offset = emit_mask(g, U64, offset, mask_offset);
+		emit_cmp_field(g, cmp, f, data_offset, const_offset, jump);
 		break;
 	case SELECT:
 		f_inner = f->desc.d_select->field;
@@ -131,11 +187,11 @@ static union value parse_field(struct gluten_ctx *g,
 			sel = jvalue;
 		}
 
-		v = parse_field(g, offset, index, f_inner, sel);
+		v = parse_field(g, offset, cmp, jump, index, f_inner, sel);
 
 		f = select_field(g, index, f->desc.d_select, v);
 		if (f)
-			parse_field(g, offset, index, f, jvalue);
+			parse_field(g, offset, cmp, jump, index, f, jvalue);
 		break;
 	case STRING:
 		v.v_str = json_value_get_string(jvalue);
@@ -155,7 +211,8 @@ static union value parse_field(struct gluten_ctx *g,
 			if (!field_value)
 				continue;
 
-			parse_field(g, offset, index, f_inner, field_value);
+			parse_field(g, offset, cmp, jump, index, f_inner,
+				    field_value);
 		}
 		break;
 	default:
@@ -179,7 +236,7 @@ static void parse_arg(struct gluten_ctx *g, JSON_Value *jvalue, struct arg *a)
 
 	offset = arg_load(g, a);
 
-	parse_field(g, offset, a->pos, &a->f, jvalue);
+	parse_field(g, offset, CMP_NE, JUMP_NEXT_BLOCK, a->pos, &a->f, jvalue);
 }
 
 /**

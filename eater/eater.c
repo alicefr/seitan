@@ -98,18 +98,19 @@ int main(int argc, char **argv)
 	n = read(fd, filter, sizeof(filter));
 	close(fd);
 
-	install_filter(filter, (unsigned short)(n / sizeof(filter[0])));
+	fd = install_filter(filter, (unsigned short)(n / sizeof(filter[0])));
+
 	/*
 	 * close-on-exec flag is set for the file descriptor by seccomp.
 	 * We want to preserve the fd on the exec in this way we are able
 	 * to easly find the notifier fd if seitan restarts.
 	 */
-	fd = find_fd_seccomp_notifier("/proc/self/fd");
 	flags = fcntl(fd, F_GETFD);
 	if (fcntl(fd, F_SETFD, flags & !FD_CLOEXEC) < 0) {
 		perror("fcntl");
 		exit(EXIT_FAILURE);
 	}
+
 	act.sa_handler = signal_handler;
 	sigaction(SIGCONT, &act, NULL);
 	pause();

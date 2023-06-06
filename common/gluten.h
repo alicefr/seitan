@@ -68,6 +68,7 @@ enum op_type {
 	OP_FD,
 	OP_RETURN,
 	OP_LOAD,
+	OP_MASK,
 	OP_CMP,
 	OP_RESOLVEDFD,
 };
@@ -193,12 +194,27 @@ enum op_cmp_type {
 	CMP_LE,
 };
 
-struct op_cmp {
+struct cmp_desc {
+	enum op_cmp_type cmp;
+	size_t size;
 	struct gluten_offset x;
 	struct gluten_offset y;
-	size_t size;
-	enum op_cmp_type cmp;
 	struct gluten_offset jmp;
+};
+
+struct op_cmp {
+	struct gluten_offset desc;	/* struct cmp_desc */
+};
+
+struct mask_desc {
+	size_t size;
+	struct gluten_offset dst;
+	struct gluten_offset src;
+	struct gluten_offset mask;
+};
+
+struct op_mask {
+	struct gluten_offset desc;	/* struct mask_desc */
 };
 
 struct op_resolvedfd {
@@ -223,6 +239,7 @@ struct op {
 		struct op_return ret;
 		struct op_fd fd;
 		struct op_load load;
+		struct op_mask mask;
 		struct op_cmp cmp;
 		struct op_resolvedfd resfd;
 		struct op_copy copy;

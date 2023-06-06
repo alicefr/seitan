@@ -349,31 +349,77 @@ int op_fd(const struct seccomp_notif *req, int notifier,
 	return 0;
 }
 
+int op_mask(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	    struct op_mask *op)
+{
+	const struct mask_desc *desc = gluten_ptr(&req->data, g, op->desc);
+	const unsigned char *src, *mask;
+	unsigned char *dst;
+	unsigned i;
+
+	(void)notifier;
+
+	if (!desc)
+		return -1;
+
+	dst  = gluten_write_ptr(      g, desc->dst);
+	src  = gluten_ptr(&req->data, g, desc->src);
+	mask = gluten_ptr(&req->data, g, desc->mask);
+
+/*
+	if (!dst || !src || !mask ||
+	    !check_gluten_limits(desc->dst,  desc->size) ||
+	    !check_gluten_limits(desc->src,  desc->size) ||
+	    !check_gluten_limits(desc->mask, desc->size))
+		return -1;
+*/
+	debug("  op_mask: dst=(%s %d) src=(%s %d) mask=(%s %d) size=%d",
+	      gluten_offset_name[desc->dst.type],  desc->dst.offset,
+	      gluten_offset_name[desc->src.type],  desc->src.offset,
+	      gluten_offset_name[desc->mask.type], desc->mask.offset,
+	      desc->size);
+
+	for (i = 0; i < desc->size; i++)
+		dst[i] = src[i] & mask[i];
+
+	return 0;
+}
+
 int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	   struct op_cmp *op)
 {
-	const void *px = gluten_ptr(&req->data, g, op->x);
-	const void *py = gluten_ptr(&req->data, g, op->y);
-	enum op_cmp_type cmp = op->cmp;
+	const struct cmp_desc *desc = gluten_ptr(&req->data, g, op->desc);
+	enum op_cmp_type cmp;
+	const void *px, *py;
 	int res;
 
 	(void)notifier;
 
-	if (px == NULL || py == NULL || !check_gluten_limits(op->x, op->size) ||
-	    !check_gluten_limits(op->y, op->size))
+	if (!desc)
+		return -1;
+
+	px  = gluten_ptr(&req->data, g, desc->x);
+	py  = gluten_ptr(&req->data, g, desc->y);
+	cmp = desc->cmp;
+
+	if (!px || !py ||
+	    !check_gluten_limits(desc->x, desc->size) ||
+	    !check_gluten_limits(desc->y, desc->size))
 		return -1;
 
 	debug("  op_cmp: operands x=(%s %d) y=(%s %d) size=%d",
-	      gluten_offset_name[op->x.type], op->x.offset,
-	      gluten_offset_name[op->y.type], op->y.offset, op->size);
-	res = memcmp(px, py, op->size);
-	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE || cmp == CMP_GE)) ||
-	    (res < 0 && (cmp == CMP_LT || cmp == CMP_LE)) ||
-	    (res > 0 && (cmp == CMP_GT || cmp == CMP_GE)) ||
+	      gluten_offset_name[desc->x.type], desc->x.offset,
+	      gluten_offset_name[desc->y.type], desc->y.offset, desc->size);
+
+	res = memcmp(px, py, desc->size);
+
+	if ((res == 0 && (cmp == CMP_EQ || cmp == CMP_LE   || cmp == CMP_GE)) ||
+	    (res < 0  && (cmp == CMP_LT || cmp == CMP_LE)) ||
+	    (res > 0  && (cmp == CMP_GT || cmp == CMP_GE)) ||
 	    (res != 0 && (cmp == CMP_NE))) {
-		debug("  op_cmp: successful comparison jump to %d",
-		      op->jmp.offset);
-		return op->jmp.offset;
+		debug("  op_cmp: successful comparison, jump to %d",
+		      desc->jmp.offset);
+		return desc->jmp.offset;
 	}
 	debug("  op_cmp: comparison is false");
 
@@ -435,6 +481,7 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 	struct op *op = (struct op *)g->inst;
 
 	while (op->type != OP_END) {
+		debug("at instruction %i", op - (struct op *)g->inst);
 		switch (op->type) {
 			HANDLE_OP(OP_CALL, op_call, call, g);
 			HANDLE_OP(OP_BLOCK, op_block, block, g);
@@ -442,6 +489,7 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 			HANDLE_OP(OP_CONT, op_continue, NO_FIELD, g);
 			HANDLE_OP(OP_FD, op_fd, fd, g);
 			HANDLE_OP(OP_LOAD, op_load, load, g);
+			HANDLE_OP(OP_MASK, op_mask, mask, g);
 			HANDLE_OP(OP_CMP, op_cmp, cmp, g);
 			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd, g);
 			HANDLE_OP(OP_NR, op_nr, nr, g);

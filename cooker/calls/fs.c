@@ -69,27 +69,66 @@ static struct arg mknod_args[] = {
 	{ 0,
 		{
 			"path",		STRING,			0,
-			0,	1 /* TODO: PATH_MAX */,
+			0,	PATH_MAX,
 			{ 0 }
 		}
 	},
 	{ 1,
 		{
-			"mode",		UNDEF /* TODO */,	FLAGS,
+			"mode",		U32 /* TODO */,	0,
 			0,	0,
 			{ 0 /* TODO */ },
 		}
 	},
 	{ 2,
 		{
-			"major",	UNDEF /* TODO */,	0,
+			"major",	GNU_DEV_MAJOR,		0,
 			0,	0,
 			{ 0 },
 		}
 	},
 	{ 2,
 		{
-			"minor",	UNDEF /* TODO */,	0,
+			"minor",	GNU_DEV_MINOR,		0,
+			0,	0,
+			{ 0 },
+		}
+	},
+	{ 0 }
+};
+
+static struct arg mknodat_args[] = {
+	{ 0,
+		{
+			"dirfd",	UNDEF,			0,
+			0,	1 /* TODO: PATH_MAX */,
+			{ 0 }
+		}
+	},
+	{ 1,
+		{
+			"path",		STRING,			0,
+			0,	PATH_MAX,
+			{ 0 }
+		}
+	},
+	{ 2,
+		{
+			"mode",		UNDEF /* TODO */,	FLAGS,
+			0,	0,
+			{ 0 /* TODO */ },
+		}
+	},
+	{ 3,
+		{
+			"major",	GNU_DEV_MAJOR,		0,
+			0,	0,
+			{ 0 },
+		}
+	},
+	{ 3,
+		{
+			"minor",	GNU_DEV_MINOR,		0,
 			0,	0,
 			{ 0 },
 		}
@@ -99,5 +138,6 @@ static struct arg mknod_args[] = {
 
 struct call syscalls_fs[] = {
 	{ __NR_mknod, "mknod", mknod_args },
+	{ __NR_mknodat, "mknodat", mknodat_args },
 	{ 0 },
 };

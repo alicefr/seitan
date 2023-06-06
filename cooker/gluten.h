@@ -45,6 +45,7 @@ struct gluten_ctx {
 enum jump_type {
 	JUMP_NEXT_BLOCK,
 	JUMP_NEXT_MATCH,
+	JUMP_NEXT_ACTION,
 	JUMP_END,
 	JUMP_COUNT,
 };

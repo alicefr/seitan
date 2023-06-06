@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
 
@@ -82,6 +83,9 @@ enum type {
 	IPV4,
 	IPV6,
 
+	GNU_DEV_MAJOR,
+	GNU_DEV_MINOR,
+
 	FDPATH,
 
 	TYPE_END,
@@ -108,7 +112,9 @@ enum flags {
 #define TYPE_IS_COMPOUND(t)						\
 	((t) == STRUCT || (t) == SELECT)
 #define TYPE_IS_NUM(t)							\
-	((t) == INT || (t) == U32 || (t) == U64 || (t) == LONG || (t) == USHORT)
+	((t) == USHORT || (t) == INT || (t) == U32 ||			\
+	 (t) == U64 || (t) == LONG ||					\
+	 (t) == GNU_DEV_MAJOR || (t) == GNU_DEV_MINOR)
 
 /**
  * struct num - A numeric value and its label

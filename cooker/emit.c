@@ -18,9 +18,10 @@ static const char *type_str[] = {
 	"UNDEF", "NONE",
 	"USHORT", "INT", "U32", "U64", "LONG",
 	"STRING",
-	"STRUCT", "SELECT",
+	"STRUCT", "SELECT", "SELECTED",
 	"PID",
 	"PORT", "IPV4", "IPV6",
+	"GNU_DEV_MAJOR", "GNU_DEV_MINOR",
 	"FDPATH",
 	NULL
 };
@@ -163,6 +164,48 @@ void emit_load(struct gluten_ctx *g, struct gluten_offset dst,
 }
 
 /**
+ * emit_mask(): Emit OP_MASK instruction: mask and store
+ * @g:		gluten context
+ * @type:	Type of operands
+ * @src:	gluten pointer to source operand
+ * @mask:	gluten pointer to mask
+ *
+ * Return: offset to destination operand, allocated here
+ */
+struct gluten_offset emit_mask(struct gluten_ctx *g, enum type type,
+			       struct gluten_offset src,
+			       struct gluten_offset mask)
+{
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct op_mask *op_mask = &op->op.mask;
+	struct gluten_offset o;
+	struct mask_desc *desc;
+
+	op->type = OP_MASK;
+
+	o = gluten_ro_alloc(g, sizeof(struct mask_desc));
+	desc = (struct mask_desc *)gluten_ptr(&g->g, o);
+
+	desc->size = gluten_size[type];
+	desc->dst  = gluten_rw_alloc(g, desc->size);
+	desc->src  = src;
+	desc->mask = mask;
+
+	op_mask->desc = o;
+
+	debug("   %i: OP_MASK: %s: #%lu (size: %lu) := %s: #%lu & %s: #%lu",
+	      g->ip.offset,
+	      gluten_offset_name[desc->dst.type],  desc->dst.offset, desc->size,
+	      gluten_offset_name[desc->src.type],  desc->src.offset,
+	      gluten_offset_name[desc->mask.type], desc->mask.offset);
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+
+	return desc->dst;
+}
+
+/**
  * emit_cmp(): Emit OP_CMP instruction: compare data from two offsets
  * @g:		gluten context
  * @cmp_type:	Type of comparison
@@ -177,15 +220,22 @@ void emit_cmp(struct gluten_ctx *g, enum op_cmp_type cmp_type,
 {
 	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
 	struct op_cmp *cmp = &op->op.cmp;
+	struct gluten_offset o;
+	struct cmp_desc *desc;
 
 	op->type = OP_CMP;
 
-	cmp->x = x;
-	cmp->y = y;
-	cmp->size = size;
-	cmp->cmp = cmp_type;
-	cmp->jmp.type = OFFSET_INSTRUCTION;
-	cmp->jmp.offset = jmp;
+	o = gluten_ro_alloc(g, sizeof(struct cmp_desc));
+	desc = (struct cmp_desc *)gluten_ptr(&g->g, o);
+
+	desc->x = x;
+	desc->y = y;
+	desc->size = size;
+	desc->cmp = cmp_type;
+	desc->jmp.type = OFFSET_INSTRUCTION;
+	desc->jmp.offset = jmp;
+
+	cmp->desc = o;
 
 	debug("   %i: OP_CMP: if %s: #%lu %s (size: %lu) %s: #%lu, jump to %s",
 	      g->ip.offset,
@@ -333,6 +383,7 @@ static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 	switch (type) {
 	case USHORT:
 	case INT:
+	case U32:
 		if (add) {
 			*(int *)p |= value->v_int;
 			debug("   C#%i |= (%s) %i",
@@ -355,6 +406,18 @@ static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 			debug("   C#%i := (%s) %llu",
 			      ret.offset, type_str[type], value->v_num);
 		}
+
+		break;
+	case GNU_DEV_MAJOR:
+		*(unsigned long long int *)p |= makedev(value->v_num, 0);
+		debug("   C#%i |= (%s) %llu",
+		      ret.offset, type_str[type], value->v_num);
+
+		break;
+	case GNU_DEV_MINOR:
+		*(unsigned long long int *)p |= makedev(0, value->v_num);
+		debug("   C#%i |= (%s) %llu",
+		      ret.offset, type_str[type], value->v_num);
 
 		break;
 	case STRING:
@@ -400,6 +463,7 @@ static void gluten_link(struct gluten_ctx *g, enum jump_type type,
 			struct op *start)
 {
 	struct gluten_offset *jmp;
+	struct cmp_desc *desc;
 	struct op *op;
 
 	for (op = (struct op *)start; op->type; op++) {
@@ -408,7 +472,9 @@ static void gluten_link(struct gluten_ctx *g, enum jump_type type,
 			jmp = &op->op.nr.no_match;
 			break;
 		case OP_CMP:
-			jmp = &op->op.cmp.jmp;
+			desc = (struct cmp_desc *)gluten_ptr(&g->g,
+							     op->op.cmp.desc);
+			jmp = &desc->jmp;
 			break;
 		default:
 			continue;
@@ -416,6 +482,10 @@ static void gluten_link(struct gluten_ctx *g, enum jump_type type,
 
 		if (jmp->offset == type) {
 			jmp->offset = g->ip.offset;
+
+			if (jmp->offset >= INST_MAX)
+				die("jump after end of instruction area");
+
 			debug("    linked jump of instruction #%i to #%i",
 			      op - (struct op *)g->g.inst, g->ip.offset);
 		}
@@ -432,4 +502,5 @@ void link_match(struct gluten_ctx *g)
 {
 	debug("   Linking match...");
 	gluten_link(g, JUMP_NEXT_MATCH, (struct op *)gluten_ptr(&g->g, g->mr));
+	gluten_link(g, JUMP_NEXT_ACTION, (struct op *)gluten_ptr(&g->g, g->mr));
 }

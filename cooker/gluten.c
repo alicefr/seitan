@@ -24,9 +24,12 @@ size_t gluten_size[TYPE_COUNT] = {
 	[IPV4]		= sizeof(struct in_addr),
 	[IPV6]		= sizeof(struct in6_addr),
 
+	[GNU_DEV_MAJOR]	= sizeof(unsigned long long int),
+	[GNU_DEV_MINOR]	= sizeof(unsigned long long int),
 };
 
-const char *jump_name[JUMP_COUNT] = { "next block", "next match", "end" };
+const char *jump_name[JUMP_COUNT] = { "next block", "next match", "next action",
+				      "end" };
 
 /**
  * gluten_rw_alloc() - Allocate in temporary (seitan read-write) data area

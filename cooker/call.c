@@ -143,6 +143,8 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 	case INT:
 	case LONG:
 	case U32:
+	case GNU_DEV_MAJOR:
+	case GNU_DEV_MINOR:
 		if (f->flags == SIZE) {
 			v.v_num = value_get_size(g, f->desc.d_size);
 		} else if (f->flags == FLAGS) {
@@ -250,6 +252,8 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 	case INT:
 	case LONG:
 	case U32:
+	case GNU_DEV_MAJOR:
+	case GNU_DEV_MINOR:
 		return false;
 	case SELECT:
 		f_inner = f->desc.d_select->field;
