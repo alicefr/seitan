@@ -186,12 +186,11 @@ int main(int argc, char **argv)
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
 	struct arguments arguments;
 	char path[PATH_MAX + 1];
-	bool running = true;
+	int fd = -1, epollfd;
 	int pidfd, notifier;
 	struct gluten g;
-	int fd, epollfd;
 	int notifierfd;
-	int nevents, i;
+	int n, i;
 
 	arguments.pid = -1;
 	parse(argc, argv, &arguments);
@@ -227,23 +226,29 @@ int main(int argc, char **argv)
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, notifier, &ev) == -1)
 		die("  epoll_ctl: notifier");
 
-	while (running) {
-		nevents = epoll_wait(epollfd, events, EPOLL_EVENTS, -1);
-		if (nevents < 0)
-			die("  waiting for seccomp events");
-		memset(req, 0, sizeof(*req));
-		if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_RECV, req) < 0)
-			die("  recieving seccomp notification");
-		for (i = 0; i < nevents; ++i) {
-			if (events[i].events & EPOLLHUP) {
-				/* The notifier fd was closed by the target */
-				running = false;
-			} else if (notifier == events[i].data.fd) {
-				if (eval(&g, req, notifier) == -1 )
-					err("  an error occured during the evaluation");
-			}
+loop:
+	n = epoll_wait(epollfd, events, EPOLL_EVENTS, -1);
+	if (n < 0)
+		die("waiting for seccomp events: %s", strerror(errno));
+
+	for (i = 0; i < n; i++) {
+		if (events[i].events & EPOLLHUP) {
+			if (fd >= 0)
+				unlink(arguments.socket);
+			exit(EXIT_SUCCESS);
 		}
+
+		if (events[i].events & EPOLLERR)
+			die("error on notifier");
 	}
-	if (strcmp(arguments.socket, "") > 0)
-		unlink(arguments.socket);
+
+	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_RECV, req) < 0)
+		die("receiving seccomp notification: %s", strerror(errno));
+
+	if (eval(&g, req, notifier))
+		err("an error occured during the evaluation");
+
+	goto loop;
+
+	return 0;
 }
