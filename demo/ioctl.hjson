@@ -1,0 +1,8 @@
+[
+  {
+    "match": [
+      { "ioctl": { "path": "/dev/net/tun", "request": "TUNSETIFF" } }
+    ],
+    "return": 0
+  }
+]

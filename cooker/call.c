@@ -275,6 +275,7 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 			return arg_needs_temp(f, pos, jvalue, NULL, level + 1);
 
 		return false;
+	case FDPATH:
 	case STRING:
 		return false;
 	case STRUCT:

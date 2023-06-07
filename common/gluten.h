@@ -217,11 +217,14 @@ struct op_mask {
 	struct gluten_offset desc;	/* struct mask_desc */
 };
 
-struct op_resolvedfd {
-	struct gluten_offset fd;
-	struct gluten_offset path;
-	size_t path_size;
-	unsigned int jmp;
+struct resolvefd_desc {
+        struct gluten_offset fd;
+        struct gluten_offset path;
+        size_t path_max;
+};
+
+struct op_resolvefd {
+	struct gluten_offset desc;
 };
 
 struct op_copy {
@@ -241,7 +244,7 @@ struct op {
 		struct op_load load;
 		struct op_mask mask;
 		struct op_cmp cmp;
-		struct op_resolvedfd resfd;
+		struct op_resolvefd resfd;
 		struct op_copy copy;
 	} op;
 };

@@ -78,13 +78,14 @@ static union value parse_field(struct gluten_ctx *g,
 			       enum op_cmp_type cmp, enum jump_type jump,
 			       int index, struct field *f, JSON_Value *jvalue)
 {
-	struct gluten_offset const_offset, mask_offset, data_offset;
+	struct gluten_offset const_offset, mask_offset, data_offset, seccomp_offset;
 	union value v = { .v_num = 0 };
 	struct field *f_inner;
 	const char *tag_name;
 	JSON_Object *tmp;
 	JSON_Array *set;
 	JSON_Value *sel;
+	size_t size;
 
 	if (f->name)
 		debug("    parsing field name %s", f->name);
@@ -200,6 +201,16 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 
 		const_offset = emit_data(g, STRING, strlen(v.v_str) + 1, &v);
 		emit_cmp(g, CMP_NE, offset, const_offset, strlen(v.v_str) + 1,
+			 JUMP_NEXT_BLOCK);
+		break;
+	case FDPATH:
+		v.v_str = json_value_get_string(jvalue);
+		size = strlen(v.v_str) + 1;
+		offset = gluten_rw_alloc(g, size);
+		const_offset = emit_data(g, STRING, size, &v);
+		seccomp_offset = emit_seccomp_data(index);
+		emit_resolvefd(g, seccomp_offset, offset, size);
+		emit_cmp(g, CMP_NE, offset, const_offset, size,
 			 JUMP_NEXT_BLOCK);
 		break;
 	case STRUCT:

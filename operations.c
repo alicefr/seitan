@@ -427,24 +427,29 @@ int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 }
 
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,
-		  struct gluten *g, struct op_resolvedfd *op)
+		  struct gluten *g, struct op_resolvefd *op)
 {
-	char fdpath[PATH_MAX], buf[PATH_MAX], path[PATH_MAX];
+	const struct resolvefd_desc *desc = gluten_ptr(&req->data, g, op->desc);
+	char fdpath[PATH_MAX], buf[PATH_MAX];
 	ssize_t nbytes;
 	int fd;
 
 	(void)notifier;
 
-	if (gluten_read(NULL, g, &path, op->path, sizeof(op->path_size)) == -1)
-		return -1;
-	if (gluten_read(&req->data, g, &fd, op->fd, sizeof(fd)) == -1)
+	debug("  op_resolvefd: fd=(%s %d) path=(%s %d) path_max=%d",
+	      gluten_offset_name[desc->fd.type], desc->fd.offset,
+	      gluten_offset_name[desc->path.type], desc->path.offset,
+	      desc->path_max);
+
+	if (gluten_read(&req->data, g, &fd, desc->fd, sizeof(fd)) == -1)
 		return -1;
 
 	snprintf(fdpath, PATH_MAX, "/proc/%d/fd/%d", req->pid, fd);
-	if ((nbytes = readlink(fdpath, buf, op->path_size)) < 0)
-		ret_err(-1, "error reading %s", fdpath);
-	if (strcmp(path, buf) == 0)
-		return op->jmp;
+	if ((nbytes = readlink(fdpath, buf, desc->path_max)) < 0)
+		ret_err(-1, "error reading %s", buf);
+
+	debug("  op_resolvefd: fd %d -> path: %s", fd, buf);
+	gluten_write(g, desc->path, &buf, desc->path_max);
 
 	return 0;
 }

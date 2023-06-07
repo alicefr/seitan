@@ -53,7 +53,7 @@ int op_continue(const struct seccomp_notif *req, int notifier, struct gluten *g,
 int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	   struct op_cmp *op);
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,
-		  struct gluten *g, struct op_resolvedfd *op);
+		  struct gluten *g, struct op_resolvefd *op);
 int op_load(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_load *load);
 int op_copy(const struct seccomp_notif *req, int notifier, struct gluten *g,

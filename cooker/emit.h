@@ -16,6 +16,7 @@ void emit_load(struct gluten_ctx *g, struct gluten_offset dst,
 struct gluten_offset emit_mask(struct gluten_ctx *g, enum type type,
 			       struct gluten_offset src,
 			       struct gluten_offset mask);
+struct gluten_offset emit_seccomp_data(int index);
 void emit_cmp(struct gluten_ctx *g, enum op_cmp_type cmp,
 	      struct gluten_offset x, struct gluten_offset y, size_t size,
 	      enum jump_type jmp);
@@ -29,6 +30,8 @@ void emit_copy(struct gluten_ctx *g,
 	       struct gluten_offset dst, struct gluten_offset src, size_t size);
 void emit_copy_field(struct gluten_ctx *g, struct field *field,
 		     struct gluten_offset dst, struct gluten_offset src);
+void emit_resolvefd(struct gluten_ctx *g, struct gluten_offset fd,
+                     struct gluten_offset path, size_t path_size);
 void emit_end(struct gluten_ctx *g);
 struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
 			       size_t str_len, union value *value);

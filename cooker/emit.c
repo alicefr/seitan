@@ -164,6 +164,40 @@ void emit_load(struct gluten_ctx *g, struct gluten_offset dst,
 }
 
 /**
+ * emit_resolved() - Emit OP_RESOLVEFD instruction: resolve file descriptor with path
+ * @g:		gluten context
+ * @fd:		offset of the file descriptor value
+ * @path:	offset of the path
+ * @path_size:	size of the path
+ */
+void emit_resolvefd(struct gluten_ctx *g, struct gluten_offset fd,
+		     struct gluten_offset path, size_t path_size)
+{
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct op_resolvefd *resfd = &op->op.resfd;
+	struct gluten_offset o;
+	struct resolvefd_desc *desc;
+
+	op->type = OP_RESOLVEDFD;
+        o = gluten_ro_alloc(g, sizeof(struct resolvefd_desc));
+        desc = (struct resolvefd_desc *)gluten_ptr(&g->g, o);
+
+	desc->fd = fd;
+	desc->path = path;
+	desc->path_max = path_size;
+
+	resfd->desc = o;
+
+	debug("   %i: OP_RESOLVEDFD:", g->ip.offset);
+	debug("   \tfd: %s offset=%d", gluten_offset_name[fd.type], fd.offset);
+	debug("   \tpath: %s offset=%d size=%d", gluten_offset_name[path.type],
+	      path.offset, path_size);
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+}
+
+/**
  * emit_mask(): Emit OP_MASK instruction: mask and store
  * @g:		gluten context
  * @type:	Type of operands
@@ -422,7 +456,7 @@ static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 		break;
 	case STRING:
 		strncpy(p, value->v_str, str_len);
-		debug("   C#%i: (%s:%i) %s", g->cp.offset, type_str[type],
+		debug("   C#%i: (%s:%i) %s", ret.offset, type_str[type],
 		      str_len, value->v_str);
 
 		break;
@@ -457,6 +491,11 @@ struct gluten_offset emit_data_or(struct gluten_ctx *g,
 	return emit_data_do(g, offset, type,
 			    (type == STRING) ? strlen(value->v_str) : 0, value,
 			    true);
+}
+
+struct gluten_offset emit_seccomp_data(int index) {
+	struct gluten_offset o = { OFFSET_SECCOMP_DATA, index };
+	return o;
 }
 
 static void gluten_link(struct gluten_ctx *g, enum jump_type type,
