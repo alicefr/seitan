@@ -322,11 +322,11 @@ int op_fd(const struct seccomp_notif *req, int notifier,
 	return 0;
 }
 
-int op_mask(const struct seccomp_notif *req, int notifier, struct gluten *g,
-	    struct op_mask *op)
+int op_bitwise(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	       struct op_bitwise *op)
 {
-	const struct mask_desc *desc = gluten_ptr(&req->data, g, op->desc);
-	const unsigned char *src, *mask;
+	const struct bitwise_desc *desc = gluten_ptr(&req->data, g, op->desc);
+	const unsigned char *x, *y;
 	unsigned char *dst;
 	unsigned i;
 
@@ -335,9 +335,9 @@ int op_mask(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	if (!desc)
 		return -1;
 
-	dst  = gluten_write_ptr(      g, desc->dst);
-	src  = gluten_ptr(&req->data, g, desc->src);
-	mask = gluten_ptr(&req->data, g, desc->mask);
+	dst = gluten_write_ptr(      g, desc->dst);
+	x   = gluten_ptr(&req->data, g, desc->x);
+	y   = gluten_ptr(&req->data, g, desc->y);
 
 /*
 	if (!dst || !src || !mask ||
@@ -346,14 +346,21 @@ int op_mask(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    !check_gluten_limits(desc->mask, desc->size))
 		return -1;
 */
-	debug("  op_mask: dst=(%s %d) src=(%s %d) mask=(%s %d) size=%d",
-	      gluten_offset_name[desc->dst.type],  desc->dst.offset,
-	      gluten_offset_name[desc->src.type],  desc->src.offset,
-	      gluten_offset_name[desc->mask.type], desc->mask.offset,
+	debug("  op_bitwise: dst=(%s %d) := x=(%s %d) %s y=(%s %d) size=%d",
+	      gluten_offset_name[desc->dst.type], desc->dst.offset,
+	      gluten_offset_name[desc->x.type],   desc->x.offset,
+	      bitwise_type_str[desc->type],
+	      gluten_offset_name[desc->y.type],   desc->y.offset,
 	      desc->size);
 
-	for (i = 0; i < desc->size; i++)
-		dst[i] = src[i] & mask[i];
+	for (i = 0; i < desc->size; i++) {
+		if (desc->type == BITWISE_AND)
+			dst[i] = x[i] & y[i];
+		else if (desc->type == BITWISE_OR)
+			dst[i] = x[i] | y[i];
+		else
+			return -1;
+	}
 
 	return 0;
 }
@@ -465,7 +472,7 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 			HANDLE_OP(OP_RETURN, op_return, ret, g);
 			HANDLE_OP(OP_FD, op_fd, fd, g);
 			HANDLE_OP(OP_LOAD, op_load, load, g);
-			HANDLE_OP(OP_MASK, op_mask, mask, g);
+			HANDLE_OP(OP_BITWISE, op_bitwise, bitwise, g);
 			HANDLE_OP(OP_CMP, op_cmp, cmp, g);
 			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd, g);
 			HANDLE_OP(OP_NR, op_nr, nr, g);

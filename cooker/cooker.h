@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 
+#include <common.h>
 #include <util.h>
 
 #define TAGS_MAX			256

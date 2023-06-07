@@ -78,7 +78,7 @@ static union value parse_field(struct gluten_ctx *g,
 			       enum op_cmp_type cmp, enum jump_type jump,
 			       int index, struct field *f, JSON_Value *jvalue)
 {
-	struct gluten_offset const_offset, mask_offset, data_offset, seccomp_offset;
+	struct gluten_offset const_offset, mask_offset, seccomp_offset;
 	union value v = { .v_num = 0 };
 	struct field *f_inner;
 	const char *tag_name;
@@ -89,6 +89,32 @@ static union value parse_field(struct gluten_ctx *g,
 
 	if (f->name)
 		debug("    parsing field name %s", f->name);
+
+	/* Some types need pre-tagging preparation */
+	switch (f->type) {
+	case GNU_DEV_MAJOR:
+		/*
+xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
+______________________                            _____________
+		*/
+		v.v_num = ((long long)0xfff << 44) | (0xfff << 8);
+		mask_offset = emit_data(g, U64, 0, &v);
+		offset = emit_bitwise(g, U64, BITWISE_AND, NULL_OFFSET,
+				      offset, mask_offset);
+		break;
+	case GNU_DEV_MINOR:
+		/*
+xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
+                      ____________________________              ________
+		*/
+		v.v_num = 0xff | ((long long)0xffffff << 12);
+		mask_offset = emit_data(g, U64, 0, &v);
+		offset = emit_bitwise(g, U64, BITWISE_AND, NULL_OFFSET,
+				      offset, mask_offset);
+		break;
+	default:
+		break;
+	}
 
 	if (json_value_get_type(jvalue) == JSONObject &&
 	    (tmp = json_value_get_object(jvalue)) &&
@@ -153,30 +179,20 @@ static union value parse_field(struct gluten_ctx *g,
 xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 ______________________                            _____________
 		*/
-		v.v_num = ((long long)0xfff << 44) | (0xfff << 8);
-		mask_offset = emit_data(g, U64, 0, &v);
-
 		v.v_num = value_get_num(f->desc.d_num, jvalue);
 		v.v_num = (v.v_num & 0xfff) << 8 | (v.v_num & ~0xfff) << 32;
 		const_offset = emit_data(g, U64, 0, &v);
-
-		data_offset = emit_mask(g, U64, offset, mask_offset);
-		emit_cmp_field(g, cmp, f, data_offset, const_offset, jump);
+		emit_cmp_field(g, cmp, f, offset, const_offset, jump);
 		break;
 	case GNU_DEV_MINOR:
 		/*
 xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
                       ____________________________              ________
 		*/
-		v.v_num = 0xff | ((long long)0xffffff << 12);
-		mask_offset = emit_data(g, U64, 0, &v);
-
 		v.v_num = value_get_num(f->desc.d_num, jvalue);
 		v.v_num = (v.v_num & 0xff) | (v.v_num & ~0xfff) << 12;
 		const_offset = emit_data(g, U64, 0, &v);
-
-		data_offset = emit_mask(g, U64, offset, mask_offset);
-		emit_cmp_field(g, cmp, f, data_offset, const_offset, jump);
+		emit_cmp_field(g, cmp, f, offset, const_offset, jump);
 		break;
 	case SELECT:
 		f_inner = f->desc.d_select->field;
@@ -329,4 +345,6 @@ void handle_matches(struct gluten_ctx *g, JSON_Value *value)
 
 		link_match(g);
 	}
+
+	link_matches(g);
 }

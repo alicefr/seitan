@@ -37,3 +37,5 @@ const char *gluten_offset_name[OFFSET_TYPE_MAX + 1] = {
 const char *ns_type_name[NS_TYPE_MAX + 1] = {
 	"mnt", "cgroup", "uts", "ipc", "user", "pid", "net", "time",
 };
+
+const char *bitwise_type_str[BITWISE_MAX + 1] = { "&", "|" };

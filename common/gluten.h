@@ -45,6 +45,8 @@ enum gluten_offset_type {
 	OFFSET_TYPE_MAX		= OFFSET_INSTRUCTION,
 };
 
+#define NULL_OFFSET ((struct gluten_offset){ .type = OFFSET_NULL })
+
 extern const char *gluten_offset_name[OFFSET_TYPE_MAX + 1];
 
 struct gluten_offset {
@@ -66,7 +68,7 @@ enum op_type {
 	OP_FD,
 	OP_RETURN,
 	OP_LOAD,
-	OP_MASK,
+	OP_BITWISE,
 	OP_CMP,
 	OP_RESOLVEDFD,
 };
@@ -210,15 +212,24 @@ struct op_cmp {
 	struct gluten_offset desc;	/* struct cmp_desc */
 };
 
-struct mask_desc {
-	size_t size;
-	struct gluten_offset dst;
-	struct gluten_offset src;
-	struct gluten_offset mask;
+enum bitwise_type {
+	BITWISE_AND,
+	BITWISE_OR,
+	BITWISE_MAX = BITWISE_OR,
 };
 
-struct op_mask {
-	struct gluten_offset desc;	/* struct mask_desc */
+extern const char *bitwise_type_str[BITWISE_MAX + 1];
+
+struct bitwise_desc {
+	size_t size;
+	enum bitwise_type type;
+	struct gluten_offset dst;
+	struct gluten_offset x;
+	struct gluten_offset y;
+};
+
+struct op_bitwise {
+	struct gluten_offset desc;	/* struct bitwise_desc */
 };
 
 struct resolvefd_desc {
@@ -246,7 +257,7 @@ struct op {
 		struct op_return ret;
 		struct op_fd fd;
 		struct op_load load;
-		struct op_mask mask;
+		struct op_bitwise bitwise;
 		struct op_cmp cmp;
 		struct op_resolvefd resfd;
 		struct op_copy copy;
@@ -352,6 +363,7 @@ static inline int gluten_write(struct gluten *g, struct gluten_offset dst,
 			       const void *src, size_t size)
 {
 	void *p = gluten_write_ptr(g, dst);
+
 	if (p == NULL || !check_gluten_limits(dst, size))
 		return -1;
 	memcpy(p, src, size);

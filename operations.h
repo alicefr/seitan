@@ -46,6 +46,8 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_call *op);
 int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	      struct op_return *op);
+int op_bitwise(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	       struct op_bitwise *op);
 int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	   struct op_cmp *op);
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,

@@ -113,10 +113,14 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 			if (tag_offset.type == OFFSET_NULL)
 				die("   tag not found");
 
-			if (base_offset->type == OFFSET_NULL)
+			if (base_offset->type == OFFSET_NULL) {
 				*base_offset = tag_offset;
-			else
+			} else if (f->flags & MASK || add) {
+				emit_bitwise(g, f->type, BITWISE_OR, offset,
+					     offset, tag_offset);
+			} else {
 				emit_copy_field(g, f, offset, tag_offset);
+			}
 		}
 
 		if (json_object_get_count(tmp2) > count)
@@ -252,9 +256,10 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 	case INT:
 	case LONG:
 	case U32:
+		return false;
 	case GNU_DEV_MAJOR:
 	case GNU_DEV_MINOR:
-		return false;
+		return true;
 	case SELECT:
 		f_inner = f->desc.d_select->field;
 		if (arg_needs_temp(f_inner, pos, jvalue, top_level_tag, level))
@@ -300,7 +305,7 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 }
 
 static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *args,
-				      struct arg *a,
+				      struct arg *a, bool multi_field,
 				      struct gluten_offset offset,
 				      JSON_Value *jvalue)
 {
@@ -314,10 +319,15 @@ static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *args,
 		return offset;
 	}
 
-	if (arg_needs_temp(&a->f, a->pos, jvalue, &top_level_tag, 0))
-		offset = gluten_rw_alloc(g, a->f.size);
-	else if (a->f.size && !top_level_tag)
+	if (arg_needs_temp(&a->f, a->pos, jvalue, &top_level_tag, 0) ||
+	    multi_field) {
+		if (a->f.size)
+			offset = gluten_rw_alloc(g, a->f.size);
+		else
+			offset = gluten_rw_alloc_type(g, a->f.type);
+	} else if ((a->f.size && !top_level_tag)) {
 		offset = gluten_ro_alloc(g, a->f.size);
+	}
 	parse_field(g, args, &offset, a->pos, &a->f, jvalue, false, false);
 
 	return offset;
@@ -336,6 +346,8 @@ static void parse_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
 	struct {
 		bool needs_fd;
 		bool has_fd;
+		bool found;
+		bool multi_field;
 	} arg_check[6] = { 0 };
 	int arg_max_pos = -1;
 	unsigned count = 0;
@@ -348,6 +360,10 @@ static void parse_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
 				die("  No argument selected for %s", a->f.name);
 			a = g->selected_arg[a->pos];
 		}
+
+		if (arg_check[a->pos].found)
+			arg_check[a->pos].multi_field = true;
+		arg_check[a->pos].found = true;
 
 		if (a->f.type == FDPATH)
 			arg_check[a->pos].needs_fd = true;
@@ -362,9 +378,12 @@ static void parse_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
 	/* TODO: Factor this out into a function in... parse.c? */
 	for (a = args; a->f.name; a++) {
 		JSON_Value *jvalue;
+		bool multi_field;
 
 		if (a->f.type == SELECTED)
 			a = g->selected_arg[a->pos];
+
+		multi_field = arg_check[a->pos].multi_field;
 
 		/* Not common with parse_match(), though */
 		if ((jvalue = json_object_get_value(obj, a->f.name))) {
@@ -373,15 +392,15 @@ static void parse_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
 			else if (arg_check[a->pos].needs_fd)
 				arg_check[a->pos].has_fd = true;
 
-			offset[a->pos] = parse_arg(g, args, a, offset[a->pos],
-						   jvalue);
+			offset[a->pos] = parse_arg(g, args, a, multi_field,
+						   offset[a->pos], jvalue);
 			count++;
 		} else if (arg_check[a->pos].needs_fd &&
 			   arg_check[a->pos].has_fd) {
 			;
 		} else if (a->f.flags & SIZE) {
-			offset[a->pos] = parse_arg(g, args, a, offset[a->pos],
-						   jvalue);
+			offset[a->pos] = parse_arg(g, args, a, multi_field,
+						   offset[a->pos], jvalue);
 		} else {
 			die("  No specification for argument %s", a->f.name);
 		}

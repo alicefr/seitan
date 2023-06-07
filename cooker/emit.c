@@ -198,40 +198,49 @@ void emit_resolvefd(struct gluten_ctx *g, struct gluten_offset fd,
 }
 
 /**
- * emit_mask(): Emit OP_MASK instruction: mask and store
+ * emit_bitwise(): Emit OP_BITWISE instruction: bitwise operation and store
  * @g:		gluten context
  * @type:	Type of operands
- * @src:	gluten pointer to source operand
- * @mask:	gluten pointer to mask
+ * @op_type:	Type of bitwise operation
+ * @dst:	gluten pointer to destination operand, can be OFFSET_NULL
+ * @x:		gluten pointer to first source operand
+ * @y:		gluten pointer to second source operand
  *
- * Return: offset to destination operand, allocated here
+ * Return: offset to destination operand, allocated here if not given
  */
-struct gluten_offset emit_mask(struct gluten_ctx *g, enum type type,
-			       struct gluten_offset src,
-			       struct gluten_offset mask)
+struct gluten_offset emit_bitwise(struct gluten_ctx *g, enum type type,
+				  enum bitwise_type op_type,
+				  struct gluten_offset dst,
+				  struct gluten_offset x,
+				  struct gluten_offset y)
 {
 	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
-	struct op_mask *op_mask = &op->op.mask;
+	struct op_bitwise *op_bitwise = &op->op.bitwise;
 	struct gluten_offset o;
-	struct mask_desc *desc;
+	struct bitwise_desc *desc;
 
-	op->type = OP_MASK;
+	op->type = OP_BITWISE;
 
-	o = gluten_ro_alloc(g, sizeof(struct mask_desc));
-	desc = (struct mask_desc *)gluten_ptr(&g->g, o);
+	o = gluten_ro_alloc(g, sizeof(struct bitwise_desc));
+	desc = (struct bitwise_desc *)gluten_ptr(&g->g, o);
 
 	desc->size = gluten_size[type];
-	desc->dst  = gluten_rw_alloc(g, desc->size);
-	desc->src  = src;
-	desc->mask = mask;
+	desc->type = op_type;
+	if (dst.type == OFFSET_NULL)
+		desc->dst = gluten_rw_alloc(g, desc->size);
+	else
+		desc->dst = dst;
+	desc->x    = x;
+	desc->y    = y;
 
-	op_mask->desc = o;
+	op_bitwise->desc = o;
 
-	debug("   %i: OP_MASK: %s: #%lu (size: %lu) := %s: #%lu & %s: #%lu",
+	debug("   %i: OP_BITWISE: %s: #%lu (size: %lu) := %s: #%lu %s %s: #%lu",
 	      g->ip.offset,
-	      gluten_offset_name[desc->dst.type],  desc->dst.offset, desc->size,
-	      gluten_offset_name[desc->src.type],  desc->src.offset,
-	      gluten_offset_name[desc->mask.type], desc->mask.offset);
+	      gluten_offset_name[desc->dst.type], desc->dst.offset, desc->size,
+	      gluten_offset_name[desc->x.type],   desc->x.offset,
+	      bitwise_type_str[op_type],
+	      gluten_offset_name[desc->y.type],   desc->y.offset);
 
 	if (++g->ip.offset > INST_MAX)
 		die("Too many instructions");
@@ -537,5 +546,10 @@ void link_match(struct gluten_ctx *g)
 {
 	debug("   Linking match...");
 	gluten_link(g, JUMP_NEXT_MATCH, (struct op *)gluten_ptr(&g->g, g->mr));
-	gluten_link(g, JUMP_NEXT_ACTION, (struct op *)gluten_ptr(&g->g, g->mr));
+}
+
+void link_matches(struct gluten_ctx *g)
+{
+	debug("   Linking matches...");
+	gluten_link(g, JUMP_NEXT_ACTION, (struct op *)gluten_ptr(&g->g, g->lr));
 }

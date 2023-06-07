@@ -1,13 +1,34 @@
 [
   {
     "match": [ /* Giuseppe's example */
-      { "mknodat": { "path": { "tag": "path" }, "mode": 8630, "major": 1, "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "tag": "minor" } } }
+      { "mknodat":
+        { "path": { "tag": "path" },
+          "mode": { "tag": "mode" },
+          "type": { "tag": "type" },
+          "major": 1,
+          "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "tag": "minor" }
+        }
+      },
+      { "mknod":
+        { "path": { "tag": "path" },
+          "mode": { "tag": "mode" },
+          "type": { "tag": "type" },
+          "major": 1,
+          "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "tag": "minor" }
+        }
+      }
     ],
-    "call": {
-      "mknod": { "path": { "tag": { "get": "path" } }, "mode": 8630, "major": 1, "minor": 7 /* { "tag": { "get": "minor" } }*/ },
-      "ret": "x"/*,
-      "context": { "user": "init", "mnt": "caller" }*/
-    },
+    "call":
+      { "mknod":
+        { "path": { "tag": { "get": "path" } },
+          "mode": { "tag": { "get": "mode" } },
+          "type": { "tag": { "get": "type" } },
+          "major": 1,
+          "minor": { "tag": { "get": "minor" } }
+        },
+        "ret": "x"/*,
+        "context": { "user": "init", "mnt": "caller" }*/
+      },
     "return": { "tag": "x" }
   }
 ]
