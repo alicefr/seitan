@@ -304,36 +304,32 @@ void emit_cmp_field(struct gluten_ctx *g, enum op_cmp_type cmp,
 /**
  * emit_return() - Emit OP_RETURN instruction: return value
  * @g:		gluten context
- * @v:		Pointer to return value
+ * @v:		offset of the return value
+ * @error:	error value
+ * @cont 	if the filtered syscall needs to be executed
  */
-void emit_return(struct gluten_ctx *g, struct gluten_offset v)
+void emit_return(struct gluten_ctx *g, struct gluten_offset v, int32_t error,
+		 bool cont)
 {
 	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
 	struct op_return *ret = &op->op.ret;
+	struct gluten_offset o;
+	struct return_desc *desc;
 
 	op->type = OP_RETURN;
-	ret->val = v;
+
+	o = gluten_ro_alloc(g, sizeof(struct return_desc));
+	desc = (struct return_desc *)gluten_ptr(&g->g, o);
+
+	desc->val = v;
+	desc->error = error;
+	desc->cont = cont;
+
+	ret->desc = o;
 
 	debug("   %i: OP_RETURN:",  g->ip.offset);
-
-	if (++g->ip.offset > INST_MAX)
-		die("Too many instructions");
-}
-
-/**
- * emit_block() - Emit OP_BLOCK instruction: return error value
- * @g:		gluten context
- * @error:	Error value
- */
-void emit_block(struct gluten_ctx *g, int32_t error)
-{
-	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
-	struct op_block *block = &op->op.block;
-
-	op->type = OP_BLOCK;
-	block->error = error;
-
-	debug("   %i: OP_BLOCK: %d", g->ip.offset, error);
+	debug("  \t val=(%s %d) errno=%d cont=%s", gluten_offset_name[v.type],
+	      v.offset, error, cont ? "true" : "false");
 
 	if (++g->ip.offset > INST_MAX)
 		die("Too many instructions");

@@ -261,54 +261,27 @@ out:
 	return ret;
 }
 
-int op_block(const struct seccomp_notif *req, int notifier, struct gluten *g,
-	     struct op_block *op)
-{
-	struct seccomp_notif_resp resp;
-
-	(void)g;
-	resp.id = req->id;
-	resp.val = 0;
-	resp.flags = 0;
-	resp.error = op->error;
-
-	if (send_target(&resp, notifier) == -1)
-		return -1;
-
-	return 0;
-}
-
 int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	      struct op_return *op)
 {
+	const struct return_desc *desc = gluten_ptr(&req->data, g, op->desc);
 	struct seccomp_notif_resp resp;
 
 	resp.id = req->id;
-	resp.flags = 0;
-	resp.error = 0;
-
-	if (gluten_read(&req->data, g, &resp.val, op->val, sizeof(resp.val)) ==
-	    -1)
-		return -1;
-
-	if (send_target(&resp, notifier) == -1)
-		return -1;
-
-	return 0;
-}
-
-int op_continue(const struct seccomp_notif *req, int notifier, struct gluten *g,
-		void *op)
-{
-	struct seccomp_notif_resp resp;
-
-	(void)g;
-	(void)op;
-
-	resp.id = req->id;
-	resp.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
-	resp.error = 0;
-	resp.val = 0;
+	if (desc->cont) {
+		resp.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+		resp.error = 0;
+		resp.val = 0;
+		debug("  op_return: continue the syscall");
+	} else {
+		resp.id = req->id;
+		resp.flags = 0;
+		resp.error = desc->error;
+		if (gluten_read(&req->data, g, &resp.val, desc->val,
+				sizeof(resp.val)) == -1)
+			return -1;
+		debug("  op_return: val=%ld errno=%d", resp.val, resp.error);
+	}
 
 	if (send_target(&resp, notifier) == -1)
 		return -1;
@@ -489,9 +462,7 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 		debug("at instruction %i", op - (struct op *)g->inst);
 		switch (op->type) {
 			HANDLE_OP(OP_CALL, op_call, call, g);
-			HANDLE_OP(OP_BLOCK, op_block, block, g);
 			HANDLE_OP(OP_RETURN, op_return, ret, g);
-			HANDLE_OP(OP_CONT, op_continue, NO_FIELD, g);
 			HANDLE_OP(OP_FD, op_fd, fd, g);
 			HANDLE_OP(OP_LOAD, op_load, load, g);
 			HANDLE_OP(OP_MASK, op_mask, mask, g);

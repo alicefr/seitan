@@ -6,6 +6,7 @@
  *
  * Copyright 2023 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
+ *         Alice Frosi <afrosi@redhat.com>
  */
 
 #include "parson.h"
@@ -73,14 +74,34 @@ static void handle_limit(struct gluten_ctx *g, JSON_Value *value)
 
 static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 {
-	union value v = { .v_u64 = json_value_get_number(value) };
+	JSON_Object *obj = json_value_get_object(value);
+	JSON_Value *jvalue;
+	union value v = { .v_u64 = 0 };
+	int32_t error = 0;
+	bool cont = false;
 
-	emit_return(g, emit_data(g, U64, sizeof(v.v_u64), &v));
-}
+	debug("  Parsing \"return\"");
 
-static void handle_block(struct gluten_ctx *g, JSON_Value *value)
-{
-	emit_block(g, json_value_get_number(value));
+	jvalue = json_object_get_value(obj, "error");
+        if (json_value_get_type(jvalue) == JSONNumber) {
+		error = json_value_get_number(jvalue);
+	}
+
+	jvalue = json_object_get_value(obj, "value");
+        if (json_value_get_type(jvalue) == JSONNumber) {
+		v.v_u64 = json_value_get_number(jvalue);
+	}
+
+	jvalue = json_object_get_value(obj, "continue");
+        if (json_value_get_type(jvalue) == JSONBoolean) {
+		cont = json_value_get_boolean(jvalue);
+	}
+	if (cont && (v.v_u64 != 0 || error != 0))
+		die("  if continue is true, error and value needs to be zero");
+
+	debug("  emit return: val=%ld errno=%d cont=%s", v.v_u64, error,
+	      cont ? "true" : "false");
+	emit_return(g, emit_data(g, U64, sizeof(v.v_u64), &v), error, cont);
 }
 
 static void handle_context(struct gluten_ctx *g, JSON_Value *value)
@@ -103,7 +124,6 @@ struct rule_parser {
 	{ "fd",		handle_fd },
 	{ "limit",	handle_limit },
 	{ "return",	handle_return },
-	{ "block",	handle_block },
 	{ "context",	handle_context },
 	{ NULL, NULL },
 };

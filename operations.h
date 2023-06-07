@@ -44,12 +44,8 @@ int do_call(struct arg_clone *c);
 int eval(struct gluten *g, const struct seccomp_notif *req, int notifier);
 int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	    struct op_call *op);
-int op_block(const struct seccomp_notif *req, int notifier, struct gluten *g,
-	     struct op_block *op);
 int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	      struct op_return *op);
-int op_continue(const struct seccomp_notif *req, int notifier, struct gluten *g,
-		void *);
 int op_cmp(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	   struct op_cmp *op);
 int op_resolve_fd(const struct seccomp_notif *req, int notifier,

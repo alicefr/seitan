@@ -63,8 +63,6 @@ enum op_type {
 	OP_NR,
 	OP_CALL,
 	OP_COPY,
-	OP_BLOCK,
-	OP_CONT,
 	OP_FD,
 	OP_RETURN,
 	OP_LOAD,
@@ -171,8 +169,14 @@ struct op_block {
 	int32_t error;
 };
 
-struct op_return {
+struct return_desc {
 	struct gluten_offset val;
+	int32_t error;
+	bool cont;
+};
+
+struct op_return {
+	struct gluten_offset desc;
 };
 
 struct op_fd {
