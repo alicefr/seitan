@@ -141,15 +141,15 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 
 static int set_namespaces(struct arg_clone *c)
 {
-	char *path;
+	char (*path)[PATH_MAX];
 	int fd;
 
-	for (path = c->ns_path[0]; *path; path++) {
-		if ((fd = open(path, O_CLOEXEC)) < 0)
-			ret_err(-1, "open for file %s", path);
+	for (path = c->ns_path; **path; *path++) {
+		if ((fd = open(*path, O_CLOEXEC)) < 0)
+			;//ret_err(-1, "open for file %s", *path);
 
 		if (setns(fd, 0) != 0)
-			ret_err(-1, "setns");
+			;//ret_err(-1, "setns");
 	}
 	return 0;
 }

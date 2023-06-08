@@ -149,14 +149,19 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 	case U32:
 	case GNU_DEV_MAJOR:
 	case GNU_DEV_MINOR:
-		if (f->flags == SIZE) {
+		if (json_value_get_type(jvalue) == JSONArray) {
+			JSON_Array *array = json_value_get_array(jvalue);
+			unsigned i;
+
+			if (!(f->flags & FLAGS))
+				die("multiple values for non-FLAGS argument");
+
+			for (i = 0; i < json_array_get_count(array); i++) {
+				jvalue = json_array_get_value(array, i);
+				v.v_num |= value_get_num(f->desc.d_num, jvalue);
+			}
+		} else if (f->flags == SIZE) {
 			v.v_num = value_get_size(g, f->desc.d_size);
-		} else if (f->flags == FLAGS) {
-			/* fetch/combine expr algebra loop */
-			v.v_num = value_get_num(f->desc.d_num, jvalue);
-		} else if (f->flags == MASK) {
-			/* calculate mask first */
-			v.v_num = value_get_num(f->desc.d_num, jvalue);
 		} else {
 			v.v_num = value_get_num(f->desc.d_num, jvalue);
 		}
@@ -164,12 +169,14 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 		if (dry_run)
 			break;
 
-		if (base_offset->type == OFFSET_NULL)
-			*base_offset = emit_data(g, f->type, 0, &v);
-		else if (add)
+		if (base_offset->type == OFFSET_NULL) {
+			*base_offset = gluten_ro_alloc_type(g, U64);
+			emit_data_at(g, *base_offset, f->type, &v);
+		} else if (add) {
 			emit_data_or(g, offset, f->type, &v);
-		else
+		} else {
 			emit_data_at(g, offset, f->type, &v);
+		}
 
 		break;
 	case SELECT:

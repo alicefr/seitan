@@ -85,25 +85,25 @@ static struct num protocols[] = {
 static struct arg socket_args[] = {
 	{ 0,
 		{
-			"family",	INT,	0,	0,	0,
+			"family",	INT,	0,		0,	0,
 			{ .d_num = af }
 		}
 	},
 	{ 1,
 		{
-			"type",		INT,	MASK,	0,	0,
+			"type",		INT,	MASK,		0,	0,
 			{ .d_num = socket_types }
 		}
 	},
 	{ 1,
 		{
-			"flags",	INT,	FLAGS,	0,	0,
+			"flags",	INT,	MASK | FLAGS,	0,	0,
 			{ .d_num = socket_flags }
 		}
 	},
 	{ 2,
 		{
-			"protocol",	INT,	0,	0,	0,
+			"protocol",	INT,	0,		0,	0,
 			{ .d_num = protocols }
 		}
 	},

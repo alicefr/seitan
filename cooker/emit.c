@@ -425,12 +425,14 @@ static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 	case U32:
 		if (add) {
 			*(int *)p |= value->v_int;
-			debug("   C#%i |= (%s) %i",
-			      ret.offset, type_str[type], value->v_int);
+			debug("   C#%i |= (%s) %i (0x%04x)",
+			      ret.offset, type_str[type],
+			      value->v_num, value->v_num);
 		} else {
 			*(int *)p = value->v_int;
-			debug("   C#%i := (%s) %i",
-			      ret.offset, type_str[type], value->v_int);
+			debug("   C#%i := (%s) %i (0x%04x)",
+			      ret.offset, type_str[type],
+			      value->v_num, value->v_num);
 		}
 
 		break;
@@ -475,9 +477,7 @@ static struct gluten_offset emit_data_do(struct gluten_ctx *g,
 struct gluten_offset emit_data(struct gluten_ctx *g, enum type type,
 			       size_t str_len, union value *value)
 {
-	struct gluten_offset offset = { .type = OFFSET_NULL, .offset = 0 };
-
-	return emit_data_do(g, offset, type, str_len, value, false);
+	return emit_data_do(g, NULL_OFFSET, type, str_len, value, false);
 }
 
 struct gluten_offset emit_data_at(struct gluten_ctx *g,

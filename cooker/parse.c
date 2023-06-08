@@ -128,6 +128,66 @@ struct rule_parser {
 	{ NULL, NULL },
 };
 
+static union value value_get_set(struct num *desc, JSON_Array *set)
+{
+	struct num *tmp;
+	union value n;
+	unsigned i;
+
+	for (i = 0; i < json_array_get_count(set); i++) {
+		for (tmp = desc; tmp->name; tmp++) {
+			if (!strcmp(tmp->name, json_array_get_string(set, i))) {
+				n.v_num |= desc->value;
+				break;
+			}
+		}
+
+		if (!tmp->name)
+			die("invalid flag'%s'", json_array_get_string(set, i));
+	}
+
+	return n;
+}
+
+void value_get_flags(struct num *desc, JSON_Object *obj,
+		     union value *bitset, enum op_cmp_type *cmp,
+		     union value *cmpterm)
+{
+	JSON_Array *set;
+
+	if ((set = json_object_get_array(obj, "some"))) {
+		*bitset = value_get_set(desc, set);
+		*cmp = CMP_EQ;
+		cmpterm->v_num = 0;
+	} else if ((set = json_object_get_array(obj, "all"))) {
+		*bitset = value_get_set(desc, set);
+		*cmp = CMP_NE;
+		*cmpterm = *bitset;
+	} else if ((set = json_object_get_array(obj, "not"))) {
+		*bitset = value_get_set(desc, set);
+		*cmp = CMP_NE;
+		cmpterm->v_num = 0;
+	} else {
+		die("unsupported flag quantifier");
+	}
+}
+
+/**
+ * value_get_mask() - Get union of all possible numeric values from description
+ * @desc:	Description of possible values from model
+ *
+ * Return: numeric value
+ */
+long long value_get_mask(struct num *desc)
+{
+	long long n = 0;
+
+	while ((desc++)->name)
+		n |= desc->value;
+
+	return n;
+}
+
 /**
  * value_get_num() - Get numeric value from description matching JSON input
  * @desc:	Description of possible values from model

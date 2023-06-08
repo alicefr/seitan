@@ -352,7 +352,7 @@ static inline const void *gluten_ptr(const struct seccomp_data *s,
 static inline bool check_gluten_limits(struct gluten_offset v, size_t size)
 {
 	struct gluten_offset off = { v.type, v.offset + size };
-	if (is_offset_valid(off))
+	if (v.type == OFFSET_SECCOMP_DATA || is_offset_valid(off))
 		return true;
 
 	err("  offset limits are invalid");

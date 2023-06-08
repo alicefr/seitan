@@ -78,7 +78,8 @@ static union value parse_field(struct gluten_ctx *g,
 			       enum op_cmp_type cmp, enum jump_type jump,
 			       int index, struct field *f, JSON_Value *jvalue)
 {
-	struct gluten_offset const_offset, mask_offset, seccomp_offset;
+	struct gluten_offset const_offset, mask_offset, data_offset;
+	struct gluten_offset seccomp_offset;
 	union value v = { .v_num = 0 };
 	struct field *f_inner;
 	const char *tag_name;
@@ -125,7 +126,8 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 		jvalue = json_object_get_value(tmp, "value");
 	}
 
-	if (json_value_get_type(jvalue) == JSONObject &&
+	if (!(f->flags & FLAGS) && /* For FLAGS, it's a single operation */
+	    json_value_get_type(jvalue) == JSONObject &&
 	    (tmp = json_value_get_object(jvalue)) &&
 	    (set = json_object_get_array(tmp, "in"))) {
 		unsigned i, count = json_array_get_count(set);
@@ -160,19 +162,54 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 	case INT:
 	case LONG:
 	case U32:
-		if (f->flags == FLAGS) {
-			/* fetch/combine expr algebra loop */
-			;
+		data_offset = offset;
+
+		if ((f->flags & FLAGS) &&
+		    json_value_get_type(jvalue) == JSONObject &&
+		    (tmp = json_value_get_object(jvalue))) {
+			struct gluten_offset set_offset, cmp_offset, masked;
+			union value set, cmpterm;
+
+			value_get_flags(f->desc.d_num, tmp,
+					&set, &cmp, &cmpterm);
+
+			set_offset = emit_data(g, f->type, 0, &set);
+			masked = emit_bitwise(g, f->type, BITWISE_AND,
+					      NULL_OFFSET,
+					      offset, set_offset);
+
+			cmp_offset = emit_data(g, f->type, 0, &cmpterm);
+			emit_cmp(g, cmp, masked, cmp_offset,
+				 gluten_size[f->type], jump);
+
+			break;
 		}
-		if (f->flags == MASK) {
-			/* calculate mask first */
-			;
+
+		if (json_value_get_type(jvalue) == JSONArray) {
+			JSON_Array *array = json_value_get_array(jvalue);
+			unsigned i;
+
+			if (!(f->flags & FLAGS))
+				die("multiple values for non-FLAGS argument");
+
+			for (i = 0; i < json_array_get_count(array); i++) {
+				jvalue = json_array_get_value(array, i);
+				v.v_num |= value_get_num(f->desc.d_num, jvalue);
+			}
+		} else if (f->flags & MASK) {
+			v.v_num = value_get_mask(f->desc.d_num);
+			mask_offset = emit_data(g, f->type, 0, &v);
+			data_offset = emit_bitwise(g, f->type, BITWISE_AND,
+						   NULL_OFFSET, offset,
+						   mask_offset);
+			v.v_num = value_get_num(f->desc.d_num, jvalue);
+		} else {
+			v.v_num = value_get_num(f->desc.d_num, jvalue);
 		}
-		/* Falls through */
-		v.v_num = value_get_num(f->desc.d_num, jvalue);
+
 		const_offset = emit_data(g, f->type, 0, &v);
-		emit_cmp(g, cmp, offset, const_offset, gluten_size[f->type],
-			 jump);
+		emit_cmp(g, cmp, data_offset, const_offset,
+			 gluten_size[f->type], jump);
 		break;
 	case GNU_DEV_MAJOR:
 		/*

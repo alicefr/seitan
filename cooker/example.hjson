@@ -44,30 +44,36 @@
 ]
 
 /*
- * INTFLAGS, LONGFLAGS, U32FLAGS
+ * FLAGS
  *
- * "field": { "in": [ "ipc", "mount", "uts" ] }
+ * "field": { "some": [ "ipc", "mount", "uts" ] }
  *   flags & set
  *   !!(flags & (ipc | mount | ns))
+ *   OP_BITWISE field AND set
+ *   OP_CMP result EQ 0 -> next match
  *
  * "field": { "all": [ "ipc", "mount", "uts" ] }
  *   flags & set == set
  *   flags & (ipc | mount | ns) == (ipc | mount | ns)
+ *   OP_BITWISE field AND set
+ *   OP_CMP result NE set -> next match
  *
- * "field": { "not": [ "ipc", "mount", "uts" ] }
+ * "field": { "none": [ "ipc", "mount", "uts" ] }
  *   !(flags & set)
+ *   OP_BITWISE field AND set
+ *   OP_CMP result NE 0 -> next match
  *
- * "field": { "ipc": false, "mount": true, "uts": false }
- *   flags & set == set
- *   !(flags & ipc) && (flags & mount) && !(flags & utc)
+ * "field": { [ "ipc", "mount", "uts" ] }
+ *   flags == set
+ *   flags == (ipc | mount | ns)
  *
- * "field": { "ipc" }
+ * "field": "ipc"
  *   flags == ipc
  *
- * INTMASK
+ * MASK
  *   value = (target value & known values)
  *
- * INT, LONG, U32
+ * NUMBERS
  *   "arg": { "in": [ 0, 1 ] }
  *   arg == 0 || arg == 1
  */

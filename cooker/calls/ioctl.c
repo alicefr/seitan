@@ -76,7 +76,7 @@ static struct field tun_ifr[] = {	/* netdevice(7) */
 		IFNAMSIZ,	{ 0 },
 	},
 	{
-		"flags",	INT,	/* One allowed at a time? */ 0,
+		"flags",	INT,	FLAGS,
 		offsetof(struct ifreq, ifr_flags),
 		0,		{ .d_num = tun_ifr_flags },
 	},
