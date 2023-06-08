@@ -74,52 +74,55 @@ enum op_type {
 };
 
 /**
- * enum ns_spec_type - Type of reference to target namespace
+ * enum context_spec_type - Type of reference to target namespace and directory
  */
-enum ns_spec_type {
-	NS_SPEC_NONE		= 0,
+enum context_spec_type {
+	CONTEXT_SPEC_NONE		= 0,
 
 	/* PID from seccomp_data */
-	NS_SPEC_CALLER		= 1,
+	CONTEXT_SPEC_CALLER		= 1,
 
 	/* PID/path from gluten, resolved in seitan */
-	NS_SPEC_PID		= 2,
-	NS_SPEC_PATH		= 3,
+	CONTEXT_SPEC_PID		= 2,
+	CONTEXT_SPEC_PATH		= 3,
 
-	NS_SPEC_TYPE_MAX	= NS_SPEC_PATH,
+	CONTEXT_SPEC_TYPE_MAX		= CONTEXT_SPEC_PATH,
 };
 
 /**
- * enum ns_type - Namespace types: see <linux/sched.h>
+ * enum context_type - Working directory, and namespaces (see <linux/sched.h>)
  */
-enum ns_type {
-	NS_MOUNT	= 0,
-	NS_CGROUP	= 1,
-	NS_UTS		= 2,
-	NS_IPC		= 3,
-	NS_USER		= 4,
-	NS_PID		= 5,
-	NS_NET		= 6,
-	NS_TIME		= 7,
-	NS_TYPE_MAX	= NS_TIME,
+enum context_type {
+	NS_MOUNT		= 0,
+	NS_CGROUP		= 1,
+	NS_UTS			= 2,
+	NS_IPC			= 3,
+	NS_USER			= 4,
+	NS_PID			= 5,
+	NS_NET			= 6,
+	NS_TIME			= 7,
+	NS_TYPE_MAX		= NS_TIME,
+	CWD			= 8,
+	CONTEXT_TYPE_MAX	= CWD,
 };
 
-extern const char *ns_type_name[NS_TYPE_MAX + 1];
+extern const char *context_type_name[CONTEXT_TYPE_MAX + 1];
+extern const char *context_spec_type_name[CONTEXT_SPEC_TYPE_MAX + 1];
 
 /**
- * struct ns_spec - Identification of one type of target namespace
- * @ns:			Namespace type
+ * struct context_desc - Identification of one type of context information
+ * @context:		Type of context (namespace types, or working directory)
  * @spec:		Reference type
  * @target.pid:		PID in procfs reference
  * @target.path:	Filesystem-bound (nsfs) reference
  */
-struct ns_spec {
+struct context_desc {
 #ifdef __GNUC__
-	enum ns_type ns			:BITS_PER_NUM(NS_TYPE_MAX);
-	enum ns_spec_type spec		:BITS_PER_NUM(NS_SPEC_TYPE_MAX);
+	enum context_type type		:BITS_PER_NUM(CONTEXT_TYPE_MAX);
+	enum context_spec_type spec	:BITS_PER_NUM(CONTEXT_SPEC_TYPE_MAX);
 #else
-	uint8_t ns			:BITS_PER_NUM(NS_TYPE_MAX);
-	uint8_t spec			:BITS_PER_NUM(NS_SPEC_TYPE_MAX);
+	uint8_t type			:BITS_PER_NUM(CONTEXT_TYPE_MAX);
+	uint8_t spec			:BITS_PER_NUM(CONTEXT_SPEC_TYPE_MAX);
 #endif
 	union {
 		pid_t pid;
@@ -127,17 +130,8 @@ struct ns_spec {
 	} target;
 };
 
-BUILD_BUG_ON(BITS_PER_NUM(NS_TYPE_MAX) + BITS_PER_NUM(NS_SPEC_TYPE_MAX) > 8)
-
-/**
- * struct context_desc - Description of context where the call is executed
- * @count:	Number of namespace specifications
- * @ns:		Namespace specifications
- */
-struct context_desc {
-	uint8_t count;
-	struct ns_spec ns[];
-};
+BUILD_BUG_ON(BITS_PER_NUM(CONTEXT_TYPE_MAX) +				\
+	     BITS_PER_NUM(CONTEXT_SPEC_TYPE_MAX) > 8)
 
 struct syscall_desc {
 	uint32_t nr		:9;
@@ -145,8 +139,8 @@ struct syscall_desc {
 	uint32_t has_ret	:1;
 	uint32_t arg_deref	:6;
 
-	struct gluten_offset context;	/* struct ns_spec [] */
-        struct gluten_offset args[];
+	struct gluten_offset context;	/* struct context_desc [] */
+	struct gluten_offset args[];
 };
 
 struct fd_desc {

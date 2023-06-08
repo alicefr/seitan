@@ -340,8 +340,9 @@ static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *args,
 	return offset;
 }
 
-static void parse_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
-		       JSON_Object *obj, const char *ret, struct arg *args)
+static void parse_call(struct gluten_ctx *g, struct context_desc *cdesc,
+		       long nr, JSON_Object *obj, const char *ret,
+		       struct arg *args)
 {
 	struct gluten_offset offset[6] = { 0 }, ret_offset = { 0 };
 	bool is_ptr[6] = { false };
@@ -421,49 +422,49 @@ static void parse_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
 	if (count != json_object_get_count(obj))
 		die("  Stray elements in call");
 
-	emit_call(g, ns, nr, arg_max_pos + 1, is_ptr, offset, ret_offset);
+	emit_call(g, cdesc, nr, arg_max_pos + 1, is_ptr, offset, ret_offset);
 }
 
-static void parse_context(struct ns_spec *ns, JSON_Object *obj)
+static void parse_context(struct context_desc *cdesc, JSON_Object *obj)
 {
 	unsigned i, n = 0;
 
 	/* Key order gives setns() order */
 	for (i = 0; i < json_object_get_count(obj); i++) {
 		const char *name = json_object_get_name(obj, i);
-		const char **ns_name = ns_type_name, *str;
-		enum ns_type type;
+		const char **ctx_name, *str;
+		enum context_type type;
 		double num;
 
-		for (ns_name = ns_type_name; *ns_name; ns_name++) {
-			if (!strcmp(name, *ns_name))
+		for (ctx_name = context_type_name; *ctx_name; ctx_name++) {
+			if (!strcmp(name, *ctx_name))
 				break;
 		}
 
-		if (!*ns_name)
-			die("invalid namespace type \"%s\"", name);
+		if (!*ctx_name)
+			die("invalid context type \"%s\"", name);
 
-		type = ns_name - ns_type_name;
-		ns[n].ns = type;
+		type = ctx_name - context_type_name;
+		cdesc[n].type = type;
 		if ((str = json_object_get_string(obj, name))) {
 			if (!strcmp(str, "init"))
 				continue;
 
-			debug("   '%s' namespace: %s", name, str);
+			debug("   '%s' context: %s", name, str);
 
 			if (!strcmp(str, "caller")) {
-				ns[n].spec = NS_SPEC_CALLER;
+				cdesc[n].spec = CONTEXT_SPEC_CALLER;
 			} else {
-				ns[n].spec = NS_SPEC_PATH;
-				strncpy(ns[n].target.path, str, PATH_MAX);
+				cdesc[n].spec = CONTEXT_SPEC_PATH;
+				strncpy(cdesc[n].target.path, str, PATH_MAX);
 			}
 		} else if ((num = json_object_get_number(obj, name))) {
-			debug("   '%s' namespace: %lli", name, num);
+			debug("   '%s' context: %lli", name, num);
 
-			ns[n].spec = NS_SPEC_PID;
-			ns[n].target.pid = num;
+			cdesc[n].spec = CONTEXT_SPEC_PID;
+			cdesc[n].target.pid = num;
 		} else {
-			die("invalid namespace specification");
+			die("invalid context specification");
 		}
 		n++;
 	}
@@ -481,7 +482,7 @@ void handle_calls(struct gluten_ctx *g, JSON_Value *value)
 		count = 1;
 
 	for (i = 0; i < count; i++) {
-		struct ns_spec ns[NS_TYPE_MAX + 1] = { 0 };
+		struct context_desc cdesc[CONTEXT_TYPE_MAX + 1] = { 0 };
 		JSON_Object *obj, *args, *ctx;
 		struct call **set, *call;
 		const char *name, *ret;
@@ -509,7 +510,7 @@ void handle_calls(struct gluten_ctx *g, JSON_Value *value)
 		ret = json_object_get_string(obj, "ret");
 
 		ctx = json_object_get_object(obj, "context");
-		parse_context(ns, ctx);
+		parse_context(cdesc, ctx);
 
 		/* TODO: Factor this out into a function in calls.c */
 		for (set = call_sets, call = set[0]; *set; ) {
@@ -522,7 +523,7 @@ void handle_calls(struct gluten_ctx *g, JSON_Value *value)
 			if (!strcmp(name, call->name)) {
 				debug("  Found description for %s",
 				      name);
-				parse_call(g, ns, call->number,
+				parse_call(g, cdesc, call->number,
 					   args, ret, call->args);
 				break;
 			}

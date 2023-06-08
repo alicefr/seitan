@@ -81,31 +81,31 @@ void emit_fd(struct gluten_ctx *g, struct fd_desc *desc)
 /**
  * emit_call() - Emit OP_CALL instruction: execute a system call
  * @g:		gluten context
- * @ns:		NS_SPEC_NONE-terminated array of namespaces references
+ * @context:	CONTEXT_SPEC_NONE-terminated array of context references
  * @nr:		System call number
  * @count:	Argument count
  * @is_ptr:	Array indicating whether arguments need to be dereferenced
  * @args:	Offsets of arguments
  * @ret_offset:	Offset where return value must be saved, can be OFFSET_NULL
  */
-void emit_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
+void emit_call(struct gluten_ctx *g, struct context_desc *cdesc, long nr,
 	       unsigned count, bool is_ptr[6],
 	       struct gluten_offset offset[6], struct gluten_offset ret_offset)
 {
 	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
 	struct gluten_offset o1 = { 0 }, o2 = { 0 };
 	struct op_call *call = &op->op.call;
+	struct context_desc *c = cdesc;
 	struct syscall_desc *desc;
-	unsigned ns_count, i;
-	struct ns_spec *ctx;
+	unsigned i;
 
 	op->type = OP_CALL;
-	for (ns_count = 0; ns[ns_count].spec != NS_SPEC_NONE; ns_count++);
 
-	if (ns_count) {
-		o1 = gluten_ro_alloc(g, sizeof(struct ns_spec) * ns_count);
-		ctx = (struct ns_spec *)gluten_ptr(&g->g, o1);
-		memcpy(ctx, ns, sizeof(struct ns_spec) * ns_count);
+	for (i = 0; c[i].spec != CONTEXT_SPEC_NONE; i++);
+	if (i) {
+		o1 = gluten_ro_alloc(g, sizeof(struct context_desc) * i);
+		c = (struct context_desc *)gluten_ptr(&g->g, o1);
+		memcpy(c, cdesc, sizeof(struct context_desc) * i);
 	}
 
 	o2 = gluten_ro_alloc(g, sizeof(struct syscall_desc) +

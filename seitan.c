@@ -184,7 +184,7 @@ int main(int argc, char **argv)
 	char req_b[BUFSIZ];
 	struct epoll_event ev, events[EPOLL_EVENTS];
 	struct seccomp_notif *req = (struct seccomp_notif *)req_b;
-	struct arguments arguments;
+	struct arguments arguments = { 0 };
 	char path[PATH_MAX + 1];
 	int fd = -1, epollfd;
 	int pidfd, notifier;

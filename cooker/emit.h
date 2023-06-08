@@ -8,7 +8,7 @@
 
 void emit_nr(struct gluten_ctx *g, struct gluten_offset number);
 void emit_fd(struct gluten_ctx *g, struct fd_desc *desc);
-void emit_call(struct gluten_ctx *g, struct ns_spec *ns, long nr,
+void emit_call(struct gluten_ctx *g, struct context_desc *cdesc, long nr,
 	       unsigned count, bool is_ptr[6],
 	       struct gluten_offset offset[6], struct gluten_offset ret_offset);
 void emit_load(struct gluten_ctx *g, struct gluten_offset dst,

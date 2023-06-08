@@ -36,6 +36,7 @@ struct arg_clone {
 	long nr;
 	const void *args[6];
 	char ns_path[NS_TYPE_MAX + 1][PATH_MAX];
+	char cwd[PATH_MAX];
 	long ret;
 	int err;
 };

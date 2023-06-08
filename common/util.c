@@ -34,8 +34,12 @@ const char *gluten_offset_name[OFFSET_TYPE_MAX + 1] = {
 	"read-only data", "temporary data", "seccomp data", "instruction area",
 };
 
-const char *ns_type_name[NS_TYPE_MAX + 1] = {
-	"mnt", "cgroup", "uts", "ipc", "user", "pid", "net", "time",
+const char *context_type_name[CONTEXT_TYPE_MAX + 1] = {
+	"mnt", "cgroup", "uts", "ipc", "user", "pid", "net", "time", "cwd",
+};
+
+const char *context_spec_type_name[CONTEXT_SPEC_TYPE_MAX + 1] = {
+	"none", "caller", "pid", "path",
 };
 
 const char *bitwise_type_str[BITWISE_MAX + 1] = { "&", "|" };

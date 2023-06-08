@@ -26,10 +26,9 @@
           "major": 1,
           "minor": { "tag": { "get": "minor" } }
         },
-        "ret": "x"/*,
-        "context": { "user": "init", "mnt": "caller" }*/
+        "context": { "cwd": "caller" }
       },
-    "return": { "tag": "x" }
+    "return": { "value": 0 }
   }
 ]
 

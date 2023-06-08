@@ -80,10 +80,11 @@ static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
 }
 
 static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
-			     struct syscall_desc *s, struct ns_spec *ctx,
+			     struct syscall_desc *s, struct context_desc *cdesc,
 			     struct arg_clone *c)
 {
-	unsigned int i, n = 0;
+	char (*dst)[PATH_MAX];
+	unsigned int i;
 	long arg;
 
 	c->err = 0;
@@ -109,32 +110,56 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 	}
 
 	/* TODO: add proper check when there is no context */
-	if (ctx == NULL)
+	if (cdesc == NULL) {
+		debug("  op_call: no context provided");
 		return 0;
-
-	for (; ctx->spec != NS_SPEC_NONE; ctx++) {
-		enum ns_spec_type spec = ctx->spec;
-		enum ns_type ns = ctx->ns;
-
-		switch (spec) {
-		case NS_SPEC_NONE:
-			break;
-		case NS_SPEC_CALLER:
-			snprintf(c->ns_path[n++], PATH_MAX, "/proc/%d/ns/%s",
-				 req->pid, ns_type_name[ns]);
-			break;
-		case NS_SPEC_PID:
-			snprintf(c->ns_path[n++], PATH_MAX, "/proc/%d/ns/%s",
-				 ctx->target.pid, ns_type_name[ns]);
-			break;
-		case NS_SPEC_PATH:
-			strncpy(c->ns_path[n++], ctx->target.path,
-				PATH_MAX);
-			break;
-		}
 	}
 
-	*c->ns_path[n] = 0;
+	for (dst = c->ns_path; cdesc->spec != CONTEXT_SPEC_NONE; cdesc++) {
+		enum context_spec_type spec = cdesc->spec;
+		enum context_type type = cdesc->type;
+
+		debug("  op_call: adding context for %s, type: %s",
+		      context_type_name[type], context_spec_type_name[spec]);
+
+		if (spec == CONTEXT_SPEC_NONE)
+			break;
+
+		switch (spec) {
+		case CONTEXT_SPEC_CALLER:
+			if (type == CWD) {
+				snprintf(c->cwd, PATH_MAX, "/proc/%d/root",
+					 req->pid);
+			} else {
+				snprintf(c->cwd, PATH_MAX, "/proc/%d/ns/%s",
+					req->pid, context_type_name[type]);
+			}
+			break;
+		case CONTEXT_SPEC_PID:
+			if (type == CWD) {
+				snprintf(c->cwd, PATH_MAX, "/proc/%d/root",
+					 cdesc->target.pid);
+			} else {
+				snprintf(*dst, PATH_MAX, "/proc/%d/ns/%s",
+					 cdesc->target.pid,
+					 context_type_name[type]);
+			}
+			break;
+		case CONTEXT_SPEC_PATH:
+			if (type == CWD)
+				strncpy(c->cwd, cdesc->target.path, PATH_MAX);
+			else 
+				strncpy(*dst, cdesc->target.path, PATH_MAX);
+			break;
+		default:
+			break;
+		}
+
+		if (type != CWD)
+			dst++;
+	}
+
+	**dst = 0;
 
 	return 0;
 }
@@ -146,10 +171,10 @@ static int set_namespaces(struct arg_clone *c)
 
 	for (path = c->ns_path; **path; *path++) {
 		if ((fd = open(*path, O_CLOEXEC)) < 0)
-			;//ret_err(-1, "open for file %s", *path);
+			ret_err(-1, "open for file %s", *path);
 
 		if (setns(fd, 0) != 0)
-			;//ret_err(-1, "setns");
+			ret_err(-1, "setns");
 	}
 	return 0;
 }
@@ -158,13 +183,19 @@ static int execute_syscall(void *args)
 {
 	struct arg_clone *c = (struct arg_clone *)args;
 
-	if (set_namespaces(c) < 0) {
+	if (*c->cwd && chdir(c->cwd) < 0)
 		exit(EXIT_FAILURE);
-	}
+
+	if (set_namespaces(c) < 0)
+		exit(EXIT_FAILURE);
+
+	errno = 0;
 	/* execute syscall */
 	c->ret = syscall(c->nr, c->args[0], c->args[1], c->args[2], c->args[3],
 			 c->args[4], c->args[5]);
 	c->err = errno;
+	debug("  execute syscall: ret=%ld errno=%d%s%s", c->ret, c->err,
+	      *c->cwd ? " cwd=" : "", *c->cwd ? c->cwd : "");
 	if (c->ret < 0) {
 		perror("  syscall");
 		exit(EXIT_FAILURE);
@@ -191,7 +222,7 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	struct seccomp_notif_resp resp;
 	struct arg_clone c = { 0 };
 	struct syscall_desc *s;
-	struct ns_spec *ctx;
+	struct context_desc *cdesc;
 
 	resp.id = req->id;
 	resp.val = 0;
@@ -199,9 +230,9 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	resp.error = 0;
 
 	s = (struct syscall_desc *)gluten_ptr(NULL, g, op->desc);
-	ctx = (struct ns_spec *)gluten_ptr(NULL, g, s->context);
+	cdesc = (struct context_desc *)gluten_ptr(NULL, g, s->context);
 
-	if (prepare_arg_clone(req, g, s, ctx, &c) == -1)
+	if (prepare_arg_clone(req, g, s, cdesc, &c) == -1)
 		return -1;
 
 	debug("  op_call: execute syscall nr=%ld", c.nr);
