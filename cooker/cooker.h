@@ -59,6 +59,8 @@ union value {
 	const char		*v_str;
 };
 
+#define NO_VALUE ((union value){ .v_num = 0 })
+
 /**
  * enum type - Types of values for arguments and fields within arguments
  */
@@ -116,6 +118,10 @@ enum flags {
 	((t) == USHORT || (t) == INT || (t) == U32 ||			\
 	 (t) == U64 || (t) == LONG ||					\
 	 (t) == GNU_DEV_MAJOR || (t) == GNU_DEV_MINOR)
+#define TYPE_IS_64BIT(t)						\
+	((t) == U64 || (t) == LONG ||					\
+	 (t) == GNU_DEV_MAJOR || (t) == GNU_DEV_MINOR)
+
 
 /**
  * struct num - A numeric value and its label

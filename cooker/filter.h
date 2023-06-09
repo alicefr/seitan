@@ -56,6 +56,7 @@ union bpf_value {
 	uint64_t v64;
 };
 
+extern const char *bpf_cmp_str[];
 enum bpf_cmp { NO_CHECK = 0, EQ, NE, LE, LT, GE, GT, AND_EQ, AND_NE };
 
 struct bpf_arg {

@@ -13,10 +13,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <util.h>
+
 #include "filter.h"
 
 struct bpf_entry entries[MAX_ENTRIES];
 static unsigned int index_entries = 0;
+
+const char *bpf_cmp_str[] = { "no check", "==", "!=", "<=", "<", ">=", ">",
+			      "==", "!=" };
 
 /**
  * struct filter_call_input - First input stage for cooker notification requests
@@ -32,12 +37,6 @@ struct filter_call_input {
 } filter_input[N_SYSCALL] = { 0 };
 
 static long current_nr;
-
-static void set_no_args(struct bpf_entry *entry)
-{
-	for (int i = 0; i < 6; i++)
-		entry->args[i].cmp = NO_CHECK;
-}
 
 static unsigned int get_number_entries(long nr)
 {
@@ -137,7 +136,8 @@ void filter_notify(long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
 
-	if (nr >= 0) {
+	if (nr > 0) {
+		debug("   BPF: start filter information for #%lu", nr);
 		current_nr = nr;
 		call->notify = true;
 	}
@@ -152,6 +152,17 @@ void filter_add_arg(int index, struct bpf_arg arg)
 {
 	struct filter_call_input *call = filter_input + current_nr;
 	struct bpf_entry *entry = &entries[index_entries];
+	char buf[BUFSIZ];
+	unsigned n;
+
+	n = snprintf(buf, BUFSIZ, "   BPF: adding #%i %s %lu",
+		     index, bpf_cmp_str[arg.cmp],
+		     (arg.type == BPF_U32) ? arg.value.v32 : arg.value.v64);
+	if (arg.cmp == AND_EQ || arg.cmp == AND_NE) {
+		snprintf(buf + n, BUFSIZ - n, " & %lu",
+			 (arg.type == BPF_U32) ? arg.op2.v32 : arg.op2.v64);
+	}
+	debug("%s", buf);
 
 	/* If it reaches the maximum number of entries per syscall, then we simply
 	 * notify for all the arguments and ignore the other arguments.
@@ -169,6 +180,9 @@ void filter_add_arg(int index, struct bpf_arg arg)
 void filter_flush_args()
 {
 	struct filter_call_input *call = filter_input + current_nr;
+
+	debug("   BPF: flush filter information for #%lu", current_nr);
+
 	call->count++;
 	index_entries++;
 }
@@ -176,6 +190,8 @@ void filter_flush_args()
 void filter_needs_deref(void)
 {
 	struct filter_call_input *call = filter_input + current_nr;
+
+	debug("   BPF: arguments for #%lu now ignored", current_nr);
 
 	call->ignore_args = true;
 	call->count = 0;

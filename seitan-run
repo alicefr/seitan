@@ -36,6 +36,8 @@ trap cleanup EXIT INT
 [ -z "${SEITAN}" ]	&& echo "seitan not found"		&& exit 1
 
 "${COOKER}" "${1}" "${DIR}/gluten" "${DIR}/bpf"
+echo "Cooked files now at ${DIR}"
+
 shift
 ( "${EATER}" -i "${DIR}/bpf" -- ${@} & echo "${!}" > "${DIR}/eater.pid" 2>&1 ) &
 sleep 0.1 || sleep 1

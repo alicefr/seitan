@@ -11,6 +11,7 @@
 
 #include "cooker.h"
 #include "gluten.h"
+#include "filter.h"
 #include "util.h"
 #include "emit.h"
 
@@ -534,6 +535,32 @@ static void gluten_link(struct gluten_ctx *g, enum jump_type type,
 			      op - (struct op *)g->g.inst, g->ip.offset);
 		}
 	}
+}
+
+void emit_bpf_arg(int index, enum type type, union value v, union value mask,
+		  enum op_cmp_type cmp)
+{
+	struct bpf_arg bpf;
+
+	/* gluten uses the comparison to skip to the next match, the BPF filter
+	 * uses it to notify instead.
+	 */
+	if (mask.v_num)
+		bpf.cmp = (cmp == CMP_EQ) ? AND_NE : AND_EQ;
+	else
+		bpf.cmp = (cmp == CMP_EQ) ? NE : EQ;
+
+	if (TYPE_IS_64BIT(type)) {
+		bpf.value.v64 = v.v_num;
+		bpf.op2.v64 = mask.v_num;
+		bpf.type = BPF_U64;
+	} else {
+		bpf.value.v32 = v.v_num;
+		bpf.op2.v32 = mask.v_num;
+		bpf.type = BPF_U32;
+	}
+
+	filter_add_arg(index, bpf);
 }
 
 void link_block(struct gluten_ctx *g)

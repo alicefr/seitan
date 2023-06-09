@@ -79,8 +79,8 @@ static union value parse_field(struct gluten_ctx *g,
 			       int index, struct field *f, JSON_Value *jvalue)
 {
 	struct gluten_offset const_offset, mask_offset, data_offset;
+	union value v = NO_VALUE, mask = NO_VALUE;
 	struct gluten_offset seccomp_offset;
-	union value v = { .v_num = 0 };
 	struct field *f_inner;
 	const char *tag_name;
 	JSON_Object *tmp;
@@ -182,6 +182,7 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 			emit_cmp(g, cmp, masked, cmp_offset,
 				 gluten_size[f->type], jump);
 
+			emit_bpf_arg(index, f->type, cmpterm, set, cmp);
 			break;
 		}
 
@@ -197,8 +198,8 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 				v.v_num |= value_get_num(f->desc.d_num, jvalue);
 			}
 		} else if (f->flags & MASK) {
-			v.v_num = value_get_mask(f->desc.d_num);
-			mask_offset = emit_data(g, f->type, 0, &v);
+			mask.v_num = value_get_mask(f->desc.d_num);
+			mask_offset = emit_data(g, f->type, 0, &mask);
 			data_offset = emit_bitwise(g, f->type, BITWISE_AND,
 						   NULL_OFFSET, offset,
 						   mask_offset);
@@ -208,8 +209,12 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 		}
 
 		const_offset = emit_data(g, f->type, 0, &v);
+
 		emit_cmp(g, cmp, data_offset, const_offset,
 			 gluten_size[f->type], jump);
+
+		emit_bpf_arg(index, f->type, v, mask, cmp);
+
 		break;
 	case GNU_DEV_MAJOR:
 		/*
@@ -219,7 +224,10 @@ ______________________                            _____________
 		v.v_num = value_get_num(f->desc.d_num, jvalue);
 		v.v_num = (v.v_num & 0xfff) << 8 | (v.v_num & ~0xfff) << 32;
 		const_offset = emit_data(g, U64, 0, &v);
+
 		emit_cmp_field(g, cmp, f, offset, const_offset, jump);
+
+		filter_needs_deref();	/* No shifts in BPF */
 		break;
 	case GNU_DEV_MINOR:
 		/*
@@ -230,6 +238,8 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 		v.v_num = (v.v_num & 0xff) | (v.v_num & ~0xfff) << 12;
 		const_offset = emit_data(g, U64, 0, &v);
 		emit_cmp_field(g, cmp, f, offset, const_offset, jump);
+
+		filter_needs_deref();	/* No shifts in BPF */
 		break;
 	case SELECT:
 		f_inner = f->desc.d_select->field;
@@ -370,8 +380,9 @@ void handle_matches(struct gluten_ctx *g, JSON_Value *value)
 				emit_nr(g, emit_data(g, U64, 0, &v));
 
 				filter_notify(call->number);
-
 				parse_match(g, args, call->args);
+				filter_flush_args();
+
 				break;
 			}
 			call++;
