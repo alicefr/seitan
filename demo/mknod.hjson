@@ -26,37 +26,8 @@
           "major": 1,
           "minor": { "tag": { "get": "minor" } }
         },
-        "context": { "cwd": "caller" }
+        "context": { "mnt": "caller" }
       },
     "return": { "value": 0 }
   }
 ]
-
-/*
- * INTFLAGS, LONGFLAGS, U32FLAGS
- *
- * "field": { "in": [ "ipc", "mount", "uts" ] }
- *   flags & set
- *   !!(flags & (ipc | mount | ns))
- *
- * "field": { "all": [ "ipc", "mount", "uts" ] }
- *   flags & set == set
- *   flags & (ipc | mount | ns) == (ipc | mount | ns)
- *
- * "field": { "not": [ "ipc", "mount", "uts" ] }
- *   !(flags & set)
- *
- * "field": { "ipc": false, "mount": true, "uts": false }
- *   flags & set == set
- *   !(flags & ipc) && (flags & mount) && !(flags & utc)
- *
- * "field": { "ipc" }
- *   flags == ipc
- *
- * INTMASK
- *   value = (target value & known values)
- *
- * INT, LONG, U32
- *   "arg": { "in": [ 0, 1 ] }
- *   arg == 0 || arg == 1
- */
