@@ -247,7 +247,6 @@ struct op {
 	union {
 		struct op_nr nr;
 		struct op_call call;
-		struct op_block block;
 		struct op_return ret;
 		struct op_fd fd;
 		struct op_load load;
