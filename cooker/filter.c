@@ -183,6 +183,8 @@ void filter_flush_args()
 
 	debug("   BPF: flush filter information for #%lu", current_nr);
 
+	if (!has_args(current_nr))
+		return;
 	call->count++;
 	index_entries++;
 }
