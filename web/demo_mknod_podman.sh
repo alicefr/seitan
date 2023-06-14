@@ -3,8 +3,6 @@
 
 SESSION=dmknod
 VIDEO=seitan-mknod
-PSEITAN=2
-PPODMAN=1
 source web/common.sh
 
 split_panes() {
@@ -54,6 +52,9 @@ tmux send-keys -t $SESSION -l 'reset'
 tmux send-keys -t $SESSION C-m
 tmux rename-window -t $SESSION 'Seitan demo: run mknod in container'
 sleep 10
+
+PSEITAN=$(get_first_pane)
+PPODMAN=$((PSEITAN+1))
 
 asciinema rec --overwrite ${VIDEO}.cast -c 'tmux attach -t $SESSION' &
 tmux refresh-client

@@ -10,9 +10,6 @@
 
 SESSION=demo
 VIDEO=seitan-connect
-PSEITAN=1
-PEATER=2
-PSERVER=3
 
 source web/common.sh
 
@@ -40,13 +37,7 @@ socat UNIX-LISTEN:/tmp/demo.sock -
 
 SCRIPT_eater_connect='
 #
-./seitan-eater -i demo/connect.bpf -- socat OPEN:abcd UNIX-CONNECT:/var/run/pr-helper.sock
-#
-'
-
-SCRIPT_eater_connect_fake='
-#
-./seitan-eater -i demo/connect.bpf -- socat - UNIX-CONNECT:/fake.sock
+./seitan-eater -i demo/connect.bpf -- socat OPEN:abcd UNIX-CONNECT:/cool.sock
 #
 '
 
@@ -71,7 +62,11 @@ tmux rename-window -t $SESSION 'Seitan demo: generate input files'
 
 asciinema rec --overwrite ${VIDEO}.cast -c 'tmux attach -t $SESSION' &
 sleep 1
-tmux refresh-client
+#tmux refresh-client
+
+PSEITAN=$(get_first_pane)
+PEATER=$((PSEITAN+1))
+PSERVER=$((PEATER+1))
 
 # Input generation
 tmux select-pane -t $PSEITAN
@@ -95,16 +90,6 @@ clear_panes
 tmux kill-pane -t $PSERVER
 
 # Second part
-tmux rename-window -t $SESSION 'Seitan demo: mock connect syscall'
-tmux select-pane -t $PEATER
-script eater_connect_fake
-tmux select-pane -t $PSEITAN
-script seitan
-
-sleep 4
-clear_panes
-
-# Third part
 tmux rename-window -t $SESSION 'Seitan demo: error injection (EPERM)'
 tmux select-pane -t $PEATER
 script eater_connect_error

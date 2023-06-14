@@ -10,12 +10,6 @@
     "fd": { "src": { "tag": "fd" }, "new": { "tag": "new_fd" }, "close_on_exec": false },
     "return": { "value": 0, "error": 0 }
   },
-  { /* fake connect syscall */
-    "match": [
-      { "connect": { "addr": { "family": "unix", "path": "/fake.sock" } } }
-    ],
-    "return": { "value": 0, "error": 0 }
-  },
   { /* Inject permission denied error */
     "match": [
       { "connect": { "addr": { "family": "unix", "path": "/error.sock" } } }

@@ -79,6 +79,11 @@ clear_panes() {
         sleep 1
 }
 
+get_first_pane() {
+	pane=$(tmux list-panes | awk 'NR==1{ print $1 }' | sed 's/://')
+	echo $pane
+}
+
 teardown_common() {
         sleep 5
         tmux kill-session -t $SESSION
