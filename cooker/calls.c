@@ -15,7 +15,10 @@
 #include "calls/ioctl.h"
 #include "calls/process.h"
 #include "calls/fs.h"
+#include "calls/io.h"
 
 struct call *call_sets[] = {
-	syscalls_net, syscalls_ioctl, syscalls_process, syscalls_fs, NULL,
+	syscalls_net, syscalls_ioctl, syscalls_process, syscalls_fs,
+	syscalls_io,
+	NULL,
 };

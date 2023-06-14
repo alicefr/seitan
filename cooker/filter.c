@@ -17,176 +17,148 @@
 
 #include "filter.h"
 
-struct bpf_entry entries[MAX_ENTRIES];
-static unsigned int index_entries = 0;
+#define N_SYSCALL			512
+#define MAX_ENTRIES_PER_SYSCALL		16
+#define MAX_FIELDS_PER_SYSCALL		16
 
 const char *bpf_cmp_str[] = { "no check", "==", "!=", "<=", "<", ">=", ">",
 			      "==", "!=" };
 
+struct bpf_entry {
+	struct bpf_field field[MAX_FIELDS_PER_SYSCALL];
+};
+
 /**
  * struct filter_call_input - First input stage for cooker notification requests
- * @notify:	Notify on this system call
- * @count:	How many entry for the same syscall
- * @entries:	Index for the arguments for every entry
+ * @notify:		Notify on this syscall
+ * @ignore_args:	Don't filter on arguments for this syscall
+ * @entry:		syscall notification entry with field checks
  */
 struct filter_call_input {
-	bool ignore_args;
 	bool notify;
-	unsigned int count;
-	int entries[MAX_ENTRIES_SYSCALL];
+	bool ignore_args;
+	struct bpf_entry entry[MAX_ENTRIES_PER_SYSCALL];
 } filter_input[N_SYSCALL] = { 0 };
 
 static long current_nr;
 
-static unsigned int get_number_entries(long nr)
+/**
+ * entry_has_check() - Input stage: does the syscall entry need argument checks?
+ * @entry:	syscall entry with field checks
+ *
+ * Return: true if at least one argument comparison is requested
+ */
+static bool entry_has_check(const struct bpf_entry *entry)
 {
-	struct filter_call_input *call = filter_input + nr;
-	return call->count;
-}
+	unsigned i;
 
-static bool need_check_arg(const struct bpf_entry *entry)
-{
-	for (int i = 0; i < 6; i++)
-		if (entry->args[i].cmp != NO_CHECK)
+	for (i = 0; i < MAX_FIELDS_PER_SYSCALL; i++) {
+		if (entry->field[i].cmp != NO_CHECK)
 			return true;
+	}
+
 	return false;
 }
 
-static bool has_args(long nr)
+/**
+ * call_entry_count() - Input stage: count of entries for the same syscall
+ * @nr:		syscall number
+ *
+ * Return: count of entries for the same syscall
+ */
+static unsigned int call_entry_count(long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
+	unsigned i, count = 0;
 
-	if (call->count < 1)
-		return false;
-	if (call->ignore_args)
-		return false;
+	if (!call->notify || call->ignore_args)
+		return 0;
 
-	/* Check if the first entry has some arguments */
-	return need_check_arg(&entries[call->entries[0]]);
-}
-
-static unsigned get_args_for_entry(const struct bpf_entry *entry)
-{
-	unsigned i, n = 0;
-
-	for (i = 0; i < 6; i++)
-		if (entry->args[i].cmp != NO_CHECK)
-			n++;
-	return n;
-}
-
-/* Calculate how many instruction for the syscall */
-static unsigned int get_n_args_syscall_instr(long nr)
-{
-	struct filter_call_input *call = filter_input + nr;
-	const struct bpf_entry *entry;
-	unsigned int n = 0, total_instr = 0;
-	unsigned int i, k;
-
-	for (i = 0; i < call->count; i++) {
-		entry = &entries[call->entries[i]];
-		n = 0;
-		for (k = 0; k < 6; k++) {
-			if (entry->args[k].cmp == NO_CHECK)
-				continue;
-			switch (entry->args[k].type) {
-			case BPF_U32:
-				/* For 32 bit arguments
-				 * comparison instructions (2):
-				 *   1 loading the value + 1 for evaluation
-				 * arithemtic instructions (3):
-				 *   1 loading the value + 1 for the operation + 1 for evaluation
-				 */
-				if (entry->args[k].cmp == AND_EQ ||
-				    entry->args[k].cmp == AND_NE)
-					n += 3;
-				else
-					n += 2;
-				break;
-			case BPF_U64:
-				/* For 64 bit arguments: 32 instructions * 2
-				 * for loading and evaluating the high and low 32 bits chuncks.
-				*/
-				if (entry->args[k].cmp == AND_EQ ||
-				    entry->args[k].cmp == AND_NE)
-					n += 6;
-				else
-					n += 4;
-				break;
-			}
-		}
-		total_instr += n;
-		/* If there at least an argument, then there is the jump to the
-		 * notification */
-		if (n > 0)
-			total_instr++;
+	for (i = 0; i < MAX_ENTRIES_PER_SYSCALL; i++) {
+		if (entry_has_check(&call->entry[i]))
+			count++;
+		else
+			break;
 	}
-	/* If there at least an argument for that syscall, then there is the jump to the
-	* accept */
-	if (has_args(nr))
-		total_instr++;
-	return total_instr;
+
+	return count;
 }
 
 /**
- * filter_notify() - Start of notification request, check/flush previous one
- * @nr:		System call number, -1 to just flush previous request
+ * entry_check_count() - Input stage: count of field checks for entry
+ * @entry:	syscall entry with field checks
+ *
+ * Return: count of argument checks
+ */
+static unsigned entry_check_count(const struct bpf_entry *entry)
+{
+	unsigned i, n = 0;
+
+	for (i = 0; i < MAX_FIELDS_PER_SYSCALL; i++)
+		if (entry->field[i].cmp != NO_CHECK)
+			n++;
+
+	return n;
+}
+
+/**
+ * filter_notify() - Start of notification request
+ * @nr:		syscall number
  */
 void filter_notify(long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
 
-	if (nr > 0) {
-		debug("   BPF: start filter information for #%lu", nr);
-		current_nr = nr;
-		call->notify = true;
-	}
+	debug("   BPF: start filter information for #%lu", nr);
+	current_nr = nr;
+	call->notify = true;
 }
 
 /**
- * filter_add_arg(): Add a new argument to the current syscall
- * @index:	position of the argument
- * @arg:	the argument to add
+ * filter_add_check() - Add a new field check to the current syscall
+ * @field:	 Field check specification
  */
-void filter_add_arg(int index, struct bpf_arg arg)
+void filter_add_check(struct bpf_field *field)
 {
 	struct filter_call_input *call = filter_input + current_nr;
-	struct bpf_entry *entry = &entries[index_entries];
+	struct bpf_entry *entry;
+	struct bpf_field *check;
 	char buf[BUFSIZ];
 	unsigned n;
 
 	n = snprintf(buf, BUFSIZ, "   BPF: adding #%i %s %lu",
-		     index, bpf_cmp_str[arg.cmp],
-		     (arg.type == BPF_U32) ? arg.value.v32 : arg.value.v64);
-	if (arg.cmp == AND_EQ || arg.cmp == AND_NE) {
+		     field->arg, bpf_cmp_str[field->cmp],
+		     (field->type == BPF_U32) ? field->value.v32 :
+						field->value.v64);
+
+	if (field->cmp == AND_EQ || field->cmp == AND_NE) {
 		snprintf(buf + n, BUFSIZ - n, " & %lu",
-			 (arg.type == BPF_U32) ? arg.op2.v32 : arg.op2.v64);
+			 (field->type == BPF_U32) ? field->op2.v32 :
+						    field->op2.v64);
 	}
+
 	debug("%s", buf);
 
-	/* If it reaches the maximum number of entries per syscall, then we simply
-	 * notify for all the arguments and ignore the other arguments.
-	 */
-	if (call->count >= MAX_ENTRIES_SYSCALL) {
+	/* Too many entries or checks: ignore argument checks from now on */
+	if (call_entry_count(current_nr) > MAX_ENTRIES_PER_SYSCALL)
 		call->ignore_args = true;
+
+	entry = &call->entry[call_entry_count(current_nr)];
+	if (entry_check_count(entry) > MAX_FIELDS_PER_SYSCALL)
+		call->ignore_args = true;
+
+	if (call->ignore_args) {
+		debug("   BPF: ignoring fields for syscall #%lu", current_nr);
 		return;
 	}
-	if (call->ignore_args)
-		return;
-	call->entries[call->count] = index_entries;
-	memcpy(&entry->args[index], &arg, sizeof(arg));
-}
 
-void filter_flush_args()
-{
-	struct filter_call_input *call = filter_input + current_nr;
+	check = &entry->field[entry_check_count(entry)];
 
-	debug("   BPF: flush filter information for #%lu", current_nr);
+	debug("   BPF: inserting check at %i for entry %i, syscall %lu",
+	      entry_check_count(entry), call_entry_count(current_nr),
+	      current_nr);
 
-	if (!has_args(current_nr))
-		return;
-	call->count++;
-	index_entries++;
+	memcpy(check, field, sizeof(*field));
 }
 
 void filter_needs_deref(void)
@@ -196,7 +168,64 @@ void filter_needs_deref(void)
 	debug("   BPF: arguments for #%lu now ignored", current_nr);
 
 	call->ignore_args = true;
-	call->count = 0;
+}
+
+/* Calculate how many instruction for the syscall */
+static unsigned int get_n_args_syscall_instr(long nr)
+{
+	struct filter_call_input *call = filter_input + nr;
+	unsigned int n = 0, total_instr = 0;
+	unsigned int i, j;
+
+	for (i = 0; i < call_entry_count(nr); i++) {
+		const struct bpf_entry *entry = &call->entry[i];
+		n = 0;
+
+		for (j = 0; j < entry_check_count(entry); j++) {
+			const struct bpf_field *field = &entry->field[j];
+			enum bpf_cmp cmp = field->cmp;
+
+			if (cmp == NO_CHECK)
+				continue;
+
+			switch (field->type) {
+			case BPF_U32:
+				/* For 32 bit fields
+				 * comparison instructions (2):
+				 *   1 loading the value + 1 for evaluation
+				 * arithemtic instructions (3):
+				 *   1 loading the value + 1 for the operation + 1 for evaluation
+				 */
+				if (cmp == AND_EQ || cmp == AND_NE)
+					n += 3;
+				else
+					n += 2;
+				break;
+			case BPF_U64:
+				/* For 64 bit fields: 32 instructions * 2
+				 * for loading and evaluating the high and low 32 bits chuncks.
+				*/
+				if (cmp == AND_EQ || cmp == AND_NE)
+					n += 6;
+				else
+					n += 4;
+				break;
+			}
+		}
+		total_instr += n;
+		/* TODO: rewrite comment: If there at least an argument, then there is the jump to the
+		 * notification */
+		if (n > 0)
+			total_instr++;
+	}
+	/* TODO: rewrite comment: If there at least an argument for that syscall, then there is the jump to the
+	* accept */
+	if (call_entry_count(nr))
+		total_instr++;
+
+	debug("  BPF: counted %i instructions for syscall %lu", total_instr, nr);
+
+	return total_instr;
 }
 
 static int table[N_SYSCALL];
@@ -284,161 +313,161 @@ static void create_lookup_nodes(int jumps[], unsigned int n)
 	}
 }
 
-static unsigned int eq(struct sock_filter filter[], int idx,
-		       const struct bpf_entry *entry, unsigned int jtrue,
+static unsigned int eq(struct sock_filter filter[],
+		       const struct bpf_field *field, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	unsigned int size = 0;
 	uint32_t hi, lo;
 
-	switch (entry->args[idx].type) {
+	switch (field->type) {
 	case BPF_U64:
-		hi = get_hi((entry->args[idx]).value.v64);
-		lo = get_lo((entry->args[idx]).value.v64);
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		hi = get_hi(field->value.v64);
+		lo = get_lo(field->value.v64);
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] = (struct sock_filter)EQ(lo, 0, jfalse);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
 		filter[size++] = (struct sock_filter)EQ(hi, jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] = (struct sock_filter)EQ(
-			entry->args[idx].value.v32, jtrue, jfalse);
+			field->value.v32, jtrue, jfalse);
 		break;
 	}
 
 	return size;
 }
 
-static unsigned int gt(struct sock_filter filter[], int idx,
-		       const struct bpf_entry *entry, unsigned int jtrue,
+static unsigned int gt(struct sock_filter filter[],
+		       const struct bpf_field *field, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	unsigned int size = 0;
 	uint32_t hi, lo;
 
-	switch (entry->args[idx].type) {
+	switch (field->type) {
 	case BPF_U64:
-		hi = get_hi((entry->args[idx]).value.v64);
-		lo = get_lo((entry->args[idx]).value.v64);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		hi = get_hi(field->value.v64);
+		lo = get_lo(field->value.v64);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
 		filter[size++] = (struct sock_filter)GT(hi, jtrue + 2, 0);
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] = (struct sock_filter)GT(lo, jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] = (struct sock_filter)GT(
-			entry->args[idx].value.v32, jtrue, jfalse);
+			field->value.v32, jtrue, jfalse);
 		break;
 	}
 
 	return size;
 }
 
-static unsigned int lt(struct sock_filter filter[], int idx,
-		       const struct bpf_entry *entry, unsigned int jtrue,
+static unsigned int lt(struct sock_filter filter[],
+		       const struct bpf_field *field, unsigned int jtrue,
 		       unsigned int jfalse)
 {
 	unsigned int size = 0;
 	uint32_t hi, lo;
 
-	switch (entry->args[idx].type) {
+	switch (field->type) {
 	case BPF_U64:
-		hi = get_hi((entry->args[idx]).value.v64);
-		lo = get_lo((entry->args[idx]).value.v64);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+		hi = get_hi(field->value.v64);
+		lo = get_lo(field->value.v64);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
 		filter[size++] = (struct sock_filter)LT(hi, jtrue + 2, jfalse);
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] = (struct sock_filter)LT(lo, jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] = (struct sock_filter)LT(
-			entry->args[idx].value.v32, jtrue, jfalse);
+			field->value.v32, jtrue, jfalse);
 		break;
 	}
 
 	return size;
 }
 
-static unsigned int neq(struct sock_filter filter[], int idx,
-			const struct bpf_entry *entry, unsigned int jtrue,
+static unsigned int neq(struct sock_filter filter[],
+			const struct bpf_field *field, unsigned int jtrue,
 			unsigned int jfalse)
 {
-	return eq(filter, idx, entry, jfalse, jtrue);
+	return eq(filter, field, jfalse, jtrue);
 }
 
-static unsigned int ge(struct sock_filter filter[], int idx,
-		       const struct bpf_entry *entry, unsigned int jtrue,
+static unsigned int ge(struct sock_filter filter[],
+		       const struct bpf_field *field, unsigned int jtrue,
 		       unsigned int jfalse)
 {
-	return lt(filter, idx, entry, jfalse, jtrue);
+	return lt(filter, field, jfalse, jtrue);
 }
 
-static unsigned int le(struct sock_filter filter[], int idx,
-		       const struct bpf_entry *entry, unsigned int jtrue,
+static unsigned int le(struct sock_filter filter[],
+		       const struct bpf_field *field, unsigned int jtrue,
 		       unsigned int jfalse)
 {
-	return gt(filter, idx, entry, jfalse, jtrue);
+	return gt(filter, field, jfalse, jtrue);
 }
 
-static unsigned int and_eq (struct sock_filter filter[], int idx,
-			    const struct bpf_entry *entry, unsigned int jtrue,
-			    unsigned int jfalse)
-{
-	unsigned int size = 0;
-
-	switch (entry->args[idx].type) {
-	case BPF_U64:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
-		filter[size++] = (struct sock_filter)AND(
-			get_lo(entry->args[idx].op2.v64));
-		filter[size++] = (struct sock_filter)EQ(
-			get_lo((entry->args[idx]).value.v64), 0, jfalse);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
-		filter[size++] = (struct sock_filter)AND(
-			get_hi(entry->args[idx].op2.v64));
-		filter[size++] = (struct sock_filter)EQ(
-			get_hi(entry->args[idx].value.v64), jtrue, jfalse);
-		break;
-	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
-		filter[size++] =
-			(struct sock_filter)AND(entry->args[idx].op2.v32);
-		filter[size++] = (struct sock_filter)EQ(
-			entry->args[idx].value.v32, jtrue, jfalse);
-		break;
-	}
-
-	return size;
-}
-
-static unsigned int and_ne(struct sock_filter filter[], int idx,
-			   const struct bpf_entry *entry, unsigned int jtrue,
+static unsigned int and_eq(struct sock_filter filter[],
+			   const struct bpf_field *field, unsigned int jtrue,
 			   unsigned int jfalse)
 {
 	unsigned int size = 0;
 
-	switch (entry->args[idx].type) {
+	switch (field->type) {
 	case BPF_U64:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] = (struct sock_filter)AND(
-			get_lo(entry->args[idx].op2.v64));
+			get_lo(field->op2.v64));
 		filter[size++] = (struct sock_filter)EQ(
-			get_lo((entry->args[idx]).value.v64), 0, jtrue + 3);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(idx));
+			get_lo(field->value.v64), 0, jfalse);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
 		filter[size++] = (struct sock_filter)AND(
-			get_hi(entry->args[idx].op2.v64));
+			get_hi(field->op2.v64));
 		filter[size++] = (struct sock_filter)EQ(
-			get_hi(entry->args[idx].value.v64), jfalse, jtrue);
+			get_hi(field->value.v64), jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(idx));
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
 		filter[size++] =
-			(struct sock_filter)AND(entry->args[idx].op2.v32);
+			(struct sock_filter)AND(field->op2.v32);
 		filter[size++] = (struct sock_filter)EQ(
-			entry->args[idx].value.v32, jfalse, jtrue);
+			field->value.v32, jtrue, jfalse);
+		break;
+	}
+
+	return size;
+}
+
+static unsigned int and_ne(struct sock_filter filter[],
+			   const struct bpf_field *field, unsigned int jtrue,
+			   unsigned int jfalse)
+{
+	unsigned int size = 0;
+
+	switch (field->type) {
+	case BPF_U64:
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
+		filter[size++] = (struct sock_filter)AND(
+			get_lo(field->op2.v64));
+		filter[size++] = (struct sock_filter)EQ(
+			get_lo(field->value.v64), 0, jtrue + 3);
+		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
+		filter[size++] = (struct sock_filter)AND(
+			get_hi(field->op2.v64));
+		filter[size++] = (struct sock_filter)EQ(
+			get_hi(field->value.v64), jfalse, jtrue);
+		break;
+	case BPF_U32:
+		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
+		filter[size++] =
+			(struct sock_filter)AND(field->op2.v32);
+		filter[size++] = (struct sock_filter)EQ(
+			field->value.v32, jfalse, jtrue);
 		break;
 	}
 
@@ -449,52 +478,51 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
 	unsigned int next_offset, n_checks = 0;
-	unsigned int count = get_number_entries(nr);
+	unsigned int count = call_entry_count(nr);
 	struct bpf_entry *entry;
 	unsigned int offset = 0;
 	unsigned int size = 0;
-	unsigned int i, k;
+	unsigned int i, j;
 
 	for (i = 0; i < count; i++) {
 		n_checks = 0;
-		entry = &entries[call->entries[i]];
+		entry = &call->entry[i];
 		/* If there are multiple entries for the syscall @nr, then the next group
 	         * of arguments to check (i.e. the next offset) is after the number of
 	         * arguments of the current entry. The next_offset is used to
 		 * jump to the next group if the check is false.
 		 */
-		next_offset = get_args_for_entry(entry);
-		for (k = 0; k < 6; k++) {
+		next_offset = entry_check_count(entry);
+		for (j = 0; j < entry_check_count(entry); j++) {
+			struct bpf_field *field = &entry->field[j];
+
 			offset = next_offset - n_checks;
-			switch (entry->args[k].cmp) {
+			switch (field->cmp) {
 			case NO_CHECK:
 				continue;
 			case EQ:
-				size += eq(&filter[size], k, entry, 0, offset);
+				size += eq(&filter[size],     field, 0, offset);
 				break;
 			case NE:
-				size += neq(&filter[size], k, entry, 0, offset);
+				size += neq(&filter[size],    field, 0, offset);
 				break;
 			case GT:
-				size += gt(&filter[size], k, entry, 0, offset);
+				size += gt(&filter[size],     field, 0, offset);
 				break;
 			case LT:
-				size += lt(&filter[size], k, entry, 0, offset);
+				size += lt(&filter[size],     field, 0, offset);
 				break;
 			case GE:
-				size += ge(&filter[size], k, entry, 0, offset);
+				size += ge(&filter[size],     field, 0, offset);
 				break;
 			case LE:
-				size += le(&filter[size], k, entry, 0, offset);
+				size += le(&filter[size],     field, 0, offset);
 				break;
 			case AND_EQ:
-				size += and_eq
-					(&filter[size], k, entry, 0, offset);
+				size += and_eq(&filter[size], field, 0, offset);
 				break;
 			case AND_NE:
-				size += and_ne(&filter[size], k, entry, 0,
-					       offset);
-
+				size += and_ne(&filter[size], field, 0, offset);
 				break;
 			}
 			n_checks++;
@@ -503,7 +531,7 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 		 * to add the notification */
 		if (n_checks > 0)
 			filter[size++] = (struct sock_filter)BPF_STMT(
-				BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
+				BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 	}
 
 	return size;
@@ -523,6 +551,8 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 
 	/* No nodes if there is a single syscall */
 	n_nodes = (1 << count_shift_right(n - 1)) - 1;
+
+	debug("  BPF: tree has %i nodes", n_nodes);
 
 	/* Pre */
 	/* cppcheck-suppress badBitmaskCheck */
@@ -559,8 +589,8 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 	/* Insert leaves */
 	for (i = 0; i < n; i++) {
 		nr = get_syscall(i);
-		if (get_number_entries(nr) > 0) {
-			offset = next_offset;
+		if (call_entry_count(nr) > 0) {
+			offset = next_offset - 1;
 		} else {
 			/* If the syscall doesn't have any arguments, then notify */
 			offset = notify - size - 1;
@@ -573,10 +603,12 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 		next_offset += get_n_args_syscall_instr(nr) - 1;
 	}
 	/* Seccomp accept and notify instruction */
-	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
+		filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
 						      SECCOMP_RET_ALLOW);
-	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						      SECCOMP_RET_USER_NOTIF);
+	if (!call_entry_count(nr))
+		filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
+						     SECCOMP_RET_USER_NOTIF);
+
 
 	/*
 	 * Insert args. It sequentially checks all the arguments for a syscall
@@ -584,12 +616,14 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 	 * check the following entry of the syscall and its arguments.
 	 */
 	for (i = 0; i < n; i++) {
-		nr = get_syscall(i);
 		size += insert_args(&filter[size], nr);
-		if (has_args(nr))
+		if (call_entry_count(nr))
 			filter[size++] = (struct sock_filter)BPF_STMT(
-				BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+				BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
 	}
+
+	debug("  BPF: filter with %i call%s has %i instructions",
+	      n, n != 1 ? "s" : "", size);
 
 	return size;
 }

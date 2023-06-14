@@ -164,6 +164,24 @@ void emit_load(struct gluten_ctx *g, struct gluten_offset dst,
 		die("Too many instructions");
 }
 
+void emit_store(struct gluten_ctx *g, struct gluten_offset dst,
+		struct gluten_offset src, struct gluten_offset count)
+{
+	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
+	struct op_store *store = &op->op.store;
+
+	op->type = OP_STORE;
+
+	store->dst = dst;
+	store->src = src;
+	store->count = count;
+
+	debug("   %i: OP_STORE: #%i", g->ip.offset);
+
+	if (++g->ip.offset > INST_MAX)
+		die("Too many instructions");
+}
+
 /**
  * emit_resolved() - Emit OP_RESOLVEFD instruction: resolve file descriptor with path
  * @g:		gluten context
@@ -540,7 +558,7 @@ static void gluten_link(struct gluten_ctx *g, enum jump_type type,
 void emit_bpf_arg(int index, enum type type, union value v, union value mask,
 		  enum op_cmp_type cmp)
 {
-	struct bpf_arg bpf;
+	struct bpf_field bpf;
 
 	/* gluten uses the comparison to skip to the next match, the BPF filter
 	 * uses it to notify instead.
@@ -549,6 +567,8 @@ void emit_bpf_arg(int index, enum type type, union value v, union value mask,
 		bpf.cmp = (cmp == CMP_EQ) ? AND_NE : AND_EQ;
 	else
 		bpf.cmp = (cmp == CMP_EQ) ? NE : EQ;
+
+	bpf.arg = index;
 
 	if (TYPE_IS_64BIT(type)) {
 		bpf.value.v64 = v.v_num;
@@ -560,7 +580,7 @@ void emit_bpf_arg(int index, enum type type, union value v, union value mask,
 		bpf.type = BPF_U32;
 	}
 
-	filter_add_arg(index, bpf);
+	filter_add_check(&bpf);
 }
 
 void link_block(struct gluten_ctx *g)

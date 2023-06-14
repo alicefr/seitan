@@ -100,6 +100,9 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 
 			if (!dry_run)
 				gluten_add_tag_post(g, tag_set, offset);
+
+			if (f->flags & RBUF)
+				return v;
 		}
 
 		if ((tag_get = json_object_get_string(tmp2, "get"))) {
@@ -199,12 +202,12 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 		}
 		break;
 	case STRING:
+		if (dry_run)
+			break;
+
 		v.v_str = json_value_get_string(jvalue);
 		if (strlen(v.v_str) + 1 > f->size)
 			die("   string %s too long for field", v.v_str);
-
-		if (dry_run)
-			break;
 
 		emit_data_at(g, offset, f->type, &v);
 		break;
@@ -327,7 +330,7 @@ static struct gluten_offset parse_arg(struct gluten_ctx *g, struct arg *args,
 	}
 
 	if (arg_needs_temp(&a->f, a->pos, jvalue, &top_level_tag, 0) ||
-	    multi_field) {
+	    multi_field || (a->f.flags & RBUF)) {
 		if (a->f.size)
 			offset = gluten_rw_alloc(g, a->f.size);
 		else

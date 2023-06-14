@@ -13,6 +13,8 @@ void emit_call(struct gluten_ctx *g, struct context_desc *cdesc, long nr,
 	       struct gluten_offset offset[6], struct gluten_offset ret_offset);
 void emit_load(struct gluten_ctx *g, struct gluten_offset dst,
 	       int index, size_t len);
+void emit_store(struct gluten_ctx *g, struct gluten_offset dst,
+		struct gluten_offset src, struct gluten_offset count);
 struct gluten_offset emit_seccomp_data(int index);
 struct gluten_offset emit_bitwise(struct gluten_ctx *g, enum type type,
 				  enum bitwise_type op_type,

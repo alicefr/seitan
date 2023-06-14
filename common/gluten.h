@@ -68,6 +68,7 @@ enum op_type {
 	OP_FD,
 	OP_RETURN,
 	OP_LOAD,
+	OP_STORE,
 	OP_BITWISE,
 	OP_CMP,
 	OP_RESOLVEDFD,
@@ -185,6 +186,12 @@ struct op_load {
 	size_t size;
 };
 
+struct op_store {
+	struct gluten_offset src;
+	struct gluten_offset dst;
+	struct gluten_offset count;
+};
+
 enum op_cmp_type {
 	CMP_EQ,
 	CMP_NE,
@@ -250,6 +257,7 @@ struct op {
 		struct op_return ret;
 		struct op_fd fd;
 		struct op_load load;
+		struct op_store store;
 		struct op_bitwise bitwise;
 		struct op_cmp cmp;
 		struct op_resolvefd resfd;

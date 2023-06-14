@@ -217,7 +217,6 @@ int main(int argc, char **argv)
 		if ((notifier = recvfd(fd)) < 0)
 			die("  failed recieving the notifier fd");
 	}
-	sleep(1);
 
 	if ((epollfd = epoll_create1(0)) < 0)
 		die("  epoll_create");

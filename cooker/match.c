@@ -41,7 +41,7 @@ static struct gluten_offset arg_load(struct gluten_ctx *g, struct arg *a)
 		size = a->f.size;
 	}
 
-	if (!size) {
+	if (!size || (a->f.flags & RBUF)) {
 		g->match_dst[index].offset.type = OFFSET_SECCOMP_DATA;
 		g->match_dst[index].offset.offset = index;
 		g->match_dst[index].len = 0;
@@ -152,7 +152,7 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 	}
 
 	/* Nothing to match on: just store as reference */
-	if (!jvalue)
+	if (!jvalue || (f->flags & RBUF))
 		return v;
 
 	offset.offset += f->offset;
@@ -381,7 +381,6 @@ void handle_matches(struct gluten_ctx *g, JSON_Value *value)
 
 				filter_notify(call->number);
 				parse_match(g, args, call->args);
-				filter_flush_args();
 
 				break;
 			}

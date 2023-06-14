@@ -72,9 +72,32 @@ static void handle_limit(struct gluten_ctx *g, JSON_Value *value)
 	(void)value;
 }
 
+static void handle_write(struct gluten_ctx *g, JSON_Value *value)
+{
+	JSON_Object *obj = json_value_get_object(value);
+	struct gluten_offset src, dst, count;
+	const char *tag;
+
+	if (!(tag = json_object_get_string(obj, "src")))
+		die("invalid tag specification");
+	src = gluten_get_tag(g, tag);
+
+	if (!(tag = json_object_get_string(obj, "dst")))
+		die("invalid tag specification");
+	dst = gluten_get_tag(g, tag);
+
+	if (!(tag = json_object_get_string(obj, "count")))
+		die("invalid tag specification");
+	count = gluten_get_tag(g, tag);
+
+	emit_store(g, dst, src, count);
+}
+
 static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 {
 	JSON_Object *obj = json_value_get_object(value);
+	struct gluten_offset data = NULL_OFFSET;
+	const char *tag;
 	JSON_Value *jvalue;
 	union value v = { .v_u64 = 0 };
 	int32_t error = 0;
@@ -83,14 +106,16 @@ static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 	debug("  Parsing \"return\"");
 
 	jvalue = json_object_get_value(obj, "error");
-        if (json_value_get_type(jvalue) == JSONNumber) {
-		error = json_value_get_number(jvalue);
-	}
+        if (json_value_get_type(jvalue) == JSONNumber)
+		data = emit_data(g, U64, sizeof(v.v_u64), &v);
+	else if ((tag = json_object_get_string(obj, "error")))
+		data = gluten_get_tag(g, tag);
 
 	jvalue = json_object_get_value(obj, "value");
-        if (json_value_get_type(jvalue) == JSONNumber) {
-		v.v_u64 = json_value_get_number(jvalue);
-	}
+        if (json_value_get_type(jvalue) == JSONNumber)
+		data = emit_data(g, U64, sizeof(v.v_u64), &v);
+	else if ((tag = json_object_get_string(obj, "value")))
+		data = gluten_get_tag(g, tag);
 
 	jvalue = json_object_get_value(obj, "continue");
         if (json_value_get_type(jvalue) == JSONBoolean) {
@@ -101,7 +126,8 @@ static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 
 	debug("  emit return: val=%ld errno=%d cont=%s", v.v_u64, error,
 	      cont ? "true" : "false");
-	emit_return(g, emit_data(g, U64, sizeof(v.v_u64), &v), error, cont);
+
+	emit_return(g, data, error, cont);
 }
 
 static void handle_context(struct gluten_ctx *g, JSON_Value *value)
@@ -121,6 +147,7 @@ struct rule_parser {
 } parsers[] = {
 	{ "match",	handle_matches },
 	{ "call",	handle_calls },
+	{ "write",	handle_write },
 	{ "fd",		handle_fd },
 	{ "limit",	handle_limit },
 	{ "return",	handle_return },

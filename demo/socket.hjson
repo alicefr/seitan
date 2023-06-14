@@ -1,7 +1,7 @@
 [
   {
     "match": [
-      { "socket": { "family": "unix", "type": "stream", "flags": 0, "protocol": 0 } }
+      { "socket": { "family": "unix", "type": "stream", "flags": "cloexec", "protocol": 0 } }
     ],
     "call": [
       { "socket": { "family": "unix", "type": "stream", "flags": [ "cloexec", "nonblock" ], "protocol": 0 }, "ret": "new_fd" }

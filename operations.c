@@ -292,6 +292,45 @@ out:
 	return ret;
 }
 
+int op_store(const struct seccomp_notif *req, int notifier, struct gluten *g,
+	     struct op_store *store)
+{
+	const long unsigned int *dst = gluten_ptr(&req->data, g, store->dst);
+	const size_t *count = gluten_ptr(&req->data, g, store->count);
+	const void *src = gluten_ptr(&req->data, g, store->src);
+	char path[PATH_MAX];
+	int fd, ret = 0;
+
+	debug("  op_store: argument (%s %d) in (%s %d) size=%d",
+	      gluten_offset_name[store->src.type], store->src.offset,
+	      gluten_offset_name[store->dst.type], store->dst.offset);
+
+	if (dst == NULL)
+		ret_err(-1, "  op_store: empty destination");
+
+	snprintf(path, sizeof(path), "/proc/%d/mem", req->pid);
+	if ((fd = open(path, O_WRONLY | O_CLOEXEC)) < 0)
+		ret_err(-1, "error opening mem for %d", req->pid);
+	/*
+         * Avoid the TOCTOU and check if the read mappings are still valid
+         */
+	if (!is_cookie_valid(notifier, req->id)) {
+		err("the seccomp request isn't valid anymore");
+		ret = -1;
+		goto out;
+	}
+
+	if (pwrite(fd, src, *count, *dst) < 0) {
+		err("pwrite");
+		ret = -1;
+		goto out;
+	}
+
+out:
+	close(fd);
+	return ret;
+}
+
 int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	      struct op_return *op)
 {
@@ -503,6 +542,7 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 			HANDLE_OP(OP_RETURN, op_return, ret, g);
 			HANDLE_OP(OP_FD, op_fd, fd, g);
 			HANDLE_OP(OP_LOAD, op_load, load, g);
+			HANDLE_OP(OP_STORE, op_store, store, g);
 			HANDLE_OP(OP_BITWISE, op_bitwise, bitwise, g);
 			HANDLE_OP(OP_CMP, op_cmp, cmp, g);
 			HANDLE_OP(OP_RESOLVEDFD, op_resolve_fd, resfd, g);
