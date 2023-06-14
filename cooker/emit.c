@@ -332,12 +332,12 @@ void emit_cmp_field(struct gluten_ctx *g, enum op_cmp_type cmp,
 /**
  * emit_return() - Emit OP_RETURN instruction: return value
  * @g:		gluten context
- * @v:		offset of the return value
- * @error:	error value
- * @cont 	if the filtered syscall needs to be executed
+ * @v:		Offset of return value
+ * @error:	Offset of error value
+ * @cont:	Continue syscall execution, if true
  */
-void emit_return(struct gluten_ctx *g, struct gluten_offset v, int32_t error,
-		 bool cont)
+void emit_return(struct gluten_ctx *g, struct gluten_offset v,
+		 struct gluten_offset error, bool cont)
 {
 	struct op *op = (struct op *)gluten_ptr(&g->g, g->ip);
 	struct op_return *ret = &op->op.ret;

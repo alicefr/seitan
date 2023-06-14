@@ -346,9 +346,11 @@ int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	} else {
 		resp.id = req->id;
 		resp.flags = 0;
-		resp.error = desc->error;
 		if (gluten_read(&req->data, g, &resp.val, desc->val,
 				sizeof(resp.val)) == -1)
+			return -1;
+		if (gluten_read(&req->data, g, &resp.error, desc->error,
+				sizeof(resp.error)) == -1)
 			return -1;
 		debug("  op_return: val=%ld errno=%d", resp.val, resp.error);
 	}
@@ -552,5 +554,6 @@ int eval(struct gluten *g, const struct seccomp_notif *req,
 			ret_err(-1, "unknown operation %d", op->type);
 		}
 	}
+
 	return 0;
 }

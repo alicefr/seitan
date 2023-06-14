@@ -28,8 +28,8 @@ void emit_cmp_field(struct gluten_ctx *g, enum op_cmp_type cmp,
 		    struct field *field,
 		    struct gluten_offset base, struct gluten_offset match,
 		    enum jump_type jmp);
-void emit_return(struct gluten_ctx *g, struct gluten_offset v, int32_t error,
-                 bool cont);
+void emit_return(struct gluten_ctx *g, struct gluten_offset v,
+		 struct gluten_offset error, bool cont);
 void emit_copy(struct gluten_ctx *g,
 	       struct gluten_offset dst, struct gluten_offset src, size_t size);
 void emit_copy_field(struct gluten_ctx *g, struct field *field,

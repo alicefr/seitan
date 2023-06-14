@@ -95,37 +95,57 @@ static void handle_write(struct gluten_ctx *g, JSON_Value *value)
 
 static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 {
+	struct gluten_offset data = NULL_OFFSET, error = NULL_OFFSET;
 	JSON_Object *obj = json_value_get_object(value);
-	struct gluten_offset data = NULL_OFFSET;
-	const char *tag;
+	union value vv = NO_VALUE, ve = NO_VALUE;
+	const char *tag_error, *tag_value;
 	JSON_Value *jvalue;
-	union value v = { .v_u64 = 0 };
-	int32_t error = 0;
 	bool cont = false;
+	char buf[BUFSIZ];
+	size_t n;
 
 	debug("  Parsing \"return\"");
 
 	jvalue = json_object_get_value(obj, "error");
-        if (json_value_get_type(jvalue) == JSONNumber)
-		data = emit_data(g, U64, sizeof(v.v_u64), &v);
-	else if ((tag = json_object_get_string(obj, "error")))
-		data = gluten_get_tag(g, tag);
+        if (json_value_get_type(jvalue) == JSONNumber) {
+		ve.v_u32 = json_value_get_number(jvalue);
+		error = emit_data(g, U32, sizeof(ve.v_u32), &ve);
+	} else if ((tag_error = json_object_get_string(obj, "error"))) {
+		error = gluten_get_tag(g, tag_error);
+	}
 
 	jvalue = json_object_get_value(obj, "value");
-        if (json_value_get_type(jvalue) == JSONNumber)
-		data = emit_data(g, U64, sizeof(v.v_u64), &v);
-	else if ((tag = json_object_get_string(obj, "value")))
-		data = gluten_get_tag(g, tag);
+        if (json_value_get_type(jvalue) == JSONNumber) {
+		vv.v_u64 = json_value_get_number(jvalue);
+		data = emit_data(g, U64, sizeof(vv.v_u64), &vv);
+	} else if ((tag_value = json_object_get_string(obj, "value"))) {
+		data = gluten_get_tag(g, tag_value);
+	}
 
 	jvalue = json_object_get_value(obj, "continue");
         if (json_value_get_type(jvalue) == JSONBoolean)
 		cont = json_value_get_boolean(jvalue);
 
-	if (cont && (v.v_u64 != 0 || error != 0 || data.offset != OFFSET_NULL))
+	if (cont && (error.offset != 0 || data.offset != OFFSET_NULL))
 		die("   \"continue\" with non-zero value or error code");
 
-	debug("  emit return: val=%ld errno=%d cont=%s", v.v_u64, error,
-	      cont ? "true" : "false");
+	if (!cont) {
+		n = snprintf(buf, BUFSIZ, "  emit return: value ");
+		if (tag_value)
+			n += snprintf(buf + n, BUFSIZ - n, "tag %s", tag_value);
+		else
+			n += snprintf(buf + n, BUFSIZ - n, "%lu", vv.v_u64);
+
+		n = snprintf(buf, BUFSIZ, "  , error ");
+		if (tag_error)
+			n += snprintf(buf + n, BUFSIZ - n, "tag %s", tag_error);
+		else
+			n += snprintf(buf + n, BUFSIZ - n, "%u", ve.v_u32);
+	} else {
+		snprintf(buf, BUFSIZ, "  emit return: continue");
+	}
+
+	debug(buf);
 
 	emit_return(g, data, error, cont);
 }

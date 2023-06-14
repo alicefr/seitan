@@ -168,7 +168,7 @@ struct op_block {
 
 struct return_desc {
 	struct gluten_offset val;
-	int32_t error;
+	struct gluten_offset error;
 	bool cont;
 };
 
