@@ -31,6 +31,7 @@ clear
 
 SCRIPT_socat='
 #
+echo abcd > abcd
 socat UNIX-LISTEN:/tmp/demo.sock -
 #
 '

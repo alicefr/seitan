@@ -11,6 +11,8 @@
 SEITAN_DIR=$(pwd)
 
 setup_common() {
+	git pull
+	make
         tmux new-session -d -s $SESSION
         tmux send-keys -t $SESSION 'PS1="$ "'
         tmux send-keys -t $SESSION C-m
