@@ -98,7 +98,7 @@ static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 	struct gluten_offset data = NULL_OFFSET, error = NULL_OFFSET;
 	JSON_Object *obj = json_value_get_object(value);
 	union value vv = NO_VALUE, ve = NO_VALUE;
-	const char *tag_error, *tag_value;
+	const char *tag_error = NULL, *tag_value = NULL;
 	JSON_Value *jvalue;
 	bool cont = false;
 	char buf[BUFSIZ];
@@ -108,8 +108,8 @@ static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 
 	jvalue = json_object_get_value(obj, "error");
         if (json_value_get_type(jvalue) == JSONNumber) {
-		ve.v_u32 = json_value_get_number(jvalue);
-		error = emit_data(g, U32, sizeof(ve.v_u32), &ve);
+		ve.v_int = json_value_get_number(jvalue);
+		error = emit_data(g, INT, sizeof(ve.v_int), &ve);
 	} else if ((tag_error = json_object_get_string(obj, "error"))) {
 		error = gluten_get_tag(g, tag_error);
 	}
@@ -134,13 +134,13 @@ static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 		if (tag_value)
 			n += snprintf(buf + n, BUFSIZ - n, "tag %s", tag_value);
 		else
-			n += snprintf(buf + n, BUFSIZ - n, "%lu", vv.v_u64);
+			n += snprintf(buf + n, BUFSIZ - n, "%ld", vv.v_u64);
 
 		n = snprintf(buf, BUFSIZ, "  , error ");
 		if (tag_error)
 			n += snprintf(buf + n, BUFSIZ - n, "tag %s", tag_error);
 		else
-			n += snprintf(buf + n, BUFSIZ - n, "%u", ve.v_u32);
+			n += snprintf(buf + n, BUFSIZ - n, "%d", ve.v_int);
 	} else {
 		snprintf(buf, BUFSIZ, "  emit return: continue");
 	}
