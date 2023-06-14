@@ -118,11 +118,11 @@ static void handle_return(struct gluten_ctx *g, JSON_Value *value)
 		data = gluten_get_tag(g, tag);
 
 	jvalue = json_object_get_value(obj, "continue");
-        if (json_value_get_type(jvalue) == JSONBoolean) {
+        if (json_value_get_type(jvalue) == JSONBoolean)
 		cont = json_value_get_boolean(jvalue);
-	}
-	if (cont && (v.v_u64 != 0 || error != 0))
-		die("  if continue is true, error and value needs to be zero");
+
+	if (cont && (v.v_u64 != 0 || error != 0 || data.offset != OFFSET_NULL))
+		die("   \"continue\" with non-zero value or error code");
 
 	debug("  emit return: val=%ld errno=%d cont=%s", v.v_u64, error,
 	      cont ? "true" : "false");
