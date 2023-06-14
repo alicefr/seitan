@@ -356,8 +356,6 @@ void emit_return(struct gluten_ctx *g, struct gluten_offset v,
 	ret->desc = o;
 
 	debug("   %i: OP_RETURN:",  g->ip.offset);
-	debug("  \t val=(%s %d) errno=%d cont=%s", gluten_offset_name[v.type],
-	      v.offset, error, cont ? "true" : "false");
 
 	if (++g->ip.offset > INST_MAX)
 		die("Too many instructions");

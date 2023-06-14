@@ -28,6 +28,6 @@
         },
         "context": { "mnt": "caller" }
       },
-    "return": { "value": 0 }
+    "return": { "value": 0, "error": 0 }
   }
 ]
