@@ -29,25 +29,24 @@
 #error "Unknown endianness"
 #endif
 
+#define JUMP(...)		((struct sock_filter)BPF_JUMP(__VA_ARGS__))
+#define STMT(...)		((struct sock_filter)BPF_STMT(__VA_ARGS__))
+
 #define JGE(nr, right, left) \
-	BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, (nr), (right), (left))
-#define JUMPA(jump) BPF_JUMP(BPF_JMP | BPF_JA, (jump), 0, 0)
-#define EQ(x, a1, a2) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (x), (a1), (a2))
+	JUMP(BPF_JMP | BPF_JGE | BPF_K, (nr), (right), (left))
+#define JUMPA(jump) JUMP(BPF_JMP | BPF_JA, (jump), 0, 0)
+#define EQ(x, a1, a2) JUMP(BPF_JMP | BPF_JEQ | BPF_K, (x), (a1), (a2))
 #define NEQ(x, a1, a2) EQ((x), (a2), (a1))
-#define GT(x, a1, a2) BPF_JUMP(BPF_JMP + BPF_JGT + BPF_K, (x), (a1), (a2))
-#define GE(x, a1, a2) BPF_JUMP(BPF_JMP + BPF_JGE + BPF_K, (x), (a1), (a2))
+#define GT(x, a1, a2) JUMP(BPF_JMP + BPF_JGT + BPF_K, (x), (a1), (a2))
+#define GE(x, a1, a2) JUMP(BPF_JMP + BPF_JGE + BPF_K, (x), (a1), (a2))
 #define LT(x, a1, a2) GE((x), (a2), (a1))
 #define LE(x, a1, a2) GT((x), (a2), (a1))
-#define LOAD(x) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, (x))
-#define AND(x) BPF_STMT(BPF_ALU | BPF_AND | BPF_IMM, (x))
+#define LOAD(x) STMT(BPF_LD | BPF_W | BPF_ABS, (x))
+#define AND(x) STMT(BPF_ALU | BPF_AND | BPF_IMM, (x))
 #define MAX_FILTER 1024
 
 #define MAX_JUMPS 128
 #define EMPTY -1
-
-#define N_SYSCALL 512
-#define MAX_ENTRIES_SYSCALL 16
-#define MAX_ENTRIES N_SYSCALL * MAX_ENTRIES_SYSCALL
 
 enum bpf_type { BPF_U32, BPF_U64 };
 
@@ -59,21 +58,17 @@ union bpf_value {
 extern const char *bpf_cmp_str[];
 enum bpf_cmp { NO_CHECK = 0, EQ, NE, LE, LT, GE, GT, AND_EQ, AND_NE };
 
-struct bpf_arg {
+struct bpf_field {
+	int arg;
 	union bpf_value value;
 	enum bpf_type type;
 	enum bpf_cmp cmp;
 	union bpf_value op2;
 };
 
-struct bpf_entry {
-	struct bpf_arg args[6];
-};
-
 void filter_notify(long nr);
 void filter_needs_deref(void);
-void filter_add_arg(int index, struct bpf_arg arg);
+void filter_add_check(struct bpf_field *field);
 void filter_write(const char *path);
-void filter_flush_args();
 
 #endif

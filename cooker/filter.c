@@ -324,15 +324,14 @@ static unsigned int eq(struct sock_filter filter[],
 	case BPF_U64:
 		hi = get_hi(field->value.v64);
 		lo = get_lo(field->value.v64);
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)EQ(lo, 0, jfalse);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
-		filter[size++] = (struct sock_filter)EQ(hi, jtrue, jfalse);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = EQ(lo, 0, jfalse);
+		filter[size++] = LOAD(HI_ARG(field->arg));
+		filter[size++] = EQ(hi, jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)EQ(
-			field->value.v32, jtrue, jfalse);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = EQ(field->value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -350,15 +349,14 @@ static unsigned int gt(struct sock_filter filter[],
 	case BPF_U64:
 		hi = get_hi(field->value.v64);
 		lo = get_lo(field->value.v64);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
-		filter[size++] = (struct sock_filter)GT(hi, jtrue + 2, 0);
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)GT(lo, jtrue, jfalse);
+		filter[size++] = LOAD(HI_ARG(field->arg));
+		filter[size++] = GT(hi, jtrue + 2, 0);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = GT(lo, jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)GT(
-			field->value.v32, jtrue, jfalse);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = GT(field->value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -376,15 +374,14 @@ static unsigned int lt(struct sock_filter filter[],
 	case BPF_U64:
 		hi = get_hi(field->value.v64);
 		lo = get_lo(field->value.v64);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
-		filter[size++] = (struct sock_filter)LT(hi, jtrue + 2, jfalse);
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)LT(lo, jtrue, jfalse);
+		filter[size++] = LOAD(HI_ARG(field->arg));
+		filter[size++] = LT(hi, jtrue + 2, jfalse);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = LT(lo, jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)LT(
-			field->value.v32, jtrue, jfalse);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = LT(field->value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -420,23 +417,17 @@ static unsigned int and_eq(struct sock_filter filter[],
 
 	switch (field->type) {
 	case BPF_U64:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)AND(
-			get_lo(field->op2.v64));
-		filter[size++] = (struct sock_filter)EQ(
-			get_lo(field->value.v64), 0, jfalse);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
-		filter[size++] = (struct sock_filter)AND(
-			get_hi(field->op2.v64));
-		filter[size++] = (struct sock_filter)EQ(
-			get_hi(field->value.v64), jtrue, jfalse);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = AND(get_lo(field->op2.v64));
+		filter[size++] = EQ(get_lo(field->value.v64), 0, jfalse);
+		filter[size++] = LOAD(HI_ARG(field->arg));
+		filter[size++] = AND(get_hi(field->op2.v64));
+		filter[size++] = EQ(get_hi(field->value.v64), jtrue, jfalse);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] =
-			(struct sock_filter)AND(field->op2.v32);
-		filter[size++] = (struct sock_filter)EQ(
-			field->value.v32, jtrue, jfalse);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = AND(field->op2.v32);
+		filter[size++] = EQ(field->value.v32, jtrue, jfalse);
 		break;
 	}
 
@@ -451,23 +442,17 @@ static unsigned int and_ne(struct sock_filter filter[],
 
 	switch (field->type) {
 	case BPF_U64:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] = (struct sock_filter)AND(
-			get_lo(field->op2.v64));
-		filter[size++] = (struct sock_filter)EQ(
-			get_lo(field->value.v64), 0, jtrue + 3);
-		filter[size++] = (struct sock_filter)LOAD(HI_ARG(field->arg));
-		filter[size++] = (struct sock_filter)AND(
-			get_hi(field->op2.v64));
-		filter[size++] = (struct sock_filter)EQ(
-			get_hi(field->value.v64), jfalse, jtrue);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = AND(get_lo(field->op2.v64));
+		filter[size++] = EQ(get_lo(field->value.v64), 0, jtrue + 3);
+		filter[size++] = LOAD(HI_ARG(field->arg));
+		filter[size++] = AND(get_hi(field->op2.v64));
+		filter[size++] = EQ(get_hi(field->value.v64), jfalse, jtrue);
 		break;
 	case BPF_U32:
-		filter[size++] = (struct sock_filter)LOAD(LO_ARG(field->arg));
-		filter[size++] =
-			(struct sock_filter)AND(field->op2.v32);
-		filter[size++] = (struct sock_filter)EQ(
-			field->value.v32, jfalse, jtrue);
+		filter[size++] = LOAD(LO_ARG(field->arg));
+		filter[size++] = AND(field->op2.v32);
+		filter[size++] = EQ(field->value.v32, jfalse, jtrue);
 		break;
 	}
 
@@ -530,8 +515,8 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 		/* If there were no arguments for this entry, then we don't need
 		 * to add the notification */
 		if (n_checks > 0)
-			filter[size++] = (struct sock_filter)BPF_STMT(
-				BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+			filter[size++] = STMT(BPF_RET | BPF_K,
+					      SECCOMP_RET_ALLOW);
 	}
 
 	return size;
@@ -556,16 +541,14 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 
 	/* Pre */
 	/* cppcheck-suppress badBitmaskCheck */
-	filter[size++] = (struct sock_filter)BPF_STMT(
-		BPF_LD | BPF_W | BPF_ABS,
-		(offsetof(struct seccomp_data, arch)));
-	filter[size++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
-						      SEITAN_AUDIT_ARCH, 1, 0);
-	filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						      SECCOMP_RET_ALLOW);
+	filter[size++] = STMT(BPF_LD | BPF_W | BPF_ABS,
+			      offsetof(struct seccomp_data, arch));
+	filter[size++] = JUMP(BPF_JMP | BPF_JEQ | BPF_K,
+			      SEITAN_AUDIT_ARCH, 1, 0);
+	filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 	/* cppcheck-suppress badBitmaskCheck */
-	filter[size++] = (struct sock_filter)BPF_STMT(
-		BPF_LD | BPF_W | BPF_ABS, (offsetof(struct seccomp_data, nr)));
+	filter[size++] = STMT(BPF_LD | BPF_W | BPF_ABS,
+			      offsetof(struct seccomp_data, nr));
 
 	/* pre-check instruction + load syscall number (4 instructions) */
 	accept = size + n_nodes + n;
@@ -574,14 +557,12 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 	/* Insert nodes */
 	for (i = 0; i < n_nodes; i++) {
 		if (nodes[i] == EMPTY) {
-			filter[size++] =
-				(struct sock_filter)JUMPA(accept - size);
+			filter[size++] = JUMPA(accept - size);
 		} else {
 			nr = get_syscall(nodes[i]);
 			offset_left = left_child(i) - i - 1;
 			offset_right = right_child(i) - i - 1;
-			filter[size++] = (struct sock_filter)JGE(
-				nr, offset_right, offset_left);
+			filter[size++] = JGE(nr, offset_right, offset_left);
 		}
 	}
 
@@ -595,19 +576,16 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 			/* If the syscall doesn't have any arguments, then notify */
 			offset = notify - size - 1;
 		}
-		filter[size++] =
-			(struct sock_filter)EQ(nr, offset, accept - size);
+		filter[size++] = EQ(nr, offset, accept - size);
 		/* The arguments block of the next entry are after the total
 		 * number of the instructions for checking the arguments of the current entry
 		 */
 		next_offset += get_n_args_syscall_instr(nr) - 1;
 	}
 	/* Seccomp accept and notify instruction */
-		filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						      SECCOMP_RET_ALLOW);
+	filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 	if (!call_entry_count(nr))
-		filter[size++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K,
-						     SECCOMP_RET_USER_NOTIF);
+		filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
 
 
 	/*
@@ -618,8 +596,8 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 	for (i = 0; i < n; i++) {
 		size += insert_args(&filter[size], nr);
 		if (call_entry_count(nr))
-			filter[size++] = (struct sock_filter)BPF_STMT(
-				BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
+			filter[size++] = STMT(BPF_RET | BPF_K,
+					      SECCOMP_RET_USER_NOTIF);
 	}
 
 	debug("  BPF: filter with %i call%s has %i instructions",
