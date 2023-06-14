@@ -1,7 +1,7 @@
 [
-  { /* connect to another path (/var/run/pr-helper.sock -> /tmp/demo.sock) */
+  { /* connect to another path (/cool.sock -> /tmp/demo.sock) */
     "match": [
-      { "connect": { "addr": { "family": "unix", "path": "/var/run/pr-helper.sock" }, "fd": { "tag": "fd" } } }
+      { "connect": { "addr": { "family": "unix", "path": "/cool.sock" }, "fd": { "tag": "fd" } } }
     ],
     "call": [
       { "socket": { "family": "unix", "type": "stream", "flags": 0, "protocol": 0 }, "ret": "new_fd" },
@@ -21,5 +21,11 @@
       { "connect": { "addr": { "family": "unix", "path": "/error.sock" } } }
     ],
     "return": { "value": 0, "error": -1 }
+  },
+  { /* Continue all the other connect syscall */
+    "match": [
+      { "connect": {} }
+    ],
+    "return": { "continue": true }
   }
 ]
