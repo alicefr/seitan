@@ -131,7 +131,7 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 				snprintf(c->cwd, PATH_MAX, "/proc/%d/root",
 					 req->pid);
 			} else {
-				snprintf(c->cwd, PATH_MAX, "/proc/%d/ns/%s",
+				snprintf(*dst, PATH_MAX, "/proc/%d/ns/%s",
 					req->pid, context_type_name[type]);
 			}
 			break;
