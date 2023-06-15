@@ -19,7 +19,7 @@ div > ul {
 </style>
 
 <img src="/static/seitan.svg" alt="seitan diagram"
- style="object-fit: contain; width: 70%; float: left">
+ style="object-fit: contain; width: 50%; float: left">
 
 * **build-filter**
     * build BPF binary-search tree
