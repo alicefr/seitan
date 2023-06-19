@@ -1,11 +1,14 @@
 [
   {
     "match": [
-      { "socket": { "family": "unix", "type": "stream", "flags": "cloexec", "protocol": 0 } }
+      { "socket": { "family": "unix" } }
     ],
-    "call": [
-      { "socket": { "family": "unix", "type": "stream", "flags": [ "cloexec", "nonblock" ], "protocol": 0 }, "ret": "new_fd" }
+    "return": {"continue": true }
+  },
+  {
+    "match": [
+      { "socket": {} }
     ],
-    "fd": { "src": { "tag": "new_fd" }, "close_on_exec": false, "return": true }
+    "return": {"error": -1, "value": 0 }
   }
 ]

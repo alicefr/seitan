@@ -1,6 +1,6 @@
 [
   {
-    "match": [
+    "match": [ /* Giuseppe's example */
       { "mknodat":
         { "path": { "tag": "path" },
           "mode": { "tag": "mode" },
@@ -28,6 +28,6 @@
         },
         "context": { "mnt": "caller" }
       },
-    "return": { "value": 0, "error": 0 }
+    "return": { "value": 0 }
   }
 ]
