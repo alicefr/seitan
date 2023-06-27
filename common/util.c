@@ -43,3 +43,7 @@ const char *context_spec_type_name[CONTEXT_SPEC_TYPE_MAX + 1] = {
 };
 
 const char *bitwise_type_str[BITWISE_MAX + 1] = { "&", "|" };
+
+const char *cmp_type_str[CMP_MAX + 1] = {
+        "EQ", "NE", "GT", "GE", "LT", "LE",
+};

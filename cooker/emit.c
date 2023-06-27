@@ -27,10 +27,6 @@ static const char *type_str[] = {
 	NULL
 };
 
-static const char *cmp_type_str[] = {
-	"EQ", "NE", "GT", "GE", "LT", "LE", NULL
-};
-
 /**
  * emit_nr() - Emit OP_NR instruction: jump on syscall mismatch
  * @g:		gluten context

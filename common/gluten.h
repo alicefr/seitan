@@ -109,7 +109,6 @@ enum context_type {
 
 extern const char *context_type_name[CONTEXT_TYPE_MAX + 1];
 extern const char *context_spec_type_name[CONTEXT_SPEC_TYPE_MAX + 1];
-
 /**
  * struct context_desc - Identification of one type of context information
  * @context:		Type of context (namespace types, or working directory)
@@ -199,7 +198,9 @@ enum op_cmp_type {
 	CMP_GE,
 	CMP_LT,
 	CMP_LE,
+	CMP_MAX = CMP_LE,
 };
+extern const char *cmp_type_str[CMP_MAX + 1];
 
 struct cmp_desc {
 	enum op_cmp_type cmp;
