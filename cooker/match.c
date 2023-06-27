@@ -106,9 +106,9 @@ ______________________                            _____________
 	case GNU_DEV_MINOR:
 		/*
 xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
-                      ____________________________              ________
+                                     _____________              ________
 		*/
-		v.v_num = 0xff | ((long long)0xffffff << 12);
+		v.v_num = 0xff | ((long long)0xfff << 20);
 		mask_offset = emit_data(g, U64, 0, &v);
 		offset = emit_bitwise(g, U64, BITWISE_AND, NULL_OFFSET,
 				      offset, mask_offset);
