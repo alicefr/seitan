@@ -28,7 +28,7 @@ IMAGE=${LIBVIRT_IMAGES}/${IMAGE_NAME}
 set -e
 
 # Don't execute the script if VM is still exists in libvirt
-if virsh list --all | grep ${VM_NAME} ; then
+if virsh --connect="qemu:///system" list --all | grep ${VM_NAME} ; then
 	echo "VM ${VM_NAME} still exists"
 	exit 0
 fi
@@ -49,7 +49,10 @@ podman run --interactive --rm --security-opt label=disable \
 chcon --verbose --type svirt_home_t ${IGNITION_CONFIG}
 
 # Install the VM
-virt-install --name="${VM_NAME}" --vcpus="${VCPUS}" --memory="${RAM_MB}" \
+# Note: if you encounter any issues with the installation with permission denied
+# for the backing storage, please try to check ACL permissions with getfacl -e
+# $HOME/.local and eventually fix them with setfacl -m u:qemu:rx $HOME/.local
+virt-install --connect="qemu:///system" --name="${VM_NAME}" --vcpus="${VCPUS}" --memory="${RAM_MB}" \
         --os-variant="fedora-coreos-$STREAM" --import --graphics=none \
         --disk="size=${DISK_GB},backing_store=${IMAGE}" \
         --network bridge=virbr0 "${IGNITION_DEVICE_ARG[@]}"
