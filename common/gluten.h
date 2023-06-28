@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <linux/limits.h>
+#include <limits.h>
 #include <linux/seccomp.h>
 
 #include <stdio.h>
@@ -75,23 +76,25 @@ enum op_type {
 };
 
 /**
- * enum context_spec_type - Type of reference to target namespace and directory
+ * enum context_spec_type - Type of reference to namespace, directory, UID/GID
  */
 enum context_spec_type {
 	CONTEXT_SPEC_NONE		= 0,
 
-	/* PID from seccomp_data */
+	/* PID from seccomp_data, UID/GID resolved via procfs in seitan */
 	CONTEXT_SPEC_CALLER		= 1,
 
-	/* PID/path from gluten, resolved in seitan */
-	CONTEXT_SPEC_PID		= 2,
-	CONTEXT_SPEC_PATH		= 3,
+	/* UID/GID, or PID resolved in seitan */
+	CONTEXT_SPEC_NUM		= 2,
 
-	CONTEXT_SPEC_TYPE_MAX		= CONTEXT_SPEC_PATH,
+	/* User/group names or namespace path, resolved in seitan */
+	CONTEXT_SPEC_NAME		= 3,
+
+	CONTEXT_SPEC_TYPE_MAX		= CONTEXT_SPEC_NAME,
 };
 
 /**
- * enum context_type - Working directory, and namespaces (see <linux/sched.h>)
+ * enum context_type - Directory, namespaces (see <linux/sched.h>), UID/GID
  */
 enum context_type {
 	NS_MOUNT		= 0,
@@ -104,17 +107,22 @@ enum context_type {
 	NS_TIME			= 7,
 	NS_TYPE_MAX		= NS_TIME,
 	CWD			= 8,
-	CONTEXT_TYPE_MAX	= CWD,
+	UID			= 9,
+	GID			= 10,
+	CONTEXT_TYPE_MAX	= GID,
 };
 
 extern const char *context_type_name[CONTEXT_TYPE_MAX + 1];
 extern const char *context_spec_type_name[CONTEXT_SPEC_TYPE_MAX + 1];
 /**
  * struct context_desc - Identification of one type of context information
- * @context:		Type of context (namespace types, or working directory)
+ * @context:		Type of context (namespace, working directory, UID/GID)
  * @spec:		Reference type
  * @target.pid:		PID in procfs reference
+ * @target.uid:		UID to switch to
+ * @target.gid:		GID to switch to
  * @target.path:	Filesystem-bound (nsfs) reference
+ * @target.name:	Username or group name
  */
 struct context_desc {
 #ifdef __GNUC__
@@ -126,7 +134,10 @@ struct context_desc {
 #endif
 	union {
 		pid_t pid;
+		uid_t uid;
+		gid_t gid;
 		char path[PATH_MAX];
+		char name[LOGIN_NAME_MAX];
 	} target;
 };
 

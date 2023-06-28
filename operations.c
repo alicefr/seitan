@@ -14,11 +14,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <sched.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
+#include <pwd.h>
 #include <linux/seccomp.h>
 #include <linux/filter.h>
 #include <linux/audit.h>
@@ -79,6 +81,7 @@ static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
 	return 0;
 }
 
+/* TODO: Move all "context" stuff to separate file */
 static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 			     struct syscall_desc *s, struct context_desc *cdesc,
 			     struct arg_clone *c)
@@ -130,26 +133,57 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 			if (type == CWD) {
 				snprintf(c->cwd, PATH_MAX, "/proc/%d/root",
 					 req->pid);
+			} else if (type == UID || type == GID) {
+				/* TODO: Move into its own function */
+				struct stat st = { 0 };
+				char path[PATH_MAX];
+
+				snprintf(path, PATH_MAX, "/proc/%d", req->pid);
+				if (stat(path, &st))
+					return errno;
+
+				if (type == UID)
+					c->uid = st.st_uid;
+				else if (type == GID)
+					c->gid = st.st_gid;
 			} else {
 				snprintf(*dst, PATH_MAX, "/proc/%d/ns/%s",
-					req->pid, context_type_name[type]);
+					 req->pid, context_type_name[type]);
 			}
+
 			break;
-		case CONTEXT_SPEC_PID:
+		case CONTEXT_SPEC_NUM:
 			if (type == CWD) {
 				snprintf(c->cwd, PATH_MAX, "/proc/%d/root",
 					 cdesc->target.pid);
+			} else if (type == UID) {
+				c->uid = cdesc->target.uid;
+			} else if (type == GID) {
+				c->gid = cdesc->target.gid;
 			} else {
 				snprintf(*dst, PATH_MAX, "/proc/%d/ns/%s",
 					 cdesc->target.pid,
 					 context_type_name[type]);
 			}
+
 			break;
-		case CONTEXT_SPEC_PATH:
-			if (type == CWD)
+		case CONTEXT_SPEC_NAME:
+			if (type == CWD) {
 				strncpy(c->cwd, cdesc->target.path, PATH_MAX);
-			else 
+			} else if (type == UID || type == GID) {
+				struct passwd *pw;
+
+				if (!(pw = getpwnam(cdesc->target.name)))
+					return errno;
+
+				if (type == UID)
+					c->uid = pw->pw_uid;
+				else if (type == GID)
+					c->gid = pw->pw_gid;
+			} else {
 				strncpy(*dst, cdesc->target.path, PATH_MAX);
+			}
+
 			break;
 		default:
 			break;
@@ -182,6 +216,15 @@ static int set_namespaces(struct arg_clone *c)
 static int execute_syscall(void *args)
 {
 	struct arg_clone *c = (struct arg_clone *)args;
+
+	/* We can use 0 as "unspecified" value because we can't switch from a
+	 * non-zero UID/GID to zero.
+	 */
+	if (c->uid && setuid(c->uid))
+		exit(EXIT_FAILURE);
+
+	if (c->gid && setgid(c->gid))
+		exit(EXIT_FAILURE);
 
 	if (*c->cwd && chdir(c->cwd) < 0)
 		exit(EXIT_FAILURE);

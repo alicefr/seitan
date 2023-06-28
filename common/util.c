@@ -8,6 +8,9 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#include <bits/local_lim.h>	/* TODO: Why isn't __USE_POSIX with limits.h
+				 * enough for LOGIN_NAME_MAX here?
+				 */
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -35,7 +38,9 @@ const char *gluten_offset_name[OFFSET_TYPE_MAX + 1] = {
 };
 
 const char *context_type_name[CONTEXT_TYPE_MAX + 1] = {
-	"mnt", "cgroup", "uts", "ipc", "user", "pid", "net", "time", "cwd",
+	"mnt", "cgroup", "uts", "ipc", "user", "pid", "net", "time",
+	"cwd",
+	"uid", "gid",
 };
 
 const char *context_spec_type_name[CONTEXT_SPEC_TYPE_MAX + 1] = {

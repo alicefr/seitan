@@ -458,14 +458,25 @@ static void parse_context(struct context_desc *cdesc, JSON_Object *obj)
 			if (!strcmp(str, "caller")) {
 				cdesc[n].spec = CONTEXT_SPEC_CALLER;
 			} else {
-				cdesc[n].spec = CONTEXT_SPEC_PATH;
-				strncpy(cdesc[n].target.path, str, PATH_MAX);
+				cdesc[n].spec = CONTEXT_SPEC_NAME;
+				if (type == UID || type == GID) {
+					strncpy(cdesc[n].target.name, str,
+						LOGIN_NAME_MAX);
+				} else {
+					strncpy(cdesc[n].target.path, str,
+						PATH_MAX);
+				}
 			}
 		} else if ((num = json_object_get_number(obj, name))) {
 			debug("   '%s' context: %lli", name, num);
 
-			cdesc[n].spec = CONTEXT_SPEC_PID;
-			cdesc[n].target.pid = num;
+			cdesc[n].spec = CONTEXT_SPEC_NUM;
+			if (type == UID)
+				cdesc[n].target.uid = num;
+			else if (type == GID)
+				cdesc[n].target.gid = num;
+			else
+				cdesc[n].target.pid = num;
 		} else {
 			die("invalid context specification");
 		}

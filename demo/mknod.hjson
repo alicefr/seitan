@@ -26,7 +26,7 @@
           "major": 1,
           "minor": { "tag": { "get": "minor" } }
         },
-        "context": { "mnt": "caller" }
+        "context": { "mnt": "caller", "uid": "caller", "gid": "caller" }
       },
     "return": { "value": 0, "error": 0 }
   }
