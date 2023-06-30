@@ -34,7 +34,6 @@ extern struct seccomp_data anonymous_seccomp_data;
 #define OP_EMPTY { .block = { -1 } }
 #define NO_FIELD block
 
-#define NS_NUM sizeof(enum ns_type)
 #define GET_BIT(x, i) (((x) & (1UL << (i))) != 0)
 
 enum gluten_offset_type {

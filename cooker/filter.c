@@ -13,7 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <util.h>
+#include "util.h"
 
 #include "filter.h"
 
@@ -37,28 +37,11 @@ struct bpf_entry {
 struct filter_call_input {
 	bool notify;
 	bool ignore_args;
+	unsigned int count;
 	struct bpf_entry entry[MAX_ENTRIES_PER_SYSCALL];
 } filter_input[N_SYSCALL] = { 0 };
 
 static long current_nr;
-
-/**
- * entry_has_check() - Input stage: does the syscall entry need argument checks?
- * @entry:	syscall entry with field checks
- *
- * Return: true if at least one argument comparison is requested
- */
-static bool entry_has_check(const struct bpf_entry *entry)
-{
-	unsigned i;
-
-	for (i = 0; i < MAX_FIELDS_PER_SYSCALL; i++) {
-		if (entry->field[i].cmp != NO_CHECK)
-			return true;
-	}
-
-	return false;
-}
 
 /**
  * call_entry_count() - Input stage: count of entries for the same syscall
@@ -69,19 +52,8 @@ static bool entry_has_check(const struct bpf_entry *entry)
 static unsigned int call_entry_count(long nr)
 {
 	struct filter_call_input *call = filter_input + nr;
-	unsigned i, count = 0;
 
-	if (!call->notify || call->ignore_args)
-		return 0;
-
-	for (i = 0; i < MAX_ENTRIES_PER_SYSCALL; i++) {
-		if (entry_has_check(&call->entry[i]))
-			count++;
-		else
-			break;
-	}
-
-	return count;
+	return call->count;
 }
 
 /**
@@ -168,6 +140,17 @@ void filter_needs_deref(void)
 	debug("   BPF: arguments for #%lu now ignored", current_nr);
 
 	call->ignore_args = true;
+}
+
+void filter_flush_args(long nr)
+{
+	struct filter_call_input *call = filter_input + nr;
+	struct bpf_entry *entry = &call->entry[(call->count)];
+
+	if (entry_check_count(entry) > 0)
+		call->count++;
+	if (call->count > MAX_FIELDS_PER_SYSCALL)
+		call->ignore_args = true;
 }
 
 /* Calculate how many instruction for the syscall */
@@ -469,6 +452,9 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 	unsigned int size = 0;
 	unsigned int i, j;
 
+	/* No entries, hence no arguments for the @nr syscall */
+	if (count <= 0)
+		return 0;
 	for (i = 0; i < count; i++) {
 		n_checks = 0;
 		entry = &call->entry[i];
@@ -478,10 +464,14 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 		 * jump to the next group if the check is false.
 		 */
 		next_offset = entry_check_count(entry);
-		for (j = 0; j < entry_check_count(entry); j++) {
+		for (j = 0; j <= entry_check_count(entry); j++) {
 			struct bpf_field *field = &entry->field[j];
-
+			/* If the current argument isn't the last argument (offset = 1),
+			 * add an additional jump as there is seccomp notify instruction
+			 * before the allow one.
+			 */
 			offset = next_offset - n_checks;
+			offset += (offset > 1) ? 1 : 0;
 			switch (field->cmp) {
 			case NO_CHECK:
 				continue;
@@ -512,12 +502,10 @@ static unsigned int insert_args(struct sock_filter filter[], long nr)
 			}
 			n_checks++;
 		}
-		/* If there were no arguments for this entry, then we don't need
-		 * to add the notification */
 		if (n_checks > 0)
-			filter[size++] = STMT(BPF_RET | BPF_K,
-					      SECCOMP_RET_ALLOW);
+			filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
 	}
+	filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 
 	return size;
 }
@@ -571,7 +559,7 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 	for (i = 0; i < n; i++) {
 		nr = get_syscall(i);
 		if (call_entry_count(nr) > 0) {
-			offset = next_offset - 1;
+			offset = next_offset;
 		} else {
 			/* If the syscall doesn't have any arguments, then notify */
 			offset = notify - size - 1;
@@ -584,21 +572,15 @@ unsigned int filter_build(struct sock_filter filter[], unsigned n)
 	}
 	/* Seccomp accept and notify instruction */
 	filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-	if (!call_entry_count(nr))
-		filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
-
+	filter[size++] = STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF);
 
 	/*
 	 * Insert args. It sequentially checks all the arguments for a syscall
 	 * entry. If a check on the argument isn't equal then it jumps to
 	 * check the following entry of the syscall and its arguments.
 	 */
-	for (i = 0; i < n; i++) {
-		size += insert_args(&filter[size], nr);
-		if (call_entry_count(nr))
-			filter[size++] = STMT(BPF_RET | BPF_K,
-					      SECCOMP_RET_USER_NOTIF);
-	}
+	for (i = 0; i < n; i++)
+		size += insert_args(&filter[size], get_syscall(i));
 
 	debug("  BPF: filter with %i call%s has %i instructions",
 	      n, n != 1 ? "s" : "", size);

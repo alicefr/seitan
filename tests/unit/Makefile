@@ -4,29 +4,30 @@
 
 MAIN_DIR := ../../
 COMMON_DIR := ../../common
-OP_DIR := ../../
 COOKER_DIR := ../../cooker
 DBG_DIR := ../../debug
 
-SRCS_FILTER_BUILD := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c $(COMMON_DIR)/common.c
-HEADERS_FILTER_BUILD := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h $(COMMON_DIR)/common.h
+SRCS_FILTER_BUILD := $(COOKER_DIR)/filter.c $(DBG_DIR)/disasm.c $(COMMON_DIR)/common.c \
+		     $(COMMON_DIR)/util.c
+HEADERS_FILTER_BUILD := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h $(COMMON_DIR)/common.h \
+			$(COMMON_DIR)/util.h
 
 SRCS_FILTER := $(COOKER_DIR)/filter.c $(COMMON_DIR)/common.c util.c \
 	       $(DBG_DIR)/disasm.c
-HEADERS_FILTER := $(COOKER_DIR)/filter.h $(COMMON_DIR)/common.h \
+HEADERS_FILTER := $(COOKER_DIR)/filter.h $(COMMON_DIR)/common.h $(COMMON_DIR)/util.h \
 		  $(DBG_DIR)/disasm.h testutil.h
 
-HEADERS_OP_CALL := testutil.h $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
+HEADERS_OP_CALL := testutil.h $(COMMON_DIR)/gluten.h  $(MAIN_DIR)/operations.h \
                    $(COMMON_DIR)/common.h $(COMMON_DIR)/util.h
-SRCS_OP_CALL := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c $(COMMON_DIR)/util.c
+SRCS_OP_CALL := $(COMMON_DIR)/common.c $(MAIN_DIR)/operations.c util.c $(COMMON_DIR)/util.c
 
-HEADERS_OP := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
+HEADERS_OP := $(COMMON_DIR)/gluten.h  $(MAIN_DIR)/operations.h \
 		   $(COMMON_DIR)/common.h testutil.h $(COMMON_DIR)/util.h
-SRCS_OP := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c $(COMMON_DIR)/util.c
+SRCS_OP := $(COMMON_DIR)/common.c $(MAIN_DIR)/operations.c util.c $(COMMON_DIR)/util.c
 
-HEADERS_ERROR := $(COMMON_DIR)/gluten.h  $(OP_DIR)/operations.h \
+HEADERS_ERROR := $(COMMON_DIR)/gluten.h  $(MAIN_DIR)/operations.h \
 		   $(COMMON_DIR)/common.h testutil.h $(COMMON_DIR)/util.h
-SRCS_ERROR := $(COMMON_DIR)/common.c $(OP_DIR)/operations.c util.c $(COMMON_DIR)/util.c
+SRCS_ERROR := $(COMMON_DIR)/common.c $(MAIN_DIR)/operations.c util.c $(COMMON_DIR)/util.c
 
 TARGET := $(shell $(CC) -dumpmachine)
 TARGET_ARCH := $(shell echo $(TARGET) | cut -f1 -d- | tr [A-Z] [a-z])
@@ -38,7 +39,7 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
 CFLAGS += -Wall -Wextra -pedantic
-CFLAGS += -I$(MAIN_DIR) -I$(OP_DIR)  -I$(DBG_DIR)
+CFLAGS += -I$(MAIN_DIR)  -I$(DBG_DIR) -I$(COMMON_DIR) -I$(COOKER_DIR)
 CFLAGS += -lcheck
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 

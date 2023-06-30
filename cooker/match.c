@@ -381,6 +381,7 @@ void handle_matches(struct gluten_ctx *g, JSON_Value *value)
 
 				filter_notify(call->number);
 				parse_match(g, args, call->args);
+				filter_flush_args(call->number);
 
 				break;
 			}

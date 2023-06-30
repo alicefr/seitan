@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
@@ -37,6 +38,19 @@ char path[PATH_MAX] = "/tmp/test-seitan";
 struct gluten gluten;
 char stderr_buff[BUFSIZ];
 char stdout_buff[BUFSIZ];
+
+#define logfn(name)                                                     \
+void name(const char *format, ...) {                                    \
+        va_list args;                                                   \
+                                                                        \
+        va_start(args, format);                                         \
+        (void)vfprintf(stderr, format, args);                           \
+        va_end(args);                                                   \
+        if (format[strlen(format)] != '\n')                             \
+                fprintf(stderr, "\n");                                  \
+}
+
+logfn(debug)
 
 int install_single_syscall(long nr)
 {
@@ -209,7 +223,7 @@ void mock_syscall_target()
 void set_args_no_check(struct args_target *at)
 {
 	for (unsigned int i = 0; i < 6; i++)
-		at->args[i].cmp = NO_CHECK;
+		at->bpf_fields[i].cmp = NO_CHECK;
 }
 
 static int set_ns_flags(bool ns[], int flags)
@@ -217,8 +231,9 @@ static int set_ns_flags(bool ns[], int flags)
 	unsigned int i;
 
 	for (i = 0; i < NS_NUM; i++) {
-		if (!ns[i] || i == NS_NONE)
+		if (!ns[i])
 			continue;
+
 		switch (i) {
 		case NS_CGROUP:
 			flags |= CLONE_NEWCGROUP;

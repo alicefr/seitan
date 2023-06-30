@@ -35,7 +35,7 @@ static bool filter_eq(struct sock_filter *f1, struct sock_filter *f2,
 
 START_TEST(test_single_instr)
 {
-	struct sock_filter filter[10];
+	struct sock_filter result[10];
 	unsigned int size;
 	long nr = 42;
 	struct sock_filter expected[] = {
@@ -53,11 +53,13 @@ START_TEST(test_single_instr)
 	};
 
 	filter_notify(nr);
+	filter_flush_args(nr);
 
 	filter_write(tfilter);
-	size = read_filter(filter, tfilter);
-	ck_assert_uint_eq(size, ARRAY_SIZE(expected));
-	ck_assert(filter_eq(expected, filter, ARRAY_SIZE(expected)));
+	size = read_filter(result, tfilter);
+
+	bpf_disasm_all(result, size);
+	ck_assert(filter_eq(expected, result, ARRAY_SIZE(expected)));
 }
 END_TEST
 
@@ -65,12 +67,12 @@ START_TEST(test_single_instr_two_args)
 {
 	unsigned int size;
 	long nr = 42;
-	struct bpf_arg a1 = { .cmp = EQ,
-			      .value = { .v32 = 0x123 },
-			      .type = BPF_U32 };
-	struct bpf_arg a2 = { .cmp = EQ,
-			      .value = { .v32 = 0x321 },
-			      .type = BPF_U32 };
+	struct bpf_field a1 = {
+		.arg = 1, .cmp = EQ, .value = { .v32 = 0x123 }, .type = BPF_U32
+	};
+	struct bpf_field a2 = {
+		.arg = 2, .cmp = EQ, .value = { .v32 = 0x321 }, .type = BPF_U32
+	};
 	struct sock_filter result[20];
 	struct sock_filter expected[] = {
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
@@ -85,7 +87,7 @@ START_TEST(test_single_instr_two_args)
 		/* l5 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 		/* l6 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 		/* l7 */ LOAD(offsetof(struct seccomp_data, args[1])),
-		/* l8 */ EQ(0x123, 0, 2),
+		/* l8 */ EQ(0x123, 0, 3),
 		/* l9 */ LOAD(offsetof(struct seccomp_data, args[2])),
 		/* l10 */ EQ(0x321, 0, 1),
 		/* l11 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
@@ -93,14 +95,14 @@ START_TEST(test_single_instr_two_args)
 	};
 
 	filter_notify(nr);
-	filter_add_arg(1, a1);
-	filter_add_arg(2, a2);
-	filter_flush_args();
+	filter_add_check(&a1);
+	filter_add_check(&a2);
+	filter_flush_args(nr);
 
 	filter_write(tfilter);
 	size = read_filter(result, tfilter);
 
-	ck_assert_uint_eq(size, ARRAY_SIZE(expected));
+	bpf_disasm_all(result, size);
 	ck_assert(filter_eq(expected, result, ARRAY_SIZE(expected)));
 }
 END_TEST
@@ -127,18 +129,21 @@ START_TEST(test_two_instr)
 	};
 	struct sock_filter result[30];
 	filter_notify(42);
+	filter_flush_args(42);
 	filter_notify(49);
+	filter_flush_args(49);
 
 	filter_write(tfilter);
 	size = read_filter(result, tfilter);
 
-	ck_assert_uint_eq(size, ARRAY_SIZE(expected));
+	bpf_disasm_all(result, size);
 	ck_assert(filter_eq(expected, result, ARRAY_SIZE(expected)));
 }
 END_TEST
 
 START_TEST(test_multiple_instr_no_args)
 {
+	unsigned long nrs[] = { 42, 43, 44, 45, 46 };
 	unsigned int size;
 	struct sock_filter expected[] = {
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
@@ -170,16 +175,14 @@ START_TEST(test_multiple_instr_no_args)
 	};
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 
-	filter_notify(42);
-	filter_notify(43);
-	filter_notify(44);
-	filter_notify(45);
-	filter_notify(46);
-
+	for(unsigned int i = 0; i < ARRAY_SIZE(nrs); i++) {
+		filter_notify(nrs[i]);
+		filter_flush_args(nrs[i]);
+	}
 	filter_write(tfilter);
 	size = read_filter(result, tfilter);
 
-	ck_assert_uint_eq(size, ARRAY_SIZE(expected));
+	bpf_disasm_all(result, size);
 	ck_assert(filter_eq(expected, result, ARRAY_SIZE(expected)));
 }
 END_TEST
@@ -187,12 +190,12 @@ END_TEST
 START_TEST(test_multiple_instr_with_args)
 {
 	unsigned int size;
-	struct bpf_arg a1 = { .cmp = EQ,
-			      .value = { .v32 = 0x123 },
-			      .type = BPF_U32 };
-	struct bpf_arg a2 = { .cmp = EQ,
-			      .value = { .v32 = 0x321 },
-			      .type = BPF_U32 };
+	struct bpf_field a1 = {
+		.arg = 1, .cmp = EQ, .value = { .v32 = 0x123 }, .type = BPF_U32
+	};
+	struct bpf_field a2 = {
+		.arg = 2, .cmp = EQ, .value = { .v32 = 0x321 }, .type = BPF_U32
+	};
 	struct sock_filter expected[] = {
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 				  (offsetof(struct seccomp_data, arch))),
@@ -222,14 +225,14 @@ START_TEST(test_multiple_instr_with_args)
 		/* l17 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 		/* ------- args ---------- */
 		/* l18 */ LOAD(offsetof(struct seccomp_data, args[1])),
-		/* l19 */ EQ(0x123, 0, 2),
+		/* l19 */ EQ(0x123, 0, 3),
 		/* l20 */ LOAD(offsetof(struct seccomp_data, args[2])),
 		/* l21 */ EQ(0x321, 0, 1),
 		/* l22 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 		/* l23 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 		/* ----- end call42 ------ */
 		/* l24 */ LOAD(offsetof(struct seccomp_data, args[1])),
-		/* l25 */ EQ(0x123, 0, 2),
+		/* l25 */ EQ(0x123, 0, 3),
 		/* l26 */ LOAD(offsetof(struct seccomp_data, args[2])),
 		/* l27 */ EQ(0x321, 0, 1),
 		/* l28 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
@@ -238,21 +241,21 @@ START_TEST(test_multiple_instr_with_args)
 	};
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 	filter_notify(42);
-	filter_add_arg(1, a1);
-	filter_add_arg(2, a2);
-	filter_flush_args();
+	filter_add_check(&a1);
+	filter_add_check(&a2);
+	filter_flush_args(42);
 	filter_notify(43);
 	filter_notify(44);
 	filter_notify(45);
-	filter_add_arg(1, a1);
-	filter_add_arg(2, a2);
-	filter_flush_args();
+	filter_add_check(&a1);
+	filter_add_check(&a2);
+	filter_flush_args(45);
 	filter_notify(46);
 
 	filter_write(tfilter);
 	size = read_filter(result, tfilter);
 
-	ck_assert_uint_eq(size, ARRAY_SIZE(expected));
+	bpf_disasm_all(result, size);
 	ck_assert(filter_eq(expected, result, ARRAY_SIZE(expected)));
 }
 END_TEST
@@ -260,12 +263,12 @@ END_TEST
 START_TEST(test_multiple_instance_same_instr)
 {
 	unsigned int size;
-	struct bpf_arg a1 = { .cmp = EQ,
-			      .value = { .v32 = 0x123 },
-			      .type = BPF_U32 };
-	struct bpf_arg a2 = { .cmp = EQ,
-			      .value = { .v32 = 0x321 },
-			      .type = BPF_U32 };
+	struct bpf_field a1 = {
+		.arg = 1, .cmp = EQ, .value = { .v32 = 0x123 }, .type = BPF_U32
+	};
+	struct bpf_field a2 = {
+		.arg = 2, .cmp = EQ, .value = { .v32 = 0x321 }, .type = BPF_U32
+	};
 	struct sock_filter expected[] = {
 		/* l0 */ BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
 				  (offsetof(struct seccomp_data, arch))),
@@ -299,38 +302,40 @@ START_TEST(test_multiple_instance_same_instr)
 		/* l20 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 		/* l21 */ LOAD(offsetof(struct seccomp_data, args[2])),
 		/* l22 */ EQ(0x321, 0, 1),
-		/* l23 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
-		/* l24 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+		/* l24 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
+		/* l23 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 		/* ----- end call42 ------ */
 		/* l25 */ LOAD(offsetof(struct seccomp_data, args[1])),
 		/* l26 */ EQ(0x123, 0, 1),
-		/* l27 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
+		/* l24 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
 		/* l28 */ LOAD(offsetof(struct seccomp_data, args[2])),
 		/* l29 */ EQ(0x321, 0, 1),
-		/* l30 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
-		/* l31 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+		/* l31 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF),
+		/* l30 */ BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 		/* ----- end call45 ------ */
 	};
 	struct sock_filter result[sizeof(expected) / sizeof(expected[0]) + 10];
 
 	filter_notify(42);
-	filter_add_arg(1, a1);
-	filter_flush_args();
-	filter_add_arg(2, a2);
-	filter_flush_args();
+	filter_add_check(&a1);
+	filter_flush_args(42);
+	filter_notify(42);
+	filter_add_check(&a2);
+	filter_flush_args(42);
 	filter_notify(43);
 	filter_notify(44);
 	filter_notify(45);
-	filter_add_arg(1, a1);
-	filter_flush_args();
-	filter_add_arg(2, a2);
-	filter_flush_args();
+	filter_add_check(&a1);
+	filter_flush_args(45);
+	filter_notify(45);
+	filter_add_check(&a2);
+	filter_flush_args(45);
 	filter_notify(46);
 
 	filter_write(tfilter);
 	size = read_filter(result, tfilter);
 
-	ck_assert_uint_eq(size, ARRAY_SIZE(expected));
+	bpf_disasm_all(result, size);
 	ck_assert(filter_eq(expected, result, ARRAY_SIZE(expected)));
 }
 END_TEST

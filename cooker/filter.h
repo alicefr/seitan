@@ -70,5 +70,5 @@ void filter_notify(long nr);
 void filter_needs_deref(void);
 void filter_add_check(struct bpf_field *field);
 void filter_write(const char *path);
-
+void filter_flush_args(long nr);
 #endif

@@ -58,7 +58,7 @@ static inline void *test_gluten_write_ptr(struct gluten *g,
 		ck_assert_ptr_nonnull(p);                        \
 		memcpy(&ref, p, sizeof(ref));                    \
 	} while (0)
-
+#define NS_NUM CONTEXT_TYPE_MAX - 3
 struct args_target {
         long ret;
         int err;
@@ -67,7 +67,7 @@ struct args_target {
         int fd;
         int nr;
 	bool filter_args[6];
-	struct bpf_arg args[6];
+	struct bpf_field bpf_fields[6];
 	void *targs[6];
 	void *tclone;
 	bool ns[NS_NUM];

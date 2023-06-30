@@ -559,8 +559,6 @@ void emit_bpf_arg(int index, enum type type, union value v, union value mask,
 	 */
 	if (mask.v_num)
 		bpf.cmp = (cmp == CMP_EQ) ? AND_NE : AND_EQ;
-	else
-		bpf.cmp = (cmp == CMP_EQ) ? NE : EQ;
 
 	bpf.arg = index;
 
