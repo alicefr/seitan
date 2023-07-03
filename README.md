@@ -11,7 +11,7 @@ Author: Stefano Brivio <sbrivio@redhat.com>
 
 <div style="display: grid; grid-template-columns: 60% auto;">
 <div>
-  <img src="/static/seitan.svg" alt="seitan diagram">
+  <img src="/static/seitan.svg" alt="seitan diagram" width="98%">
 </div>
 <div style="text-align: justify">
 
