@@ -80,4 +80,5 @@ build-error-checks: test_errors.c $(SRCS_ERROR) $(HEADERS_ERROR)
 test-error-checks: build-error-checks
 	./error_checks
 clean:
-	rm -f operations  op-call filter filter-build
+	rm -f operations  op-call filter \
+		filter-build error_checks

@@ -32,12 +32,12 @@ static int generate_install_filter(struct args_target *at)
 	filter_notify(at->nr);
 	for (unsigned int i = 0; i < 6; i++) {
 		if (at->filter_args[i]) {
-			filter_add_arg(i, at->args[i]);
+			filter_add_check(&at->bpf_fields[i]);
 			has_arg = true;
 		}
 	}
 	if(has_arg)
-		filter_flush_args();
+		filter_flush_args(at->nr);
 	filter_write(tfilter);
 	size = read_filter(filter, tfilter);
 	fprintf(stderr, "size %d\n", size);
@@ -58,37 +58,57 @@ START_TEST(no_args)
 }
 END_TEST
 
+static void add_filter_arg32(struct args_target *at, int pos, uint32_t v,
+			     uint32_t op2, enum bpf_cmp cmp)
+{
+	at->filter_args[pos] = true;
+	at->bpf_fields[pos].arg = pos;
+	at->bpf_fields[pos].value.v32 = v;
+	at->bpf_fields[pos].op2.v32 = op2;
+	at->bpf_fields[pos].type = BPF_U32;
+	at->bpf_fields[pos].cmp = cmp;
+}
+
+static void add_filter_arg64(struct args_target *at, int pos, uint64_t v,
+			     uint64_t op2, enum bpf_cmp cmp)
+{
+	at->filter_args[pos] = true;
+	at->bpf_fields[pos].arg = pos;
+	at->bpf_fields[pos].value.v64 = v;
+	at->bpf_fields[pos].op2.v64 = op2;
+	at->bpf_fields[pos].type = BPF_U64;
+	at->bpf_fields[pos].cmp = cmp;
+}
+
+
 struct t32bit_getsid_data_t {
 	enum bpf_cmp cmp;
 	int v;
+	int op;
 };
 
-struct t32bit_getsid_data_t t32bit_getsid_data[] = { { EQ, 0 },
-						     { GT, 0x100 },
-						     { LE, 0x1 },
-						     { GE, 0x10 },
-						     { LE, 0x10 } };
+struct t32bit_getsid_data_t t32bit_getsid_data[] = {
+	{ EQ, 0x1, 0x1 },   { GT, 0x10, 0x1 }, { LT, 0x1, 0x10 },
+	{ LE, 0x1, 0x10 },  { GE, 0x10, 0x1 }, { GE, 0x10, 0x10 },
+	{ LE, 0x10, 0x10 },
+};
 
 START_TEST(test_with_getsid)
 {
 	enum bpf_cmp cmp = t32bit_getsid_data[_i].cmp;
 	int v = t32bit_getsid_data[_i].v;
-	int id = 0x10;
+	int op = t32bit_getsid_data[_i].op;
+
 	at = mmap(NULL, sizeof(struct args_target), PROT_READ | PROT_WRITE,
 		  MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	at->check_fd = false;
 	at->nr = __NR_getsid;
 	set_args_no_check(at);
-	at->filter_args[0] = true;
-	at->args[0].type = BPF_U32;
-	at->args[0].value.v32 = id;
-	at->args[0].cmp = cmp;
-	if (cmp == EQ)
-		at->targs[0] = (void *)(long)id;
-	else
-		at->targs[0] = (void *)(long)v;
+	at->targs[0] = (void *)(long)v;
+	add_filter_arg32(at, 0, op, 0, cmp);
 	at->install_filter = generate_install_filter;
 	setup();
+	mock_syscall_target();
 }
 END_TEST
 
@@ -101,16 +121,12 @@ START_TEST(with_getpriority)
 	at->check_fd = false;
 	at->nr = __NR_getpriority;
 	set_args_no_check(at);
-	at->filter_args[0] = true;
-	at->args[0].value.v32 = which;
-	at->args[0].type = BPF_U32;
-	at->args[0].cmp = EQ;
-	at->args[1].value.v32 = who;
-	at->filter_args[1] = true;
-	at->args[1].type = BPF_U32;
-	at->args[1].cmp = EQ;
-	at->targs[0] = (void *)(long)which;
-	at->targs[1] = (void *)(long)who;
+
+	at->targs[0] = (void*)(long)which;
+	add_filter_arg32(at, 0, which, 0, EQ);
+	at->targs[1] = (void*)(long)who;
+	add_filter_arg32(at, 1, who, 0, EQ);
+
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -124,6 +140,7 @@ static int target_lseek()
 	/* Open the device on the target, but the arg0 isn't in the filter */
 	ck_assert_int_ge(fd, 0);
 	at->targs[0] = (void *)(long)fd;
+
 	return target();
 }
 
@@ -135,10 +152,12 @@ struct t64b_lseek_data_t {
 
 struct t64b_lseek_data_t t64b_lseek_data[] = {
 	{ EQ, 0x1, 0 },	   { EQ, 0x0000000100000000, 0 },
-	{ GT, 0x1, 0x10 }, { GT, 0x100000000, 0x200000000 },
-	{ LT, 0x10, 0x1 }, { LT, 0x200000000, 0x100000000 },
+	{ GT, 0x10, 0x1 }, { GT, 0x200000000, 0x100000000 },
+	{ LT, 0x1, 0x10 }, { LT, 0x100000000, 0x200000000 },
 	{ GE, 0x1, 0x1 },  { GE, 0x100000000, 0x100000000 },
+	{ GE, 0x2, 0x1 },  { GE, 0x200000000, 0x100000000 },
 	{ LE, 0x1, 0x1 },  { LE, 0x200000000, 0x200000000 },
+	{ LE, 0x1, 0x2 },  { LE, 0x100000000, 0x200000000 },
 };
 
 START_TEST(test_lseek)
@@ -153,14 +172,12 @@ START_TEST(test_lseek)
 	at->nr = __NR_lseek;
 	at->target = target_lseek;
 	set_args_no_check(at);
-	at->filter_args[1] = true;
-	at->args[1].value.v64 = offset;
-	at->args[1].type = BPF_U64;
-	at->args[1].cmp = cmp;
+	at->targs[1] = (void*)(long)offset;
 	if (cmp == EQ)
-		at->targs[1] = (void *)(long)offset;
+		add_filter_arg64(at, 1, offset, 0, cmp);
 	else
-		at->targs[1] = (void *)(long)v;
+		add_filter_arg64(at, 1, v, 0, cmp);
+
 	at->install_filter = generate_install_filter;
 	setup();
 	mock_syscall_target();
@@ -193,11 +210,7 @@ START_TEST(test_open_and)
 	at->check_fd = false;
 	at->nr = __NR_open;
 	set_args_no_check(at);
-	at->filter_args[1] = true;
-	at->args[1].value.v32 = res;
-	at->args[1].op2.v32 = mask;
-	at->args[1].type = BPF_U32;
-	at->args[1].cmp = cmp;
+	add_filter_arg32(at, 1, res, mask, cmp);
 	at->targs[0] = (void *)(long)&pathname;
 	at->targs[1] = (void *)(long)v;
 	at->install_filter = generate_install_filter;
@@ -232,14 +245,11 @@ START_TEST(test_prctl_and)
 	at->check_fd = false;
 	at->nr = __NR_prctl;
 	set_args_no_check(at);
-	at->filter_args[1] = true;
-	at->args[1].value.v64 = res;
-	at->args[1].op2.v64 = mask;
-	at->args[1].type = BPF_U64;
-	at->args[1].cmp = cmp;
 	at->targs[0] = (void *)(long)1;
 	at->targs[1] = (void *)(long)v;
+	add_filter_arg64(at, 1, res, mask, cmp);
 	at->install_filter = generate_install_filter;
+
 	setup();
 	mock_syscall_target();
 }
