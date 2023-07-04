@@ -29,12 +29,15 @@ cooker:
 eater:
 	$(MAKE) -C eater
 
+.PHONY: seitan
 seitan: $(SRCS) $(HEADERS)
 	$(CC) $(CFLAGS) -o $(BIN) $(SRCS)
 
+.PHONY: debug
 debug:
 	$(MAKE) -C debug
 
+.PHONY: clean
 clean:
 	rm -f $(BIN)
 	$(MAKE) -C cooker clean

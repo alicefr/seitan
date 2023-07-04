@@ -9,7 +9,7 @@
 
 SRCS := bpf_dbg.c  disasm.c
 HEADERS := disasm.h
-BIN := $(OUTDIR)bpf_dbg
+BIN := $(OUTDIR)/bpf_dbg
 CFLAGS += -Wall -Wextra -pedantic
 
 # TODO: remove this part together with the build binary
@@ -25,11 +25,6 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
 bpf_dbg: $(SRCS) $(HEADERS)
 	$(CC) $(CFLAGS) -o $(BIN) $(SRCS)
-
-# TODO: remove when cooker is ready
-build: build.c ../cooker/filter.c ../cooker/filter.h ../common/numbers.h
-	$(CC) $(CFLAGS) -I../common -I../cooker -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)\
-	       	-o $(OUTDIR)build ../cooker/filter.c build.c
 
 all: $(BIN)
 
