@@ -414,7 +414,7 @@ int op_fd(const struct seccomp_notif *req, int notifier,
 	if (!desc)
 		return -1;
 
-	resp.flags = SECCOMP_ADDFD_FLAG_SETFD;
+	resp.flags = desc->setfd ? SECCOMP_ADDFD_FLAG_SETFD : 0;
 	resp.flags |= desc->do_return ? SECCOMP_ADDFD_FLAG_SEND : 0;
 	resp.newfd_flags = desc->cloexec ? O_CLOEXEC : 0;
 	resp.id = req->id;
