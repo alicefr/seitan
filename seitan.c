@@ -241,6 +241,7 @@ loop:
 			die("error on notifier");
 	}
 
+	memset(req, 0, sizeof(*req));
 	if (ioctl(notifier, SECCOMP_IOCTL_NOTIF_RECV, req) < 0)
 		die("receiving seccomp notification: %s", strerror(errno));
 
