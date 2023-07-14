@@ -93,7 +93,6 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 	c->err = 0;
 	c->ret = -1;
 	c->nr = s->nr;
-
 	for (i = 0; i < s->arg_count; i++) {
 		/* If arg is a pointer then need to calculate the absolute
 		 * address and the value of arg is the relative offset of the actual
@@ -237,8 +236,8 @@ static int execute_syscall(void *args)
 	c->ret = syscall(c->nr, c->args[0], c->args[1], c->args[2], c->args[3],
 			 c->args[4], c->args[5]);
 	c->err = errno;
-	debug("  execute syscall: ret=%ld errno=%d%s%s", c->ret, c->err,
-	      *c->cwd ? " cwd=" : "", *c->cwd ? c->cwd : "");
+	debug("  execute syscall %ld: ret=%ld errno=%d%s%s", c->nr, c->ret,
+	      c->err, *c->cwd ? " cwd=" : "", *c->cwd ? c->cwd : "");
 	if (c->ret < 0) {
 		perror("  syscall");
 		exit(EXIT_FAILURE);
@@ -379,6 +378,9 @@ int op_return(const struct seccomp_notif *req, int notifier, struct gluten *g,
 {
 	const struct return_desc *desc = gluten_ptr(&req->data, g, op->desc);
 	struct seccomp_notif_resp resp;
+
+	if(desc == NULL)
+		ret_err(-1, "empty description for return value");
 
 	resp.id = req->id;
 	if (desc->cont) {
