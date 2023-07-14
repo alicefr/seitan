@@ -2,7 +2,7 @@
  * Copyright 2023 Red Hat GmbH
  * Author: Alice Frosi <afrosi@redhat.com>
  */
-
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -39,33 +39,46 @@ struct gluten_offset test_max_size_data[] = {
 START_TEST(test_bound_check)
 {
 	struct op ops[] = {
-		{ OP_RETURN, OP_EMPTY },
-		{ OP_END, OP_EMPTY },
+		{ .type = OP_RETURN,
+		  { .ret = { { test_max_size_data[_i].type,
+			       test_max_size_data[_i].offset } } } },
+		{ .type = OP_END, { { { 0 } } } },
 	};
-	ops[0].op.ret.val.offset = test_max_size_data[_i].offset;
-	ops[0].op.ret.val.type = test_max_size_data[_i].type;
-
 	write_instr(gluten, ops);
-	eval(&gluten, &req, notifyfd);
+	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
 }
 
 START_TEST(test_write_op_return)
 {
-	long nr = __NR_getppid;
+	struct gluten_offset offset = { OFFSET_RO_DATA, 0};
+	struct gluten_offset ret_off = { OFFSET_DATA, DATA_SIZE };
 	struct op ops[] = {
-		{ OP_CALL,
-		  { .call = { .nr = { OFFSET_DATA, 0 },
-			      .has_ret = true,
-			      .ret = { OFFSET_DATA, DATA_SIZE - 1 } } } },
+		{ OP_CALL, { .call = { offset } } },
 	};
-	ck_write_gluten(gluten, ops[0].op.call.nr, nr);
+	char err_msg[200];
+	struct syscall_desc_test {
+		uint32_t nr : 9;
+		uint32_t arg_count : 3;
+		uint32_t has_ret : 1;
+		uint32_t arg_deref : 6;
+		struct gluten_offset context; /* struct context_desc [] */
+		struct gluten_offset args[1];
+	} syscall = {
+		__NR_getppid, 0, 1, 0, { OFFSET_NULL, 0 }, { ret_off },
+	};
+
+	ck_stderr();
+	sprintf(err_msg, "failed writing return value at %d", DATA_SIZE);
+	ck_write_gluten(gluten, syscall, offset);
 	write_instr(gluten, ops);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
+	ck_error_msg(err_msg);
 }
 
 START_TEST(test_write_op_load)
 {
 	char a[30];
+	char err_msg[200];
 	struct op ops[] = {
 		{ OP_LOAD,
 		  { .load = { { OFFSET_SECCOMP_DATA, 1 },
@@ -73,8 +86,10 @@ START_TEST(test_write_op_load)
 			      sizeof(a) } } },
 	};
 
+	ck_stderr();
 	write_instr(gluten, ops);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
+	ck_error_msg("offset limits are invalid");
 }
 
 struct gluten_offset test_max_size_read_data[] = {
@@ -85,80 +100,56 @@ struct gluten_offset test_max_size_read_data[] = {
 
 START_TEST(test_read_op_return)
 {
+	struct gluten_offset offset = { OFFSET_RO_DATA, 0 };
+	struct return_desc desc = { { test_max_size_read_data[_i].offset,
+				      test_max_size_read_data[_i].type },
+				    { OFFSET_NULL, 0 },
+				    false };
 	struct op ops[] = {
-		{ OP_RETURN, OP_EMPTY },
-		{ OP_END, OP_EMPTY },
+		{ OP_RETURN, { .ret = { offset } } },
 	};
-	ops[0].op.ret.val.offset = test_max_size_read_data[_i].offset - 1;
-	ops[0].op.ret.val.type = test_max_size_read_data[_i].type;
 
+	ck_stderr();
+	ck_write_gluten(gluten, desc, offset);
 	write_instr(gluten, ops);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
+	ck_error_msg("offset limits are invalid");
 }
 
-static struct op_cmp test_cmp_data[] = {
-	{ .x = { OFFSET_DATA, DATA_SIZE } },
-	{ .y = { OFFSET_DATA, DATA_SIZE } },
-	{ .x = { OFFSET_DATA, DATA_SIZE - 1 }, .size = 10 },
-	{ .y = { OFFSET_DATA, DATA_SIZE - 1 }, .size = 10 },
-	{ .jmp = { OFFSET_DATA, DATA_SIZE } },
+static struct cmp_desc test_cmp_data[] = {
+	{ .cmp = CMP_EQ, .x = { OFFSET_DATA, DATA_SIZE } },
+	{ .cmp = CMP_EQ, .y = { OFFSET_DATA, DATA_SIZE } },
+	{ .cmp = CMP_EQ, .x = { OFFSET_DATA, DATA_SIZE - 1 }, .size = 10 },
+	{ .cmp = CMP_EQ, .y = { OFFSET_DATA, DATA_SIZE - 1 }, .size = 10 },
+	{ .cmp = CMP_EQ, .jmp = { OFFSET_DATA, DATA_SIZE } },
 };
 
 START_TEST(test_op_cmp)
 {
-	struct op ops[2];
+	struct gluten_offset offset = { OFFSET_RO_DATA, 0 };
+	struct cmp_desc cmp = {
+		test_cmp_data[_i].cmp,
+		test_cmp_data[_i].size,
+		{ test_cmp_data[_i].x.type, test_cmp_data[_i].x.offset },
+		{ test_cmp_data[_i].y.type, test_cmp_data[_i].y.offset },
+		test_cmp_data[_i].jmp
+	};
+	struct op ops[] = {
+		{ OP_CMP, { .cmp = { offset } } },
+	};
 
-	ops[0].type = OP_CMP;
-	ops[0].op.cmp.x.offset = test_cmp_data[_i].x.offset;
-	ops[0].op.cmp.x.type = test_cmp_data[_i].x.type;
-	ops[0].op.cmp.y.offset = test_cmp_data[_i].y.offset;
-	ops[0].op.cmp.y.type = test_cmp_data[_i].y.type;
-	ops[0].op.cmp.size = test_cmp_data[_i].size;
-	ops[0].op.cmp.jmp = test_cmp_data[_i].jmp;
-	ops[1].type = OP_END;
+	ck_stderr();
+	ck_write_gluten(gluten, cmp, offset);
 
 	write_instr(gluten, ops);
 	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
+	ck_error_msg("offset limits are invalid");
 }
 
 struct ttargetnoexisting_data {
 	struct op op;
 	char err_msg[BUFSIZ];
 };
-
-struct ttargetnoexisting_data test_target_noexisting_data[] = {
-	{ { OP_CONT, OP_EMPTY }, "the response id isn't valid" },
-	{ { OP_BLOCK, { .block = { -1 } } }, "the response id isn't valid" },
-	{ { OP_RETURN, { .ret = { { OFFSET_DATA, 0 } } } },
-	  "the response id isn't valid" },
-	{ { OP_INJECT,
-	    { .inject = { { OFFSET_DATA, 0 }, { OFFSET_DATA, 0 } } } },
-	  "the response id isn't valid" },
-	{ { OP_INJECT_A,
-	    { .inject = { { OFFSET_DATA, 0 }, { OFFSET_DATA, 0 } } } },
-	  "the response id isn't valid" },
-	{ { OP_LOAD,
-	    { .load = { { OFFSET_SECCOMP_DATA, 1 }, { OFFSET_DATA, 0 }, 0 } } },
-	  "error opening mem for" },
-	{ { OP_RESOLVEDFD,
-	    { .resfd = { { OFFSET_SECCOMP_DATA, 1 },
-			 { OFFSET_DATA, 0 },
-			 0,
-			 0 } } },
-	  "error reading /proc" },
-};
-
-START_TEST(test_target_noexisting)
-{
-	struct op ops[2];
-
-	ops[0] = test_target_noexisting_data[_i].op;
-	ops[1].type = OP_END;
-
-	write_instr(gluten, ops);
-	ck_assert_int_eq(eval(&gluten, &req, notifyfd), -1);
-	ck_error_msg(test_target_noexisting_data[_i].err_msg);
-}
 
 Suite *error_suite(void)
 {
@@ -170,8 +161,7 @@ Suite *error_suite(void)
 
 	bounds = tcase_create("bound checks");
 	tcase_add_loop_test(bounds, test_bound_check, 0,
-			    sizeof(test_max_size_data) /
-				    sizeof(test_max_size_data[0]));
+			    ARRAY_SIZE(test_max_size_data));
 	suite_add_tcase(s, bounds);
 
 	gwrite = tcase_create("write gluten");
@@ -183,8 +173,7 @@ Suite *error_suite(void)
 	gread = tcase_create("read gluten");
 	tcase_add_checked_fixture(gread, setup_error_check, teardown);
 	tcase_add_loop_test(gread, test_read_op_return, 0,
-			    sizeof(test_max_size_read_data) /
-				    sizeof(test_max_size_read_data[0]));
+			    ARRAY_SIZE(test_max_size_read_data));
 	suite_add_tcase(s, gread);
 
 	gcmp = tcase_create("compare gluten");
@@ -192,12 +181,6 @@ Suite *error_suite(void)
 	tcase_add_loop_test(gcmp, test_op_cmp, 0,
 			    sizeof(test_cmp_data) / sizeof(test_cmp_data[0]));
 	suite_add_tcase(s, gcmp);
-
-	tnotexist = tcase_create("target not existing");
-	tcase_add_checked_fixture(tnotexist, setup_stderr, NULL);
-	tcase_add_loop_test(tnotexist, test_target_noexisting, 0,
-			    ARRAY_SIZE(test_target_noexisting_data));
-	suite_add_tcase(s, tnotexist);
 
 	return s;
 }

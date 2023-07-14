@@ -25,7 +25,7 @@
 static inline void *test_gluten_write_ptr(struct gluten *g,
 					  const struct gluten_offset x)
 {
-	ck_assert_msg(is_offset_valid(x), "offset out of bounds");
+	ck_assert_msg(is_offset_valid(x), "offset %d out of bounds", x.offset);
 
 	switch (x.type) {
 	case OFFSET_DATA:
@@ -45,18 +45,18 @@ static inline void *test_gluten_write_ptr(struct gluten *g,
 		memcpy(test_gluten_write_ptr(&gluten, x), &ops, sizeof(ops)); \
 	} while (0)
 
-#define ck_write_gluten(gluten, value, ref)                            \
-	do {                                                           \
-		void *p = test_gluten_write_ptr(&gluten, value);       \
-		ck_assert_ptr_nonnull(p);                              \
-		memcpy(p, &ref, sizeof(ref));                          \
+#define ck_write_gluten(gluten, value, offset)                    \
+	do {                                                      \
+		void *p = test_gluten_write_ptr(&gluten, offset); \
+		ck_assert_ptr_nonnull(p);                         \
+		memcpy(p, &value, sizeof(value));                 \
 	} while (0)
 
 #define ck_read_gluten(gluten, value, ref)                       \
 	do {                                                     \
 		void *p = test_gluten_write_ptr(&gluten, value); \
 		ck_assert_ptr_nonnull(p);                        \
-		memcpy(&ref, p, sizeof(ref));                    \
+		memcpy(&value, p, sizeof(value));                \
 	} while (0)
 #define NS_NUM CONTEXT_TYPE_MAX - 3
 struct args_target {
@@ -102,7 +102,6 @@ void set_args_no_check(struct args_target *at);
 void check_target_result_nonegative();
 void ck_error_msg(char *s);
 void ck_stderr();
-void ck_stdout();
 int install_single_syscall(long nr);
 int read_filter(struct sock_filter filter[], char *file);
 #endif /* TESTUTIL_H */

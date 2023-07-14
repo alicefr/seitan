@@ -35,22 +35,10 @@ struct args_target *at;
 int pipefd[2];
 pid_t pid;
 char path[PATH_MAX] = "/tmp/test-seitan";
+/* TODO: randomize the outfile name */
+char logfile[PATH_MAX] = "/tmp/seitan-test.log";
 struct gluten gluten;
-char stderr_buff[BUFSIZ];
-char stdout_buff[BUFSIZ];
-
-#define logfn(name)                                                     \
-void name(const char *format, ...) {                                    \
-        va_list args;                                                   \
-                                                                        \
-        va_start(args, format);                                         \
-        (void)vfprintf(stderr, format, args);                           \
-        va_end(args);                                                   \
-        if (format[strlen(format)] != '\n')                             \
-                fprintf(stderr, "\n");                                  \
-}
-
-logfn(debug)
+FILE *fperr;
 
 int install_single_syscall(long nr)
 {
@@ -291,27 +279,45 @@ void setup()
 		      (req.data).nr);
 }
 
+static void teardown_stderr()
+{
+	fclose(fperr);
+	unlink(logfile);
+}
+
 void teardown()
 {
 	if (at != NULL)
 		munmap(at, sizeof(struct args_target));
+	if (fperr != NULL)
+		teardown_stderr();
 	unlink(path);
 }
 
 void ck_stderr()
 {
-	setbuf(stderr, stderr_buff);
-}
-
-void ck_stdout()
-{
-	setbuf(stdout, stdout_buff);
+	fprintf(stderr, "Redirect stderr to %s\n", logfile);
+	fperr = freopen (logfile, "a+", stderr);
 }
 
 void ck_error_msg(char *s)
 {
-	ck_assert_msg(strstr(stderr_buff, s) != NULL, "err=\"%s\" doesn't contain \"%s\" ",
-		      stderr_buff, s);
+	char line[256];
+	FILE *file;
+
+	if (fperr == NULL)
+		ck_abort_msg("need to call ck_stderr");
+
+	fflush(stderr);
+	file = fopen(logfile, "r");
+	while (fgets(line, sizeof(line), file)) {
+		if(strstr(line, s) != NULL) {
+			return;
+		}
+	}
+	fclose(file);
+
+	ck_abort_msg("doesn't find \"%s\"", s);
 }
 
 int read_filter(struct sock_filter filter[], char *file)

@@ -13,7 +13,7 @@ HEADERS_FILTER_BUILD := $(COOKER_DIR)/filter.h $(DBG_DIR)/disasm.h $(COMMON_DIR)
 			$(COMMON_DIR)/util.h
 
 SRCS_FILTER := $(COOKER_DIR)/filter.c $(COMMON_DIR)/common.c util.c \
-	       $(DBG_DIR)/disasm.c
+	       $(DBG_DIR)/disasm.c $(COMMON_DIR)/util.c
 HEADERS_FILTER := $(COOKER_DIR)/filter.h $(COMMON_DIR)/common.h $(COMMON_DIR)/util.h \
 		  $(DBG_DIR)/disasm.h testutil.h
 
@@ -38,7 +38,7 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
-CFLAGS += -Wall -Wextra -pedantic
+CFLAGS += -Wall -Wextra -pedantic -std=c99
 CFLAGS += -I$(MAIN_DIR)  -I$(DBG_DIR) -I$(COMMON_DIR) -I$(COOKER_DIR)
 CFLAGS += -lcheck
 CFLAGS += -DSEITAN_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
