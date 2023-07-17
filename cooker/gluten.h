@@ -9,6 +9,11 @@
 #define COOKER
 #include <gluten.h>
 
+enum scmp_mode {
+	SCMP_FILTER,
+	SCMP_PROFILE,
+};
+
 struct gluten_arg_data {
 	struct gluten_offset offset;
 	size_t len;
@@ -37,6 +42,8 @@ struct gluten_ctx {
 	struct attr attrs[ATTRS_MAX];
 
 	struct arg *selected_arg[6];
+
+	enum scmp_mode mode;
 };
 
 /**
