@@ -17,20 +17,23 @@
 #include "gluten.h"
 #include "parse.h"
 #include "filter.h"
+#include "seccomp_profile.h"
 
 /* Cooker options */
 static struct option options[] = {
 	{ "input", required_argument, NULL, 'i' },
 	{ "gluten", required_argument, NULL, 'g' },
 	{ "filter", required_argument, NULL, 'f' },
-	{ "scmp-profile", required_argument, NULL, 'p' },
+	{ "scmp-out-prof", required_argument, NULL, 'p' },
+	{ "scmp-orig-prof", required_argument, NULL, 's' }, //??? is required
 };
 
 struct arguments {
 	char *input_file;
 	char *gluten_file;
 	char *filter_file;
-	char *scmp_profile_file;
+	char *scmp_prof_file;
+	char *orig_scmp_prof_file;
 };
 
 static void usage()
@@ -38,10 +41,11 @@ static void usage()
 	printf("seitan-cooker: generate the BPF filters or seccomp profile and the action byte code for seitan\n"
                "Example:  setain-cooker -i <input file> -g <gluten_file> -f <filter_file>\n"
                "Usage:\n"
-               "\t-i, --input:\tJSON input file\n"
-               "\t-g, --gluten:\tBytecode file for seitan action\n"
-               "\t-f, --filter:\tBPF filter file (cannot be used together with scmp-profile)\n"
-               "\t-p, --scmp-profile:\tSeccomp profile file (cannot be used together with filter)\n");
+               "\t-i, --input:\t\tJSON input file\n"
+               "\t-g, --gluten:\t\tBytecode file for seitan action\n"
+               "\t-f, --filter:\t\tBPF filter file (cannot be used together with scmp-profile)\n"
+               "\t-p, --scmp-prof:\tSeccomp profile file (cannot be used together with filter)\n"
+               "\t-s, --scmp-orig-prof:\tOriginal seccomp profile (ignored if used with filter)\n");
         exit(EXIT_FAILURE);
 }
 
@@ -51,7 +55,7 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 	int oc;
 	if (arguments == NULL)
 		usage();
-	while ((oc = getopt_long(argc, argv, ":i:g:f:p:", options,
+	while ((oc = getopt_long(argc, argv, ":i:g:f:p:s:", options,
 				 &option_index)) != -1) {
 		switch (oc) {
 		case 'i':
@@ -64,7 +68,10 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 			arguments->filter_file = optarg;
 			break;
 		case 'p':
-			arguments->scmp_profile_file = optarg;
+			arguments->scmp_prof_file = optarg;
+			break;
+		case 's':
+			arguments->orig_scmp_prof_file = optarg;
 			break;
 		default:
 			usage();
@@ -75,12 +82,12 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 		usage();
 	}
 	if (arguments->filter_file != NULL &&
-	    arguments->scmp_profile_file != NULL) {
+	    arguments->scmp_prof_file != NULL) {
 		err("the filter and scmp-profile options cannot be used together");
 		usage();
 	}
 	if (arguments->filter_file == NULL &&
-	    arguments->scmp_profile_file == NULL) {
+	    arguments->scmp_prof_file == NULL) {
 		err("select one of the options between filter and scmp-profile");
 		usage();
 	}
@@ -104,12 +111,22 @@ int main(int argc, char **argv)
 
 	parse(argc, argv, &arguments);
 
+	if (arguments.filter_file != NULL) {
+		g.mode = SCMP_FILTER;
+	} else {
+		g.mode = SCMP_PROFILE;
+		scmp_profile_init(arguments.orig_scmp_prof_file);
+	}
+
 	gluten_init(&g);
 
 	parse_file(&g, arguments.input_file);
 
 	gluten_write(&g, arguments.gluten_file);
-	filter_write(arguments.filter_file);
+	if (arguments.filter_file != NULL)
+		filter_write(arguments.filter_file);
+	else
+		scmp_profile_write(arguments.scmp_prof_file);
 
 	return 0;
 }

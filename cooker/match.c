@@ -18,7 +18,7 @@
 #include "util.h"
 
 #include "calls/net.h"
-
+#include "seccomp_profile.h"
 /**
  * arg_load() - Allocate and build bytecode for one syscall argument
  * @g:		gluten context
@@ -182,7 +182,7 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 			emit_cmp(g, cmp, masked, cmp_offset,
 				 gluten_size[f->type], jump);
 
-			emit_bpf_arg(index, f->type, cmpterm, set, cmp);
+			emit_bpf_arg(index, f->type, cmpterm, set, cmp, g->mode);
 			break;
 		}
 
@@ -213,7 +213,7 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 		emit_cmp(g, cmp, data_offset, const_offset,
 			 gluten_size[f->type], jump);
 
-		emit_bpf_arg(index, f->type, v, mask, cmp);
+		emit_bpf_arg(index, f->type, v, mask, cmp, g->mode);
 
 		break;
 	case GNU_DEV_MAJOR:
@@ -379,9 +379,17 @@ void handle_matches(struct gluten_ctx *g, JSON_Value *value)
 				debug("  Found description for %s", name);
 				emit_nr(g, emit_data(g, U64, 0, &v));
 
-				filter_notify(call->number);
+				if (g->mode == SCMP_FILTER)
+					filter_notify(call->number);
+				else
+					scmp_profile_notify(call->name);
+
 				parse_match(g, args, call->args);
-				filter_flush_args(call->number);
+
+				if (g->mode == SCMP_FILTER)
+					filter_flush_args(call->number);
+				else
+					scmp_profile_flush_args();
 
 				break;
 			}

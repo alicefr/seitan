@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <errno.h>
 
 #define BIT(n)			(1UL << (n))

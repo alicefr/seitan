@@ -14,6 +14,7 @@
 #include "filter.h"
 #include "util.h"
 #include "emit.h"
+#include "seccomp_profile.h"
 
 static const char *type_str[] = {
 	"UNDEF", "NONE",
@@ -549,8 +550,8 @@ static void gluten_link(struct gluten_ctx *g, enum jump_type type,
 	}
 }
 
-void emit_bpf_arg(int index, enum type type, union value v, union value mask,
-		  enum op_cmp_type cmp)
+static void emit_bpf_filter_arg(int index, enum type type, union value v,
+				union value mask, enum op_cmp_type cmp)
 {
 	struct bpf_field bpf;
 
@@ -573,6 +574,15 @@ void emit_bpf_arg(int index, enum type type, union value v, union value mask,
 	}
 
 	filter_add_check(&bpf);
+}
+
+void emit_bpf_arg(int index, enum type type, union value v, union value mask,
+		  enum op_cmp_type cmp, enum scmp_mode mode)
+{
+	if (mode == SCMP_FILTER)
+		emit_bpf_filter_arg(index, type, v, mask, cmp);
+	else
+		scmp_profile_add_check(index, v, mask, cmp);
 }
 
 void link_block(struct gluten_ctx *g)

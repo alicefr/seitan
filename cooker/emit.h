@@ -46,7 +46,7 @@ struct gluten_offset emit_data_or(struct gluten_ctx *g,
 				  struct gluten_offset offset,
 				  enum type type, union value *value);
 void emit_bpf_arg(int index, enum type type, union value v, union value mask,
-		  enum op_cmp_type cmp);
+		  enum op_cmp_type cmp, enum scmp_mode mode);
 void link_block(struct gluten_ctx *g);
 void link_match(struct gluten_ctx *g);
 void link_matches(struct gluten_ctx *g);
