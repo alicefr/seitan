@@ -28,6 +28,7 @@
 #include <sys/un.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <linux/netlink.h>
 #include <linux/connector.h>
 #include <linux/cn_proc.h>
@@ -48,12 +49,16 @@ static struct option options[] = {
 	{ "input", required_argument, NULL, 'i' },
 	{ "pid", optional_argument, NULL, 'p' },
 	{ "socket", optional_argument, NULL, 's' },
+	{ "socket-user", optional_argument, NULL, 'u' },
+	{ "socket-group", optional_argument, NULL, 'g' },
 };
 
 struct arguments {
 	char *input_file;
 	char *socket;
 	int pid;
+	uid_t uid;
+	gid_t gid;
 };
 
 static void usage()
@@ -63,7 +68,9 @@ static void usage()
 	       "Usage:\n"
 	       "\t-i, --input:\tAction input file\n"
 	       "\t-p, --pid:\tPid of process to monitor (cannot be used together with socket)\n"
-	       "\t-s, --socket:\tSocket to pass the seccomp notifier fd (cannot be used together with pid)\n");
+	       "\t-s, --socket:\tSocket to pass the seccomp notifier fd (cannot be used together with pid)\n"
+	       "\t-u, --socket-user:\t User to set for the socket (cannot be used together with pid)\n"
+	       "\t-g, --socket-group:\t Group to set for the socket (cannot be used together with pid)\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -73,7 +80,7 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 	int oc;
 	if (arguments == NULL)
 		usage();
-	while ((oc = getopt_long(argc, argv, ":i:o:p:s:", options,
+	while ((oc = getopt_long(argc, argv, ":i:o:p:s:u:g:", options,
 				 &option_index)) != -1) {
 		switch (oc) {
 		case 'p':
@@ -84,6 +91,12 @@ static void parse(int argc, char **argv, struct arguments *arguments)
 			break;
 		case 's':
 			arguments->socket = optarg;
+			break;
+		case 'u':
+			arguments->uid = atoi(optarg);
+			break;
+		case 'g':
+			arguments->gid = atoi(optarg);
 			break;
 		default:
 			usage();
@@ -115,7 +128,7 @@ static void unblock_eater(int pidfd)
 		die("  pidfd_send_signal");
 }
 
-static int create_socket(const char *path)
+static int create_socket(const char *path, uid_t uid, gid_t gid)
 {
 	struct sockaddr_un addr;
 	int ret, conn;
@@ -129,6 +142,9 @@ static int create_socket(const char *path)
 	if (ret < 0)
 		die("  bind");
 
+	ret = lchown(path, uid, gid);
+	if (ret < 0)
+		die("  failed to the permission on the socket");
 	ret = listen(fd, 1);
 	if (ret < 0)
 		die("  listen");
@@ -193,6 +209,8 @@ int main(int argc, char **argv)
 	int n, i;
 
 	arguments.pid = -1;
+	arguments.uid = getuid();
+	arguments.gid = getgid();
 	parse(argc, argv, &arguments);
 	fd = open(arguments.input_file, O_CLOEXEC | O_RDONLY);
 	if (read(fd, &g, sizeof(g)) != sizeof(g))
@@ -212,7 +230,7 @@ int main(int argc, char **argv)
 		unblock_eater(pidfd);
 	} else if (arguments.socket != NULL) {
 		unlink(arguments.socket);
-		if ((fd = create_socket(arguments.socket)) < 0)
+		if ((fd = create_socket(arguments.socket, arguments.uid, arguments.gid)) < 0)
 			die("  creating the socket");
 		if ((notifier = recvfd(fd)) < 0)
 			die("  failed recieving the notifier fd");
