@@ -1,8 +1,0 @@
-[
-  { /* fake connect syscall */
-    "match": [
-      { "connect": { "addr": { "family": "unix", "path": "/fake.sock" } } }
-    ],
-    "return": 0
-  }
-]
