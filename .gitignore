@@ -10,3 +10,4 @@ tests-utils/test-syscalls
 tests-utils/test-server
 *.bpf
 *.gluten
+*.swp
