@@ -90,6 +90,8 @@ enum type {
 	GNU_DEV_MINOR,
 
 	FDPATH,
+	UID_T,
+	GID_T,
 
 	TYPE_END,
 };
@@ -117,7 +119,8 @@ enum flags {
 #define TYPE_IS_NUM(t)							\
 	((t) == USHORT || (t) == INT || (t) == U32 ||			\
 	 (t) == U64 || (t) == LONG ||					\
-	 (t) == GNU_DEV_MAJOR || (t) == GNU_DEV_MINOR)
+	 (t) == GNU_DEV_MAJOR || (t) == GNU_DEV_MINOR) ||	        \
+	 (t) == UID_T || (t) == GID_T
 #define TYPE_IS_64BIT(t)						\
 	((t) == U64 || (t) == LONG ||					\
 	 (t) == GNU_DEV_MAJOR || (t) == GNU_DEV_MINOR)

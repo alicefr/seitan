@@ -175,8 +175,35 @@ static struct arg mknodat_args[] = {
 	{ 0 }
 };
 
+static struct arg chown_args[] = {
+	{ 0,
+		{
+			"path",		STRING,			0,
+			0,	PATH_MAX,
+			{ 0 }
+		}
+	},
+	{ 1,
+		{
+			"uid",		UID_T,			0,
+			0,	0,
+			{ .d_num = modes },
+		}
+	},
+	{ 2,
+		{
+			"gid",	GID_T,		0,
+			0,	0,
+			{ 0 },
+		}
+	},
+	{ 0 }
+};
+
 struct call syscalls_fs[] = {
 	{ __NR_mknod, "mknod", mknod_args },
 	{ __NR_mknodat, "mknodat", mknodat_args },
+	{ __NR_chown, "chown", chown_args },
+	{ __NR_lchown, "lchown", chown_args },
 	{ 0 },
 };
