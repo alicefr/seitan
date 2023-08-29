@@ -42,7 +42,8 @@ enum gluten_offset_type {
 	OFFSET_DATA		= 2,
 	OFFSET_SECCOMP_DATA	= 3,
 	OFFSET_INSTRUCTION	= 4,
-	OFFSET_TYPE_MAX		= OFFSET_INSTRUCTION,
+	OFFSET_METADATA		= 5,
+	OFFSET_TYPE_MAX		= OFFSET_METADATA,
 };
 
 #define NULL_OFFSET ((struct gluten_offset){ .type = OFFSET_NULL })
@@ -142,6 +143,12 @@ struct context_desc {
 
 BUILD_BUG_ON(BITS_PER_NUM(CONTEXT_TYPE_MAX) +				\
 	     BITS_PER_NUM(CONTEXT_SPEC_TYPE_MAX) > 8)
+
+enum metadata_type {
+	UID_TARGET = 0,
+	GID_TARGET = 1,
+	METADATA_MAX = GID_TARGET,
+};
 
 struct syscall_desc {
 	uint32_t nr		:9;
@@ -288,6 +295,8 @@ struct gluten {
 	GLUTEN_CONST char inst[INST_SIZE];
 
 	GLUTEN_CONST char ro_data[RO_DATA_SIZE];
+
+	GLUTEN_CONST enum metadata_type metadata;
 
 	char data[DATA_SIZE];
 } __attribute__((packed));

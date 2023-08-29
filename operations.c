@@ -81,6 +81,57 @@ static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
 	return 0;
 }
 
+static void parse_number_string(char *line, char *v, size_t len)
+{
+	bool first = true;
+
+	for (i = 0; i < len; i++) {
+		/* Check until it encounters the first number */
+		if (!isdigit(line[i]))
+			continue;
+		/* Only parse the first instance */
+		if (!first)
+			break;
+		v[k] = line[i];
+		k++;
+		first = false;
+	}
+}
+
+static int proc_state(char *field, pid_t pid)
+{
+	char path[PATH_MAX], line[PATH_MAX];
+	char v[PATH_MAX] = '0';
+	size_t len = PATH_MAX;
+	ssize_t read;
+	unsigned int i, k = 0;
+	FILE *fp;
+
+	snprintf(path, PATH_MAX, "/proc/%d/status", pid);
+	if ((fp = fopen(path, "r")) == NULL)
+		ret_err(-1, "failed reading status for %d", pid);
+
+	while ((read = getline(&line, &len, fp)) != -1) {
+		if (strstr(line, field) != NULL)
+			parse_number_string(&line, &v, len);
+		debug("XXX %s", line);
+	}
+
+	fclose(fp);
+}
+
+static void *get_metadata_value(uint32_t offset)
+{
+	switch(offset) {
+		case UID_TARGET:
+			break;
+		case GID_TARGET:
+			break;
+		default:
+			err("unrecognize metadata type");
+	}
+}
+
 /* TODO: Move all "context" stuff to separate file */
 static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 			     struct syscall_desc *s, struct context_desc *cdesc,
@@ -101,7 +152,10 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 		if (GET_BIT(s->arg_deref, i) == 1) {
 			c->args[i] = gluten_ptr(NULL, g, s->args[i]);
 			debug("  read pointer arg%d at offset %d", i, s->args[i].offset);
-		} else {
+		} else if(s->args[i].type == METADATA) {
+			c->args[i] = get_metadata_value(s->args[i].offset);
+
+		}else {
 			if (gluten_read(NULL, g, &arg, s->args[i],
 					sizeof(arg)) == -1)
 				ret_err(-1, "  failed reading arg %d", i);

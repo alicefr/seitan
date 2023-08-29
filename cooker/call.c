@@ -16,6 +16,70 @@
 #include "parse.h"
 #include "util.h"
 
+/* TODO: refactor and simplify this horrible function */
+static union value parse_metadata(struct gluten_ctx *g, struct field *f,
+				  struct gluten_offset **base_offset,
+				  struct gluten_offset offset,
+				  JSON_Object *metadata, bool dry_run, bool add)
+{
+	const char *tag;
+	size_t count = 0;
+	union value v = { .v_num = 0 };
+
+	if ((tag = json_object_get_string(metadata, "caller"))) {
+		debug("    args reference value at runtime '%s' with metadata %s", tag, tag);
+		(*base_offset)->type = OFFSET_METADATA;
+		if (strcmp(tag, "uid") == 0) {
+			(*base_offset)->offset = UID_TARGET;
+		} else if (strcmp(tag, "gid") == 0) {
+			(*base_offset)->offset = GID_TARGET;
+		} else {
+			die("    unrecognized metadata tag: %s", tag);
+		}
+		return v;
+	}
+
+	if ((tag = json_object_get_string(metadata, "set"))) {
+		count++;
+		debug("    setting tag reference (post) '%s'", tag);
+
+		if (!dry_run)
+			gluten_add_tag_post(g, tag, offset);
+
+		if (f->flags & RBUF)
+			return v;
+	}
+
+	if ((tag = json_object_get_string(metadata, "get"))) {
+		struct gluten_offset tag_offset;
+
+		count++;
+		debug("    getting tag reference '%s'", tag);
+
+		/* TODO: Check type */
+		tag_offset = gluten_get_tag(g, tag);
+		if (tag_offset.type == OFFSET_NULL)
+			die("   tag not found");
+
+		if ((*base_offset)->type == OFFSET_NULL) {
+			**base_offset = tag_offset;
+		} else if (f->flags & MASK || add) {
+			emit_bitwise(g, f->type, BITWISE_OR, offset, offset,
+				     tag_offset);
+		} else {
+			emit_copy_field(g, f, offset, tag_offset);
+		}
+	}
+
+	if (json_object_get_count(metadata) > count)
+		die("stray object in tag reference");
+
+	if (!count)
+		die("invalid tag specification");
+
+	return v;
+}
+
 /**
 
 struct syscall_desc {
@@ -78,7 +142,7 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 {
 	struct gluten_offset offset = *base_offset;
 	union value v = { .v_num = 0 };
-	JSON_Object *tmp1, *tmp2;
+	JSON_Object *tmp1;
 	struct field *f_inner;
 	JSON_Value *sel;
 
@@ -89,58 +153,11 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 		offset.offset += f->offset;
 
 	if (json_value_get_type(jvalue) == JSONObject &&
-	    (tmp1 = json_value_get_object(jvalue)) &&
-	    (tmp2 = json_object_get_object(tmp1, "tag"))) {
-		const char *tag_set, *tag_get;
-		size_t count = 0;
-
-		if ((tag_set = json_object_get_string(tmp2, "set"))) {
-			count++;
-			debug("    setting tag reference (post) '%s'", tag_set);
-
-			if (!dry_run)
-				gluten_add_tag_post(g, tag_set, offset);
-
-			if (f->flags & RBUF)
-				return v;
-		}
-
-		if ((tag_get = json_object_get_string(tmp2, "get"))) {
-			struct gluten_offset tag_offset;
-
-			count++;
-			debug("    getting tag reference '%s'", tag_get);
-
-			/* TODO: Check type */
-			tag_offset = gluten_get_tag(g, tag_get);
-			if (tag_offset.type == OFFSET_NULL)
-				die("   tag not found");
-
-			if (base_offset->type == OFFSET_NULL) {
-				*base_offset = tag_offset;
-			} else if (f->flags & MASK || add) {
-				emit_bitwise(g, f->type, BITWISE_OR, offset,
-					     offset, tag_offset);
-			} else {
-				emit_copy_field(g, f, offset, tag_offset);
-			}
-		}
-
-		if (json_object_get_count(tmp2) > count)
-			die("stray object in tag reference");
-
-		if (!count)
-			die("invalid tag specification");
-
-		jvalue = json_object_get_value(tmp1, "value");
-
-		if (tag_get) {
-			if (jvalue)
-				die("stray value with \"get\" tag");
-
-			return v;
-		}
-	}
+	    (tmp1 = json_value_get_object(jvalue)))
+		v = parse_metadata(g, f, &base_offset, offset, tmp1, dry_run,
+				   add);
+	if (v.v_num == 0)
+		return v;
 
 	if (!jvalue && !(f->flags & SIZE))
 		return v;
@@ -205,7 +222,8 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 		if (dry_run)
 			break;
 
-		v.v_str = json_value_get_string(jvalue);
+		if ((v.v_str = json_value_get_string(jvalue)) == NULL)
+			die("   failed parsing string for %s", json_serialize_to_string(jvalue));
 		if (strlen(v.v_str) + 1 > f->size)
 			die("   string %s too long for field", v.v_str);
 
@@ -247,8 +265,7 @@ bool arg_needs_temp(struct field *f, int pos, JSON_Value *jvalue,
 		return false;
 
 	if (json_value_get_type(jvalue) == JSONObject &&
-	    (tmp = json_value_get_object(jvalue)) &&
-	    (tmp = json_object_get_object(tmp, "tag"))) {
+	    (tmp = json_value_get_object(jvalue))) {
 		if (json_object_get_string(tmp, "set"))
 			return true;
 

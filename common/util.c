@@ -34,7 +34,8 @@ logfn(debug)
 
 const char *gluten_offset_name[OFFSET_TYPE_MAX + 1] = {
 	"NULL",
-	"read-only data", "temporary data", "seccomp data", "instruction area",
+	"read-only data", "temporary data", "seccomp data",
+	"instruction area", "metadata",
 };
 
 const char *context_type_name[CONTEXT_TYPE_MAX + 1] = {
