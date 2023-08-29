@@ -119,7 +119,7 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 
 	if (json_value_get_type(jvalue) == JSONObject &&
 	    (tmp = json_value_get_object(jvalue)) &&
-	    (tag_name = json_object_get_string(tmp, "tag"))) {
+	    (tag_name = json_object_get_string(tmp, "set"))) {
 		debug("    setting tag reference '%s'", tag_name);
 		gluten_add_tag(g, tag_name, offset);
 
@@ -258,7 +258,9 @@ xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx  xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 			parse_field(g, offset, cmp, jump, index, f, jvalue);
 		break;
 	case STRING:
-		v.v_str = json_value_get_string(jvalue);
+		if ((v.v_str = json_value_get_string(jvalue)) == NULL)
+			die("	failed parsing field for value:%s",
+			    json_serialize_to_string_pretty(jvalue));
 		if (strlen(v.v_str) + 1 > f->size)
 			die("   string %s too long for field", v.v_str);
 

@@ -25,6 +25,7 @@
 #include <linux/filter.h>
 #include <linux/audit.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include "common/gluten.h"
 #include "common/util.h"
@@ -81,6 +82,60 @@ static int write_syscall_ret(struct gluten *g, struct syscall_desc *s,
 	return 0;
 }
 
+static void parse_number_string(char *line, char *v, size_t len)
+{
+	bool first = true;
+	unsigned int i, k = 0;
+
+	for (i = 0; i < len; i++) {
+		/* Check until it encounters the first number */
+		if(!isdigit(line[i]) && !first)
+			break;
+		if (!isdigit(line[i]))
+			continue;
+		v[k] = line[i];
+		k++;
+		first = false;
+	}
+}
+
+static int proc_state(char *field, pid_t pid)
+{
+	char path[PATH_MAX];
+	char v[PATH_MAX] = { '0' };
+	char *line = NULL;
+	size_t len = PATH_MAX;
+	ssize_t read;
+	FILE *fp;
+
+	snprintf(path, PATH_MAX, "/proc/%d/status", pid);
+	if ((fp = fopen(path, "r")) == NULL)
+		ret_err(-1, "failed reading status for %d", pid);
+
+	while ((read = getline(&line, &len, fp)) != -1) {
+		if (strstr(line, field) != NULL)
+			parse_number_string(line, v, len);
+	}
+
+	fclose(fp);
+	return atoi(v);
+}
+
+static int get_metadata_value(uint32_t offset, pid_t pid)
+{
+	switch (offset) {
+	case UID_TARGET:
+		return proc_state("Uid", pid);
+		break;
+	case GID_TARGET:
+		return proc_state("Gid", pid);
+		break;
+	default:
+		err("unrecognize metadata type");
+	}
+	return 0;
+}
+
 /* TODO: Move all "context" stuff to separate file */
 static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 			     struct syscall_desc *s, struct context_desc *cdesc,
@@ -100,7 +155,13 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 		*/
 		if (GET_BIT(s->arg_deref, i) == 1) {
 			c->args[i] = gluten_ptr(NULL, g, s->args[i]);
-			debug("  read pointer arg%d at offset %d", i, s->args[i].offset);
+			debug("  read pointer arg%d at offset %d", i,
+			      s->args[i].offset);
+		} else if (s->args[i].type == OFFSET_METADATA) {
+			c->args[i] = (void *)(long)get_metadata_value(
+				s->args[i].offset, req->pid);
+			debug("  read metadata value %s: %d",
+			      metadata_type_str[s->args[i].offset], (int *)c->args[i]);
 		} else {
 			if (gluten_read(NULL, g, &arg, s->args[i],
 					sizeof(arg)) == -1)
@@ -236,7 +297,7 @@ static int execute_syscall(void *args)
 	c->ret = syscall(c->nr, c->args[0], c->args[1], c->args[2], c->args[3],
 			 c->args[4], c->args[5]);
 	c->err = errno;
-	debug("  execute syscall %ld: ret=%ld errno=%d%s%s", c->nr, c->ret,
+	debug("  execute syscall %s: ret=%ld errno=%d%s%s", syscall_name_str[c->nr], c->ret,
 	      c->err, *c->cwd ? " cwd=" : "", *c->cwd ? c->cwd : "");
 	if (c->ret < 0) {
 		perror("  syscall");
@@ -277,7 +338,6 @@ int op_call(const struct seccomp_notif *req, int notifier, struct gluten *g,
 	if (prepare_arg_clone(req, g, s, cdesc, &c) == -1)
 		return -1;
 
-	debug("  op_call: execute syscall nr=%ld", c.nr);
 	if (do_call(&c) == -1) {
 		resp.error = -1;
 		if (send_target(&resp, notifier) == -1)

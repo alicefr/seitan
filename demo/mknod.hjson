@@ -2,32 +2,41 @@
   {
     "match": [
       { "mknodat":
-        { "path": { "tag": "path" },
-          "mode": { "tag": "mode" },
-          "type": { "tag": "type" },
+        { "path": { "set": "path" },
+          "mode": { "set": "mode" },
+          "type": { "set": "type" },
           "major": 1,
-          "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "tag": "minor" }
+          "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "set": "minor" }
         }
       },
       { "mknod":
-        { "path": { "tag": "path" },
-          "mode": { "tag": "mode" },
-          "type": { "tag": "type" },
+        { "path": { "set": "path" },
+          "mode": { "set": "mode" },
+          "type": { "set": "type" },
           "major": 1,
-          "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "tag": "minor" }
+          "minor": { "value": { "in": [ 3, 5, 7, 8, 9 ] }, "set": "minor" }
         }
       }
     ],
-    "call":
+    "call": [
       { "mknod":
-        { "path": { "tag": { "get": "path" } },
-          "mode": { "tag": { "get": "mode" } },
-          "type": { "tag": { "get": "type" } },
+        { "path": { "get": "path" },
+          "mode": { "get": "mode" },
+          "type": { "get": "type" },
           "major": 1,
-          "minor": { "tag": { "get": "minor" } }
+          "minor": { "get": "minor" }
         },
-        "context": { "mnt": "caller", "uid": "caller", "gid": "caller" }
+        "context": { "mnt": "caller" }
       },
+      {
+        "lchown": {
+           "path": { "get": "path" },
+           "uid" : { "caller": "uid" },
+           "gid" : { "caller": "gid" }
+        },
+        "context": { "mnt": "caller" }
+      }
+     ],
     "return": { "value": 0, "error": 0 }
   }
 ]
