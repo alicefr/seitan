@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/syscall.h>
 
 #include "gluten.h"
 
@@ -51,4 +52,19 @@ const char *bitwise_type_str[BITWISE_MAX + 1] = { "&", "|" };
 
 const char *cmp_type_str[CMP_MAX + 1] = {
         "EQ", "NE", "GT", "GE", "LT", "LE",
+};
+
+const char *metadata_type_str[METADATA_MAX + 1] = { "uid", "gid" };
+const char *syscall_name_str[N_SYSCALL + 1] = {
+	[__NR_chown] 	= "chown",
+	[__NR_connect] 	= "connect",
+	[__NR_ioctl]	= "ioctl",
+	[__NR_lchown] 	= "lchown",
+	[__NR_mknod] 	= "mknod",
+	[__NR_mknodat] 	= "mknodat",
+	[__NR_read] 	= "read",
+	[__NR_socket] 	= "socket",
+	[__NR_unshare]	= "unshare",
+        [__NR_open] 	= "open",
+
 };

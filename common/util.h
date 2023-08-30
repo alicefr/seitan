@@ -128,5 +128,6 @@ void debug(const char *format, ...);
 	-1)
 
 #define BITS_PER_NUM(n)		(const_ilog2(n) + 1)
-
+#define N_SYSCALL                       512
+extern const char *syscall_name_str[N_SYSCALL + 1];
 #endif /* UTIL_H */
