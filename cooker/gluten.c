@@ -119,10 +119,8 @@ struct gluten_offset gluten_get_tag(struct gluten_ctx *g, const char *name)
 	int i;
 
 	for (i = 0; i < TAGS_MAX && g->tags[i].name; i++) {
-		if (!strcmp(g->tags[i].name, name)) {
-			debug("XXX got tag for name:%s offset:%d", name, g->tags[i].offset);
+		if (!strcmp(g->tags[i].name, name))
 			return g->tags[i].offset;
-		}
 	}
 
 	die("   tag '%s' not found", name);
