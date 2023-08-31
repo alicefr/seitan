@@ -178,12 +178,13 @@ static int prepare_arg_clone(const struct seccomp_notif *req, struct gluten *g,
 		return 0;
 	}
 
-	for (dst = c->ns_path; cdesc->spec != CONTEXT_SPEC_NONE; cdesc++) {
+	for (dst = c->ns_path; cdesc->spec != CONTEXT_SPEC_NONE && cdesc->type < CONTEXT_TYPE_MAX; cdesc++) {
 		enum context_spec_type spec = cdesc->spec;
 		enum context_type type = cdesc->type;
 
-		debug("  op_call: adding context for %s, type: %s",
-		      context_type_name[type], context_spec_type_name[spec]);
+		debug("  op_call: adding context for %s, type: %s %u, pid: %d",
+		      context_type_name[type], context_spec_type_name[spec], type,
+		      req->pid);
 
 		if (spec == CONTEXT_SPEC_NONE)
 			break;
@@ -265,10 +266,10 @@ static int set_namespaces(struct arg_clone *c)
 
 	for (path = c->ns_path; **path; *path++) {
 		if ((fd = open(*path, O_CLOEXEC)) < 0)
-			ret_err(-1, "open for file %s", *path);
+			ret_err(-1, "  failed opening %s", *path);
 
 		if (setns(fd, 0) != 0)
-			ret_err(-1, "setns");
+			ret_err(-1, "  setns");
 	}
 	return 0;
 }
@@ -281,16 +282,16 @@ static int execute_syscall(void *args)
 	 * non-zero UID/GID to zero.
 	 */
 	if (c->uid && setuid(c->uid))
-		exit(EXIT_FAILURE);
+		ret_clone_err(c, "  failed setting uid");
 
 	if (c->gid && setgid(c->gid))
-		exit(EXIT_FAILURE);
+		ret_clone_err(c, "  failed setting gid");
 
 	if (*c->cwd && chdir(c->cwd) < 0)
-		exit(EXIT_FAILURE);
+		ret_clone_err(c, "  failed setting current directory");
 
 	if (set_namespaces(c) < 0)
-		exit(EXIT_FAILURE);
+		ret_clone_err(c, "  failed setting the namespace for the clone");
 
 	errno = 0;
 	/* execute syscall */

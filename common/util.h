@@ -130,4 +130,12 @@ void debug(const char *format, ...);
 #define BITS_PER_NUM(n)		(const_ilog2(n) + 1)
 #define N_SYSCALL                       512
 extern const char *syscall_name_str[N_SYSCALL + 1];
+
+#define ret_clone_err(c, ...)     \
+        do {                      \
+                c->err = -1;      \
+                err(__VA_ARGS__); \
+                return -1;        \
+        } while (0)
+
 #endif /* UTIL_H */
