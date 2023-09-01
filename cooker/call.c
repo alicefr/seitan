@@ -160,20 +160,21 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 	JSON_Value *sel;
 
 	if (f->name)
-		debug("    parsing field name %s", f->name);
+		debug("    parsing field name %s for json:%s ", f->name,
+		      json_serialize_to_string(jvalue));
 
 	if (offset.type != OFFSET_NULL)
 		offset.offset += f->offset;
 	if (json_value_get_type(jvalue) == JSONObject &&
-	    (tmp1 = json_value_get_object(jvalue)) && is_metadata_obj(tmp1))
+	    (tmp1 = json_value_get_object(jvalue)) && is_metadata_obj(tmp1)) {
 		v = parse_metadata(g, f, &base_offset, offset, tmp1, dry_run,
 				   add);
-	if (v.v_num == 0)
-		return v;
+		if (v.v_num == 0)
+			return v;
+	}
 
 	if (!jvalue && !(f->flags & SIZE))
 		return v;
-
 	switch (f->type) {
 	case USHORT:
 	case INT:
@@ -248,6 +249,8 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 
 			tmp1 = json_value_get_object(jvalue);
 			f_value = json_object_get_value(tmp1, f_inner->name);
+			debug("    parse struct internal value:%s",
+			      json_serialize_to_string(f_value));
 			if (!f_value)
 				continue;
 			parse_field(g, args, &struct_start, index, f_inner,

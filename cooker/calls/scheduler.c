@@ -20,7 +20,7 @@ static struct num sched_policy[] = {
 };
 
 static struct field sched_param[] = {
-	{ "sched_priority",
+	{ "priority",
 	  INT,
 	  0,
 	  offsetof(struct sched_param, sched_priority),
