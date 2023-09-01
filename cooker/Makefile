@@ -33,11 +33,13 @@ SRCS := call.c calls.c emit.c gluten.c filter.c main.c match.c		\
 	parse.c parson.c						\
         $(COMMON)/util.c						\
         calls/net.c calls/ioctl.c calls/process.c calls/fs.c calls/io.c \
+	calls/scheduler.c \
 	seccomp_profile.c
 HEADERS := call.h calls.h cooker.h emit.h filter.h gluten.h match.h	\
         parse.h parson.h						\
         $(COMMON)/gluten.h $(COMMON)/util.h				\
         calls/net.h calls/ioctl.h calls/process.h calls/fs.h calls/io.h \
+	calls/scheduler.h \
 	seccomp_profile.h
 
 $(BIN): $(SRCS) $(HEADERS)

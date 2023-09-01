@@ -147,7 +147,8 @@ BUILD_BUG_ON(BITS_PER_NUM(CONTEXT_TYPE_MAX) +				\
 enum metadata_type {
 	UID_TARGET = 0,
 	GID_TARGET = 1,
-	METADATA_MAX = GID_TARGET,
+	PID_TARGET = 2,
+	METADATA_MAX = PID_TARGET,
 };
 extern const char *metadata_type_str[METADATA_MAX + 1];
 

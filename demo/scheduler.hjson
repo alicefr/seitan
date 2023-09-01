@@ -1,0 +1,24 @@
+[
+  {
+    "match": [
+      {
+        "sched_setscheduler": {
+          "policy": "SCHED_FIFO",
+          "param": { "priority": 1 }
+        }
+      }
+    ],
+    "call": [
+      {
+        "sched_setscheduler": {
+          "pid": { "caller": "pid" },
+          "policy": "SCHED_FIFO",
+          "param": { "priority": 1 }
+        }
+      }
+    ],
+    "return": {
+      "value": 0
+    }
+  }
+]

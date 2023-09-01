@@ -16,6 +16,15 @@
 #include "parse.h"
 #include "util.h"
 
+static bool is_metadata_obj(JSON_Object *metadata)
+{
+	if (!metadata)
+		return false;
+	return ((!json_object_get_string(metadata, "caller")) ||
+		(!json_object_get_string(metadata, "set")) ||
+		(!json_object_get_string(metadata, "get")));
+}
+
 /* TODO: refactor and simplify this horrible function */
 static union value parse_metadata(struct gluten_ctx *g, struct field *f,
 				  struct gluten_offset **base_offset,
@@ -29,10 +38,12 @@ static union value parse_metadata(struct gluten_ctx *g, struct field *f,
 	if ((tag = json_object_get_string(metadata, "caller"))) {
 		debug("    args reference value at runtime '%s' with metadata %s", tag, tag);
 		(*base_offset)->type = OFFSET_METADATA;
-		if (strcmp(tag, "uid") == 0) {
+		if (!strcmp(tag, "uid")) {
 			(*base_offset)->offset = UID_TARGET;
-		} else if (strcmp(tag, "gid") == 0) {
+		} else if (!strcmp(tag, "gid")) {
 			(*base_offset)->offset = GID_TARGET;
+		} else if (!strcmp(tag, "pid")) {
+			(*base_offset)->offset = PID_TARGET;
 		} else {
 			die("    unrecognized metadata tag: %s", tag);
 		}
@@ -151,9 +162,7 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 
 	if (offset.type != OFFSET_NULL)
 		offset.offset += f->offset;
-
-	if (json_value_get_type(jvalue) == JSONObject &&
-	    (tmp1 = json_value_get_object(jvalue)))
+	if (!(tmp1 = json_value_get_object(jvalue)) && is_metadata_obj(tmp1))
 		v = parse_metadata(g, f, &base_offset, offset, tmp1, dry_run,
 				   add);
 	if (v.v_num == 0)

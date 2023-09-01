@@ -130,6 +130,9 @@ static int get_metadata_value(uint32_t offset, pid_t pid)
 	case GID_TARGET:
 		return proc_state("Gid", pid);
 		break;
+	case PID_TARGET:
+		return pid;
+		break;
 	default:
 		err("unrecognize metadata type");
 	}
