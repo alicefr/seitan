@@ -20,9 +20,9 @@ static bool is_metadata_obj(JSON_Object *metadata)
 {
 	if (!metadata)
 		return false;
-	return ((!json_object_get_string(metadata, "caller")) ||
-		(!json_object_get_string(metadata, "set")) ||
-		(!json_object_get_string(metadata, "get")));
+	return ((json_object_get_string(metadata, "caller")) ||
+		(json_object_get_string(metadata, "set")) ||
+		(json_object_get_string(metadata, "get")));
 }
 
 /* TODO: refactor and simplify this horrible function */
@@ -83,7 +83,9 @@ static union value parse_metadata(struct gluten_ctx *g, struct field *f,
 	}
 
 	if (json_object_get_count(metadata) > count)
-		die("stray object in tag reference");
+		die("stray object in tag reference: %s",
+		    json_serialize_to_string(
+			    json_object_get_wrapping_value(metadata)));
 
 	if (!count)
 		die("invalid tag specification");
@@ -162,7 +164,8 @@ static union value parse_field(struct gluten_ctx *g, struct arg *args,
 
 	if (offset.type != OFFSET_NULL)
 		offset.offset += f->offset;
-	if (!(tmp1 = json_value_get_object(jvalue)) && is_metadata_obj(tmp1))
+	if (json_value_get_type(jvalue) == JSONObject &&
+	    (tmp1 = json_value_get_object(jvalue)) && is_metadata_obj(tmp1))
 		v = parse_metadata(g, f, &base_offset, offset, tmp1, dry_run,
 				   add);
 	if (v.v_num == 0)
