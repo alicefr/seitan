@@ -119,7 +119,7 @@ void emit_call(struct gluten_ctx *g, struct context_desc *cdesc, long nr,
 	memcpy(desc->args, offset, sizeof(struct gluten_offset) * count);
 	desc->args[count] = ret_offset;
 
-	debug("   %i: OP_CALL: %i, arguments:", g->ip.offset, nr);
+	debug("   %i: OP_CALL: %s, arguments:", g->ip.offset, syscall_name_str[nr]);
 	for (i = 0; i < count; i++) {
 		debug("\t%i: %s %s%i", i, gluten_offset_name[offset[i].type],
 		      is_ptr[i] ? "*" : "", offset[i].offset);

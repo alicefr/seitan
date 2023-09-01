@@ -126,9 +126,9 @@ void filter_add_check(struct bpf_field *field)
 
 	check = &entry->field[entry_check_count(entry)];
 
-	debug("   BPF: inserting check at %i for entry %i, syscall %lu",
+	debug("   BPF: inserting check at %i for entry %i, syscall %s",
 	      entry_check_count(entry), call_entry_count(current_nr),
-	      current_nr);
+	      syscall_name_str[current_nr]);
 
 	memcpy(check, field, sizeof(*field));
 }
