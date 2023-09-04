@@ -1,13 +1,13 @@
 [
   { /* connect to another path (/cool.sock -> /tmp/demo.sock) */
     "match": [
-      { "connect": { "addr": { "family": "unix", "path": "/cool.sock" }, "fd": { "tag": "fd" } } }
+      { "connect": { "addr": { "family": "unix", "path": "/cool.sock" }, "fd": { "set": "fd" } } }
     ],
     "call": [
       { "socket": { "family": "unix", "type": "stream", "flags": 0, "protocol": 0 }, "ret": "new_fd" },
-      { "connect": { "fd": { "tag": { "get": "new_fd" } }, "addr": { "family": "unix", "path": "/tmp/demo.sock" } }, "ret": "y" }
+      { "connect": { "fd": { "get": "new_fd" }, "addr": { "family": "unix", "path": "/tmp/demo.sock" } }, "ret": "y" }
     ],
-    "fd": { "src": { "tag": "fd" }, "new": { "tag": "new_fd" }, "close_on_exec": false },
+    "fd": { "src": { "set": "fd" }, "new": { "set": "new_fd" }, "close_on_exec": false },
     "return": { "value": 0, "error": 0 }
   },
   { /* Inject permission denied error */
